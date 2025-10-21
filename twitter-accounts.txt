@@ -1,0 +1,14 @@
+# Twitter accounts to scrape
+# One username per line, without the @ symbol
+# Lines starting with # are comments and will be ignored
+
+elonmusk
+BillGates
+sundarpichai
+satyanadella
+jeffbezos
+tim_cook
+jack
+pmarca
+naval
+paulg 

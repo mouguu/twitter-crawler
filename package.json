@@ -1,0 +1,30 @@
+{
+  "name": "twitter-crawler",
+  "version": "1.0.0",
+  "description": "A tool to scrape Twitter/X content",
+  "main": "cli.js",
+  "scripts": {
+    "start": "node cli.js",
+    "examples": "node cli.js examples",
+    "twitter": "node cli.js twitter",
+    "schedule": "node cli.js schedule -c crawler-config.json -i 60"
+  },
+  "keywords": [
+    "twitter",
+    "x",
+    "scraper",
+    "crawler",
+    "automation"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "commander": "^13.1.0",
+    "puppeteer": "^22.10.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
+  },
+  "bin": {
+    "twitter-crawler": "./cli.js"
+  }
+}

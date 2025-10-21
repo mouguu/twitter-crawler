@@ -1,0 +1,21 @@
+{
+  "twitter": {
+    "usernames": ["elonmusk", "BillGates", "sundarpichai"],
+    "usernameFile": "twitter-accounts.txt",
+    "tweetCount": 50,
+    "separateFiles": true,
+    "saveScreenshots": false
+  },
+  "schedule": {
+    "interval": 60,
+    "runAtStartup": true,
+    "timeOfDay": "08:00",
+    "timezone": "UTC"
+  },
+  "output": {
+    "directory": "./output",
+    "format": "md",
+    "mergeResults": false,
+    "notifyOnCompletion": true
+  }
+} 
