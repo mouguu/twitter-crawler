@@ -33,14 +33,14 @@ function sanitizeSegment(segment = '') {
  */
 async function ensureDirExists(dir) {
   if (!dir) {
-    console.error('ensureDirExists 需要提供目录路径');
+    console.error('ensureDirExists requires directory path');
     return false;
   }
   try {
     await fs.mkdir(dir, { recursive: true });
     return true;
   } catch (error) {
-    console.error(`创建目录失败: ${dir}`, error.message);
+    console.error(`Failed to create directory: ${dir}`, error.message);
     return false;
   }
 }
@@ -140,13 +140,13 @@ async function loadSeenUrls(platform = DEFAULT_PLATFORM, identifier = DEFAULT_ID
     const data = await fs.readFile(cacheFile, 'utf-8');
     const parsed = JSON.parse(data);
     if (Array.isArray(parsed)) {
-      console.log(`[${platform}] 已加载 ${parsed.length} 条已抓取 URL (${identifier})`);
+      console.log(`[${platform}] Loaded ${parsed.length} scraped URLs (${identifier})`);
       return new Set(parsed);
     }
     return new Set();
   } catch (error) {
     if (error.code !== 'ENOENT') {
-      console.warn(`[${platform}] 加载已抓取 URL 失败 (${identifier}): ${error.message}`);
+      console.warn(`[${platform}] Failed to load scraped URLs (${identifier}): ${error.message}`);
     }
     return new Set();
   }
@@ -161,7 +161,7 @@ async function loadSeenUrls(platform = DEFAULT_PLATFORM, identifier = DEFAULT_ID
  */
 async function saveSeenUrls(platform = DEFAULT_PLATFORM, identifier = DEFAULT_IDENTIFIER, urls) {
   if (!urls || !(urls instanceof Set)) {
-    console.error('saveSeenUrls 需要提供 Set 类型的 urls');
+    console.error('saveSeenUrls requires Set type urls');
     return false;
   }
 
@@ -174,10 +174,10 @@ async function saveSeenUrls(platform = DEFAULT_PLATFORM, identifier = DEFAULT_ID
       JSON.stringify(Array.from(urls), null, 2),
       'utf-8'
     );
-    console.log(`[${platform}] 已保存 ${urls.size} 条已抓取 URL (${identifier})`);
+    console.log(`[${platform}] Saved ${urls.size} scraped URLs (${identifier})`);
     return true;
   } catch (error) {
-    console.error(`[${platform}] 保存已抓取 URL 失败 (${identifier}):`, error.message);
+    console.error(`[${platform}] Failed to save scraped URLs (${identifier}):`, error.message);
     return false;
   }
 }
@@ -197,7 +197,7 @@ function getTodayString() {
  */
 async function getMarkdownFiles(dir) {
   if (!dir) {
-    console.error('getMarkdownFiles 需要指定目录');
+    console.error('getMarkdownFiles requires directory path');
     return [];
   }
   try {
@@ -207,10 +207,10 @@ async function getMarkdownFiles(dir) {
       .map(file => path.join(dir, file));
   } catch (error) {
     if (error.code === 'ENOENT') {
-      console.warn(`目录不存在，无法读取 Markdown 文件: ${dir}`);
+      console.warn(`Directory does not exist, cannot read Markdown files: ${dir}`);
       return [];
     }
-    console.error(`读取 Markdown 文件失败 (${dir}):`, error.message);
+    console.error(`Failed to read Markdown files (${dir}):`, error.message);
     return [];
   }
 }

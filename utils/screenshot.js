@@ -27,7 +27,7 @@ function resolveScreenshotDir(runContext, fallbackDir) {
  */
 async function takeScreenshotOfTweet(page, tweetUrl, options = {}) {
   if (!page || !tweetUrl) {
-    console.warn('缺少必要参数，无法截图');
+    console.warn('Missing required parameters, cannot take screenshot');
     return null;
   }
 
@@ -36,7 +36,7 @@ async function takeScreenshotOfTweet(page, tweetUrl, options = {}) {
   await fileUtils.ensureDirExists(outputDir);
 
   try {
-    console.log(`正在为推文截图: ${tweetUrl}`);
+    console.log(`Taking screenshot of tweet: ${tweetUrl}`);
 
     const tweetId = tweetUrl.split('/').pop().split('?')[0];
     const filename = tweetId ? `tweet-${tweetId}-${Date.now()}.png` : `tweet-${Date.now()}.png`;
@@ -47,15 +47,15 @@ async function takeScreenshotOfTweet(page, tweetUrl, options = {}) {
 
     const tweetElement = await page.$('article[data-testid="tweet"]');
     if (!tweetElement) {
-      console.warn(`未找到推文元素: ${tweetUrl}`);
+      console.warn(`Tweet element not found: ${tweetUrl}`);
       return null;
     }
 
     await tweetElement.screenshot({ path: screenshotPath, omitBackground: true });
-    console.log(`✅ 推文截图已保存: ${screenshotPath}`);
+    console.log(`✅ Tweet screenshot saved: ${screenshotPath}`);
     return screenshotPath;
   } catch (error) {
-    console.error(`推文截图失败 (${tweetUrl}):`, error.message);
+    console.error(`Tweet screenshot failed (${tweetUrl}):`, error.message);
     return null;
   }
 }
@@ -69,7 +69,7 @@ async function takeScreenshotOfTweet(page, tweetUrl, options = {}) {
  */
 async function takeScreenshotsOfTweets(page, tweets, options = {}) {
   if (!page || !Array.isArray(tweets) || tweets.length === 0) {
-    console.log('没有推文需要截图');
+    console.log('No tweets to screenshot');
     return [];
   }
 
@@ -80,7 +80,7 @@ async function takeScreenshotsOfTweets(page, tweets, options = {}) {
     if (shot) results.push(shot);
     await new Promise(resolve => setTimeout(resolve, 1500));
   }
-  console.log(`已完成 ${results.length} 张推文截图`);
+  console.log(`Completed ${results.length} tweet screenshots`);
   return results;
 }
 
@@ -95,7 +95,7 @@ async function takeScreenshotsOfTweets(page, tweets, options = {}) {
  */
 async function takeTimelineScreenshot(page, options = {}) {
   if (!page) {
-    console.warn('缺少页面对象，无法截图');
+    console.warn('Missing page object, cannot take screenshot');
     return null;
   }
 
@@ -107,10 +107,10 @@ async function takeTimelineScreenshot(page, options = {}) {
     const filename = options.filename || `timeline-${Date.now()}.png`;
     const screenshotPath = path.join(outputDir, filename);
     await page.screenshot({ path: screenshotPath, fullPage: false });
-    console.log(`✅ 时间线截图已保存: ${screenshotPath}`);
+    console.log(`✅ Timeline screenshot saved: ${screenshotPath}`);
     return screenshotPath;
   } catch (error) {
-    console.error('时间线截图失败:', error.message);
+    console.error('Timeline screenshot failed:', error.message);
     return null;
   }
 }

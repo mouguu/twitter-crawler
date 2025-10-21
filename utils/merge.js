@@ -34,11 +34,11 @@ async function getUsernameFromEnv() {
              return usernameCookie.value;
         }
     }
-    console.warn("env.json 中未找到 'username' 字段。");
+    console.warn("'username' field not found in env.json.");
     return null;
   } catch (error) {
     if (error.code !== 'ENOENT') { // 文件不存在是正常情况
-      console.warn(`读取 env.json 获取用户名失败: ${error.message}`);
+      console.warn(`Failed to read env.json to get username: ${error.message}`);
     }
     return null;
   }
@@ -55,12 +55,12 @@ async function getUsernameFromEnv() {
 async function mergeMarkdownFiles(sourceDir, outputDir, platform, deleteSourceFiles = false) {
   // Validate required parameters
   if (!sourceDir || !outputDir || !platform) {
-      console.error('mergeMarkdownFiles 缺少必要的参数: sourceDir, outputDir, platform');
+      console.error('mergeMarkdownFiles missing required parameters: sourceDir, outputDir, platform');
       return null;
   }
 
   try {
-    console.log(`[${platform.toUpperCase()}] 开始合并 ${sourceDir} 下的Markdown文件...`);
+    console.log(`[${platform.toUpperCase()}] Starting to merge Markdown files from ${sourceDir}...`);
     await fileUtils.ensureBaseStructure(); // Ensures base dirs exist
     await fs.mkdir(outputDir, { recursive: true }); // Ensure specific output dir exists
     
@@ -68,14 +68,14 @@ async function mergeMarkdownFiles(sourceDir, outputDir, platform, deleteSourceFi
     const mdFiles = await fileUtils.getMarkdownFiles(sourceDir); // Pass sourceDir
     
     if (mdFiles.length === 0) {
-      console.log(`[${platform.toUpperCase()}] 没有找到可合并的Markdown文件于 ${sourceDir}`);
+      console.log(`[${platform.toUpperCase()}] No Markdown files found to merge in ${sourceDir}`);
       return null;
     }
-    
+
     // 按文件名排序，新的在前
     mdFiles.sort((a, b) => path.basename(b).localeCompare(path.basename(a)));
-    
-    console.log(`[${platform.toUpperCase()}] 找到 ${mdFiles.length} 个Markdown文件准备合并`);
+
+    console.log(`[${platform.toUpperCase()}] Found ${mdFiles.length} Markdown files ready to merge`);
     
     // -- 开始构建元数据 --
     const mergeTime = new Date();
@@ -90,7 +90,7 @@ async function mergeMarkdownFiles(sourceDir, outputDir, platform, deleteSourceFi
       `mergedFilename: ${mergedFilename}`,
       `mergeTimestamp: ${mergeTime.toISOString()}`,
       // Use platform-specific username if available, otherwise generic
-      username ? `accountUsername: ${username}` : '# accountUsername: (未在 env.json/medium-cookies.json 中找到)',
+      username ? `accountUsername: ${username}` : '# accountUsername: (not found in env.json/medium-cookies.json)',
       `totalItemsMerged: ${mdFiles.length}`,
       '---',
       '\n' 
@@ -120,31 +120,31 @@ async function mergeMarkdownFiles(sourceDir, outputDir, platform, deleteSourceFi
     // 保存合并后的文件
     const mergedFilePath = path.join(outputDir, mergedFilename);
     await fs.writeFile(mergedFilePath, finalContent, 'utf-8');
-    console.log(`[${platform.toUpperCase()}] ✅ 所有Markdown文件已合并保存为: ${mergedFilename}`);
-    
+    console.log(`[${platform.toUpperCase()}] ✅ All Markdown files merged and saved as: ${mergedFilename}`);
+
     // 如果需要，删除源文件
     if (deleteSourceFiles) {
-      console.log(`[${platform.toUpperCase()}] 正在删除 ${mdFiles.length} 个源Markdown文件从 ${sourceDir}...`);
+      console.log(`[${platform.toUpperCase()}] Deleting ${mdFiles.length} source Markdown files from ${sourceDir}...`);
       let deletedCount = 0;
       for (const file of mdFiles) {
         // Safety check (redundant due to initial filter but safe)
         if (path.basename(file).startsWith('merged-') || path.basename(file).startsWith('digest-')) {
-            console.warn(`[${platform.toUpperCase()}] 跳过删除受保护的文件: ${file}`);
+            console.warn(`[${platform.toUpperCase()}] Skipping deletion of protected file: ${file}`);
             continue;
         }
         try {
           await fs.unlink(file);
           deletedCount++;
         } catch (delError) {
-          console.warn(`[${platform.toUpperCase()}] 删除文件失败: ${file}`, delError.message);
+          console.warn(`[${platform.toUpperCase()}] Failed to delete file: ${file}`, delError.message);
         }
       }
-      console.log(`[${platform.toUpperCase()}] 已成功删除 ${deletedCount} 个源文件`);
+      console.log(`[${platform.toUpperCase()}] Successfully deleted ${deletedCount} source files`);
     }
-    
+
     return mergedFilePath;
   } catch (error) {
-    console.error(`[${platform.toUpperCase()}] 合并Markdown文件失败:`, error.message);
+    console.error(`[${platform.toUpperCase()}] Failed to merge Markdown files:`, error.message);
     return null;
   }
 }
@@ -210,7 +210,7 @@ async function mergeAllPlatforms(twitterResults = [], mediumResults = [], output
   ];
 
   if (allItems.length === 0) {
-    console.log('[Convergence] 没有找到任何平台的内容可合并。');
+    console.log('[Convergence] No content found from any platform to merge.');
     return null;
   }
 
@@ -221,7 +221,7 @@ async function mergeAllPlatforms(twitterResults = [], mediumResults = [], output
       return dateB - dateA; // Sort descending (newest first)
   });
 
-  console.log(`[Convergence] 开始合并 ${allItems.length} 个项目 (来自 ${twitterResults.length} X, ${mediumResults.length} Medium)...`);
+  console.log(`[Convergence] Starting to merge ${allItems.length} items (from ${twitterResults.length} X, ${mediumResults.length} Medium)...`);
   await fileUtils.ensureBaseStructure(); // Ensure base dirs exist
   await fs.mkdir(outputDir, { recursive: true }); // Ensure convergence dir exists
 
@@ -236,7 +236,7 @@ async function mergeAllPlatforms(twitterResults = [], mediumResults = [], output
     '---',
     `mergedFilename: ${mergedFilename}`,
     `mergeTimestamp: ${mergeTime.toISOString()}`,
-    username ? `primaryAccount: ${username}` : '# primaryAccount: (未在 env.json 中找到)',
+    username ? `primaryAccount: ${username}` : '# primaryAccount: (not found in env.json)',
     `totalItemsMerged: ${allItems.length}`,
     `twitterItems: ${twitterResults.length}`,
     `mediumItems: ${mediumResults.length}`,

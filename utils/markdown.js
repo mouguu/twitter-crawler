@@ -16,11 +16,11 @@ const fileUtils = require('./fileutils');
  */
 async function saveTweetAsMarkdown(tweet, runContext, index = 0) {
   if (!tweet?.time || !tweet?.text || !tweet?.url) {
-    console.warn('[X] 推文缺少必要数据，跳过保存');
+    console.warn('[X] Tweet missing required data, skipping save');
     return null;
   }
   if (!runContext?.markdownDir) {
-    throw new Error('saveTweetAsMarkdown 需要有效的 runContext.markdownDir');
+    throw new Error('saveTweetAsMarkdown requires valid runContext.markdownDir');
   }
 
   const date = new Date(tweet.time);
@@ -64,11 +64,11 @@ async function saveTweetAsMarkdown(tweet, runContext, index = 0) {
  */
 async function saveTweetsAsMarkdown(tweets, runContext, options = {}) {
   if (!Array.isArray(tweets) || tweets.length === 0) {
-    console.log('[X] 没有推文需要保存为 Markdown');
+    console.log('[X] No tweets to save as Markdown');
     return { perTweetFiles: [], indexPath: null };
   }
   if (!runContext?.markdownDir) {
-    throw new Error('saveTweetsAsMarkdown 需要有效的 runContext');
+    throw new Error('saveTweetsAsMarkdown requires valid runContext');
   }
 
   await fileUtils.ensureDirExists(runContext.markdownDir);
@@ -105,7 +105,7 @@ async function saveTweetsAsMarkdown(tweets, runContext, options = {}) {
       tweet.text || '(No text content)',
       '',
       metrics.join(' · '),
-      `[打开推文](${tweet.url})`
+      `[View Tweet](${tweet.url})`
     ].join('\n'));
   });
 
@@ -126,7 +126,7 @@ async function saveTweetsAsMarkdown(tweets, runContext, options = {}) {
   const indexPath = runContext.markdownIndexPath || path.join(runContext.runDir, 'index.md');
   await fs.writeFile(indexPath, indexContent, 'utf-8');
 
-  console.log(`[X] Markdown 已写入目录: ${runContext.markdownDir}`);
+  console.log(`[X] Markdown written to directory: ${runContext.markdownDir}`);
   return { perTweetFiles: savedFiles, indexPath };
 }
 

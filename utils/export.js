@@ -17,11 +17,11 @@ const fileUtils = require('./fileutils');
  */
 async function exportToCsv(tweets, runContext, options = {}) {
   if (!Array.isArray(tweets) || tweets.length === 0) {
-    console.log('没有推文数据可导出为 CSV');
+    console.log('No tweet data to export as CSV');
     return null;
   }
   if (!runContext?.runDir) {
-    throw new Error('exportToCsv 需要有效的 runContext');
+    throw new Error('exportToCsv requires valid runContext');
   }
 
   await fileUtils.ensureDirExists(runContext.runDir);
@@ -54,7 +54,7 @@ async function exportToCsv(tweets, runContext, options = {}) {
     : (runContext.csvPath || path.join(runContext.runDir, filename));
   await fs.writeFile(csvPath, csvRows, 'utf-8');
 
-  console.log(`✅ CSV 导出成功: ${csvPath}`);
+  console.log(`✅ CSV exported successfully: ${csvPath}`);
   return csvPath;
 }
 
@@ -68,11 +68,11 @@ async function exportToCsv(tweets, runContext, options = {}) {
  */
 async function exportToJson(tweets, runContext, options = {}) {
   if (!Array.isArray(tweets) || tweets.length === 0) {
-    console.log('没有推文数据可导出为 JSON');
+    console.log('No tweet data to export as JSON');
     return null;
   }
   if (!runContext?.runDir) {
-    throw new Error('exportToJson 需要有效的 runContext');
+    throw new Error('exportToJson requires valid runContext');
   }
 
   await fileUtils.ensureDirExists(runContext.runDir);
@@ -84,7 +84,7 @@ async function exportToJson(tweets, runContext, options = {}) {
     : (runContext.jsonPath || path.join(runContext.runDir, filename));
   await fs.writeFile(jsonPath, JSON.stringify(tweets, null, 2), 'utf-8');
 
-  console.log(`✅ JSON 导出成功: ${jsonPath}`);
+  console.log(`✅ JSON exported successfully: ${jsonPath}`);
   return jsonPath;
 }
 
