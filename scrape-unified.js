@@ -18,6 +18,7 @@ const exportUtils = require('./utils/export');
 const screenshotUtils = require('./utils/screenshot');
 const retryUtils = require('./utils/retry');
 const validation = require('./utils/validation');
+const constants = require('./config/constants');
 // const { getPageContent } = require('./utils/flaresolverr'); // 不再使用
 
 // 常量定义
@@ -114,14 +115,10 @@ async function scrapeXFeed(options = {}) {
  * @returns {Promise<{success: boolean, tweets: Array}>}
  */
 async function scrapeTwitter(options = {}) {
-  const platform = 'x'; // 平台标识
+  const platform = constants.PLATFORM_NAME;
   // 默认选项
   const config = {
-    limit: 50,
-    saveMarkdown: true,
-    saveScreenshots: false,
-    exportCsv: false,
-    exportJson: false,
+    ...constants.DEFAULT_SCRAPER_OPTIONS,
     ...options // 用传入的 options 覆盖默认值
   };
 
@@ -166,34 +163,26 @@ async function scrapeTwitter(options = {}) {
   const scrapedUrls = new Set();
   let seenUrls = await fileUtils.loadSeenUrls(cachePlatform, cacheIdentifier);
   let noNewTweetsConsecutiveAttempts = 0;
-  const MAX_CONSECUTIVE_NO_NEW_TWEETS = 3;
   let profileInfo = null;
-  
+
   try {
     // 启动浏览器（优化性能设置）
     browser = await puppeteer.launch({
       headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--disable-gpu',
-        '--window-size=1280,960'
-      ],
-      defaultViewport: { width: 1280, height: 960 }
+      args: constants.BROWSER_ARGS,
+      defaultViewport: constants.BROWSER_VIEWPORT
     });
-    
+
     const page = await browser.newPage();
-    
+
     // 设置现代浏览器UA
-    await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36');
-    
+    await page.setUserAgent(constants.BROWSER_USER_AGENT);
+
     // 屏蔽不必要的资源以加快加载速度
     await page.setRequestInterception(true);
     page.on('request', (req) => {
       const resourceType = req.resourceType();
-      if (resourceType === 'image' || resourceType === 'media' || resourceType === 'font') {
+      if (constants.BLOCKED_RESOURCE_TYPES.includes(resourceType)) {
         req.abort();
       } else {
         req.continue();
@@ -245,12 +234,11 @@ async function scrapeTwitter(options = {}) {
       await retryUtils.retryPageGoto(
         page,
         targetUrl,
-        { waitUntil: 'networkidle2', timeout: 60000 },
+        { waitUntil: 'networkidle2', timeout: constants.NAVIGATION_TIMEOUT },
         {
-          maxRetries: 3,
-          baseDelay: 2000,
+          ...constants.NAVIGATION_RETRY_CONFIG,
           onRetry: (error, attempt) => {
-            console.log(`[${platform.toUpperCase()}] 导航失败 (尝试 ${attempt}/3): ${error.message}`);
+            console.log(`[${platform.toUpperCase()}] 导航失败 (尝试 ${attempt}/${constants.NAVIGATION_RETRY_CONFIG.maxRetries}): ${error.message}`);
           }
         }
       );
@@ -264,12 +252,11 @@ async function scrapeTwitter(options = {}) {
       await retryUtils.retryWaitForSelector(
         page,
         X_SELECTORS.TWEET,
-        { timeout: 45000 },
+        { timeout: constants.WAIT_FOR_TWEETS_TIMEOUT },
         {
-          maxRetries: 2,
-          baseDelay: 2000,
+          ...constants.SELECTOR_RETRY_CONFIG,
           onRetry: (error, attempt) => {
-            console.log(`[${platform.toUpperCase()}] 等待推文加载失败 (尝试 ${attempt}/2): ${error.message}`);
+            console.log(`[${platform.toUpperCase()}] 等待推文加载失败 (尝试 ${attempt}/${constants.SELECTOR_RETRY_CONFIG.maxRetries}): ${error.message}`);
           }
         }
       );
@@ -472,28 +459,27 @@ async function scrapeTwitter(options = {}) {
       }
 
       // 检查是否需要刷新页面
-      if (noNewTweetsConsecutiveAttempts >= MAX_CONSECUTIVE_NO_NEW_TWEETS && collectedTweets.length < config.limit) {
+      if (noNewTweetsConsecutiveAttempts >= constants.MAX_CONSECUTIVE_NO_NEW_TWEETS && collectedTweets.length < config.limit) {
         console.warn(`[${platform.toUpperCase()}] 连续 ${noNewTweetsConsecutiveAttempts} 次未抓到新推文，尝试刷新页面...`);
         try {
           // 使用重试机制刷新页面
           await retryUtils.retryWithBackoff(
             async () => {
-              await page.reload({ waitUntil: 'networkidle2', timeout: 60000 });
+              await page.reload({ waitUntil: 'networkidle2', timeout: constants.NAVIGATION_TIMEOUT });
               console.log(`[${platform.toUpperCase()}] 页面刷新成功，等待推文重新加载...`);
               // 增加刷新后的等待超时时间
-              await page.waitForSelector(X_SELECTORS.TWEET, { timeout: 75000 });
+              await page.waitForSelector(X_SELECTORS.TWEET, { timeout: constants.WAIT_FOR_TWEETS_AFTER_REFRESH_TIMEOUT });
               console.log(`[${platform.toUpperCase()}] 推文已重新加载`);
             },
             {
-              maxRetries: 2,
-              baseDelay: 2000,
+              ...constants.REFRESH_RETRY_CONFIG,
               onRetry: (error, attempt) => {
-                console.log(`[${platform.toUpperCase()}] 页面刷新失败 (尝试 ${attempt}/2): ${error.message}`);
+                console.log(`[${platform.toUpperCase()}] 页面刷新失败 (尝试 ${attempt}/${constants.REFRESH_RETRY_CONFIG.maxRetries}): ${error.message}`);
               }
             }
           );
           noNewTweetsConsecutiveAttempts = 0; // 刷新后重置计数器
-          await throttle(1000 + Math.random() * 1000); // 刷新后稍作等待
+          await throttle(constants.getRefreshWaitDelay()); // 刷新后稍作等待
           continue; // 跳过本次滚动的剩余部分，直接开始下一次抓取尝试
         } catch (reloadError) {
           console.error(`[${platform.toUpperCase()}] 页面刷新或等待推文失败（所有重试均失败）: ${reloadError.message}`);
@@ -518,15 +504,15 @@ async function scrapeTwitter(options = {}) {
         await page.evaluate(() => {
           window.scrollTo(0, document.body.scrollHeight);
         });
-        
-        // 随机延迟 1.5-3 秒，避免被检测
-        await throttle(1500 + Math.random() * 1500);
-        
+
+        // 随机延迟，避免被检测
+        await throttle(constants.getScrollDelay());
+
         // 等待新推文加载
         try {
           await page.waitForFunction(
             (selector, prevCount) => document.querySelectorAll(selector).length > prevCount,
-            { timeout: 3000 },
+            { timeout: constants.WAIT_FOR_NEW_TWEETS_TIMEOUT },
             X_SELECTORS.TWEET,
             tweetsOnPage.length // 使用本次抓取前的数量判断是否有增长
           );
@@ -714,7 +700,7 @@ async function scrapeTwitterUsers(usernames, options = {}) {
     
     // 添加间隔，避免触发限流
     if (i < usernames.length - 1) {
-      const delay = options.delay || 5000;
+      const delay = options.delay || constants.BATCH_USER_DELAY;
       console.log(`等待 ${delay/1000} 秒后继续下一个用户...`);
       await throttle(delay);
     }
@@ -740,13 +726,8 @@ async function scrapeTwitterUsers(usernames, options = {}) {
  */
 function startScheduler(options = {}) {
   const config = {
-    interval: options.interval || 30 * 1000, // 默认30秒
-    limit: options.limit || 10,
-    saveMarkdown: options.saveMarkdown !== false,
-    exportCsv: options.exportCsv || false,
-    exportJson: options.exportJson || false,
-    saveScreenshots: options.saveScreenshots || false,
-    username: options.username
+    ...constants.DEFAULT_SCHEDULER_OPTIONS,
+    ...options
   };
 
   let isScraping = false; // 防止爬取重叠
