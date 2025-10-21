@@ -60,7 +60,7 @@ async function retryWithBackoff(fn, options = {}) {
         onRetry(error, attempt + 1);
       }
 
-      console.log(`重试 ${attempt + 1}/${maxRetries}，${delay}ms 后重试...`);
+      console.log(`Retrying ${attempt + 1}/${maxRetries}, retrying after ${delay}ms...`);
 
       // 等待后重试
       await sleep(delay);
@@ -109,7 +109,7 @@ async function retryWithLinearBackoff(fn, options = {}) {
         onRetry(error, attempt + 1);
       }
 
-      console.log(`重试 ${attempt + 1}/${maxRetries}，${delay}ms 后重试...`);
+      console.log(`Retrying ${attempt + 1}/${maxRetries}, retrying after ${delay}ms...`);
       await sleep(delay);
     }
   }
@@ -171,7 +171,7 @@ async function retryPageGoto(page, url, navigationOptions = {}, retryOptions = {
       baseDelay: retryOptions.baseDelay || 2000,
       shouldRetry: isRetryableError,
       onRetry: (error, attempt) => {
-        console.log(`页面导航到 ${url} 失败: ${error.message}`);
+        console.log(`Page navigation to ${url} failed: ${error.message}`);
       },
       ...retryOptions
     }
@@ -194,7 +194,7 @@ async function retryWaitForSelector(page, selector, waitOptions = {}, retryOptio
       baseDelay: retryOptions.baseDelay || 1000,
       shouldRetry: isRetryableError,
       onRetry: (error, attempt) => {
-        console.log(`等待选择器 ${selector} 失败: ${error.message}`);
+        console.log(`Waiting for selector ${selector} failed: ${error.message}`);
       },
       ...retryOptions
     }
