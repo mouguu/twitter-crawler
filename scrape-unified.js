@@ -44,11 +44,11 @@ async function scrapeXFeed(options = {}) {
   const platform = 'x';
   
   if (!username) {
-    console.error(`[${platform.toUpperCase()}] 必须提供Twitter用户名`);
+    console.error(`[${platform.toUpperCase()}] Twitter username is required`);
     return { success: false, tweets: [], error: 'Username is required' };
   }
-  
-  console.log(`[${platform.toUpperCase()}] 开始抓取用户 ${username} 的推文，上限=${limit}条...`);
+
+  console.log(`[${platform.toUpperCase()}] Starting to scrape tweets for user ${username}, limit=${limit}...`);
   
   return scrapeTwitter({
     limit: limit,
@@ -85,7 +85,7 @@ async function scrapeTwitter(options = {}) {
   // 验证配置
   const configValidation = validation.validateScraperConfig(config);
   if (!configValidation.valid) {
-    const errorMsg = `配置验证失败: ${configValidation.errors.join(', ')}`;
+    const errorMsg = `Configuration validation failed: ${configValidation.errors.join(', ')}`;
     console.error(`[${platform.toUpperCase()}] ${errorMsg}`);
     return { success: false, tweets: [], error: errorMsg };
   }
@@ -94,7 +94,7 @@ async function scrapeTwitter(options = {}) {
   if (config.username) {
     const usernameValidation = validation.validateTwitterUsername(config.username);
     if (!usernameValidation.valid) {
-      const errorMsg = `用户名验证失败: ${usernameValidation.error}`;
+      const errorMsg = `Username validation failed: ${usernameValidation.error}`;
       console.error(`[${platform.toUpperCase()}] ${errorMsg}`);
       return { success: false, tweets: [], error: errorMsg };
     }
@@ -102,8 +102,8 @@ async function scrapeTwitter(options = {}) {
     config.username = usernameValidation.normalized;
   }
 
-  console.log(`[${platform.toUpperCase()}] 开始时间线抓取，上限=${config.limit}条推文${config.withReplies ? '（with_replies）' : ''}...`);
-  console.log(`[${platform.toUpperCase()}] 选项: ${JSON.stringify(config, null, 2)}`);
+  console.log(`[${platform.toUpperCase()}] Starting timeline scrape, limit=${config.limit} tweets${config.withReplies ? ' (with_replies)' : ''}...`);
+  console.log(`[${platform.toUpperCase()}] Options: ${JSON.stringify(config, null, 2)}`);
 
   const identifierForRun = config.username || 'timeline';
   let runContext = config.runContext;
@@ -149,7 +149,7 @@ async function scrapeTwitter(options = {}) {
       X_HOME_URL;
     
     // 导航到Twitter页面
-    console.log(`[${platform.toUpperCase()}] 正在导航到 ${targetUrl}...`);
+    console.log(`[${platform.toUpperCase()}] Navigating to ${targetUrl}...`);
     try {
       await retryUtils.retryPageGoto(
         page,
@@ -158,12 +158,12 @@ async function scrapeTwitter(options = {}) {
         {
           ...constants.NAVIGATION_RETRY_CONFIG,
           onRetry: (error, attempt) => {
-            console.log(`[${platform.toUpperCase()}] 导航失败 (尝试 ${attempt}/${constants.NAVIGATION_RETRY_CONFIG.maxRetries}): ${error.message}`);
+            console.log(`[${platform.toUpperCase()}] Navigation failed (attempt ${attempt}/${constants.NAVIGATION_RETRY_CONFIG.maxRetries}): ${error.message}`);
           }
         }
       );
     } catch (navError) {
-      console.error(`[${platform.toUpperCase()}] 导航失败（所有重试均失败）: ${navError.message}`);
+      console.error(`[${platform.toUpperCase()}] Navigation failed (all retries failed): ${navError.message}`);
       return { success: false, tweets: [], error: navError.message };
     }
 
@@ -203,7 +203,7 @@ async function scrapeTwitter(options = {}) {
       try {
         await screenshotUtils.takeTimelineScreenshot(page, { runContext });
       } catch (error) {
-        console.warn('时间线截图失败:', error.message);
+        console.warn('Timeline screenshot failed:', error.message);
       }
     }
     
@@ -229,19 +229,19 @@ async function scrapeTwitter(options = {}) {
         if (collectedTweets.length >= config.limit) break;
       }
       
-      console.log(`[${platform.toUpperCase()}] 尝试 ${scrollAttempts}: 页面上有 ${tweetsOnPage.length} 条推文，添加了 ${addedInAttempt} 条新推文。总计: ${collectedTweets.length}`);
+      console.log(`[${platform.toUpperCase()}] Attempt ${scrollAttempts}: Found ${tweetsOnPage.length} tweets on page, added ${addedInAttempt} new tweets. Total: ${collectedTweets.length}`);
 
       // 更新连续无新推文计数器
       if (addedInAttempt === 0) {
         noNewTweetsConsecutiveAttempts++;
-        console.log(`[${platform.toUpperCase()}] 连续无新推文次数: ${noNewTweetsConsecutiveAttempts}`);
+        console.log(`[${platform.toUpperCase()}] Consecutive attempts with no new tweets: ${noNewTweetsConsecutiveAttempts}`);
       } else {
-        noNewTweetsConsecutiveAttempts = 0; 
+        noNewTweetsConsecutiveAttempts = 0;
       }
 
       // 检查是否需要刷新页面
       if (noNewTweetsConsecutiveAttempts >= constants.MAX_CONSECUTIVE_NO_NEW_TWEETS && collectedTweets.length < config.limit) {
-        console.warn(`[${platform.toUpperCase()}] 连续 ${noNewTweetsConsecutiveAttempts} 次未抓到新推文，尝试刷新页面...`);
+        console.warn(`[${platform.toUpperCase()}] ${noNewTweetsConsecutiveAttempts} consecutive attempts with no new tweets, refreshing page...`);
         try {
           // 使用重试机制刷新页面
           await retryUtils.retryWithBackoff(
@@ -255,7 +255,7 @@ async function scrapeTwitter(options = {}) {
             {
               ...constants.REFRESH_RETRY_CONFIG,
               onRetry: (error, attempt) => {
-                console.log(`[${platform.toUpperCase()}] 页面刷新失败 (尝试 ${attempt}/${constants.REFRESH_RETRY_CONFIG.maxRetries}): ${error.message}`);
+                console.log(`[${platform.toUpperCase()}] Page refresh failed (attempt ${attempt}/${constants.REFRESH_RETRY_CONFIG.maxRetries}): ${error.message}`);
               }
             }
           );
@@ -263,17 +263,17 @@ async function scrapeTwitter(options = {}) {
           await throttle(constants.getRefreshWaitDelay()); // 刷新后稍作等待
           continue; // 跳过本次滚动的剩余部分，直接开始下一次抓取尝试
         } catch (reloadError) {
-          console.error(`[${platform.toUpperCase()}] 页面刷新或等待推文失败（所有重试均失败）: ${reloadError.message}`);
+          console.error(`[${platform.toUpperCase()}] Page refresh or wait for tweets failed (all retries failed): ${reloadError.message}`);
           // 在退出前截图
           try {
             const errorScreenshotPath = path.join(runContext.screenshotDir, `error_refresh_timeout_${Date.now()}.png`);
             await page.screenshot({ path: errorScreenshotPath, fullPage: true });
-            console.log(`[${platform.toUpperCase()}] 错误截图已保存到: ${errorScreenshotPath}`);
+            console.log(`[${platform.toUpperCase()}] Error screenshot saved to: ${errorScreenshotPath}`);
           } catch (screenshotError) {
-            console.error('保存错误截图失败:', screenshotError.message);
+            console.error('Failed to save error screenshot:', screenshotError.message);
           }
           // 刷新失败，可能页面卡死或网络问题，直接退出
-          return { success: false, tweets: collectedTweets, error: `页面刷新失败: ${reloadError.message}` };
+          return { success: false, tweets: collectedTweets, error: `Page refresh failed: ${reloadError.message}` };
         }
       }
 
@@ -300,20 +300,20 @@ async function scrapeTwitter(options = {}) {
       }
     }
 
-    console.log(`[${platform.toUpperCase()}] 抓取完成。已收集 ${collectedTweets.length} 条推文。`);
+    console.log(`[${platform.toUpperCase()}] Scraping completed. Collected ${collectedTweets.length} tweets.`);
 
     // 保存已抓取的URL集合
     try {
       await fileUtils.saveSeenUrls(cachePlatform, cacheIdentifier, seenUrls);
     } catch (error) {
-      console.warn(`[${platform.toUpperCase()}] 保存已抓取的 URL 集合失败:`, error.message);
+      console.warn(`[${platform.toUpperCase()}] Failed to save seen URLs:`, error.message);
     }
 
     // 保存为Markdown文件（如果启用）
     if (config.saveMarkdown && collectedTweets.length > 0) {
       await markdownUtils.saveTweetsAsMarkdown(collectedTweets, runContext);
     } else if (!config.saveMarkdown) {
-      console.log(`[${platform.toUpperCase()}] Markdown保存已禁用`);
+      console.log(`[${platform.toUpperCase()}] Markdown saving is disabled`);
     }
     
     // 导出为CSV（如果启用）
@@ -360,10 +360,10 @@ async function scrapeTwitter(options = {}) {
     try {
       await fs.promises.writeFile(runContext.metadataPath, JSON.stringify(metadata, null, 2), 'utf-8');
     } catch (metaError) {
-      console.warn(`[${platform.toUpperCase()}] 写入 metadata 失败: ${metaError.message}`);
+      console.warn(`[${platform.toUpperCase()}] Failed to write metadata: ${metaError.message}`);
     }
 
-    console.log(`[${platform.toUpperCase()}] 本次抓取输出目录: ${runContext.runDir}`);
+    console.log(`[${platform.toUpperCase()}] Output directory for this scraping run: ${runContext.runDir}`);
 
     return { 
       success: true, 
@@ -394,17 +394,17 @@ async function scrapeTwitter(options = {}) {
  */
 async function scrapeTwitterUsers(usernames, options = {}) {
   if (!Array.isArray(usernames) || usernames.length === 0) {
-    console.error('需要提供有效的Twitter用户名数组');
+    console.error('Valid Twitter username array is required');
     return [];
   }
-  
-  console.log(`批量抓取 ${usernames.length} 个Twitter用户的推文`);
-  
+
+  console.log(`Batch scraping tweets from ${usernames.length} Twitter users`);
+
   const results = [];
-  
+
   for (let i = 0; i < usernames.length; i++) {
     const username = usernames[i];
-    console.log(`[${i+1}/${usernames.length}] 抓取用户 @${username} 的推文`);
+    console.log(`[${i+1}/${usernames.length}] Scraping tweets from user @${username}`);
     
     try {
       const runContext = await fileUtils.createRunContext({
@@ -433,12 +433,12 @@ async function scrapeTwitterUsers(usernames, options = {}) {
         });
         
         if (result.runContext?.runDir) {
-          console.log(`成功抓取 @${username} 的 ${result.tweets.length} 条推文，输出目录: ${result.runContext.runDir}`);
+          console.log(`Successfully scraped ${result.tweets.length} tweets from @${username}, output directory: ${result.runContext.runDir}`);
         } else {
-          console.log(`成功抓取 @${username} 的 ${result.tweets.length} 条推文`);
+          console.log(`Successfully scraped ${result.tweets.length} tweets from @${username}`);
         }
       } else {
-        console.error(`抓取 @${username} 失败: ${result.error || '未知错误'}`);
+        console.error(`Failed to scrape @${username}: ${result.error || 'Unknown error'}`);
         results.push({
           username,
           tweetCount: 0,
@@ -447,7 +447,7 @@ async function scrapeTwitterUsers(usernames, options = {}) {
         });
       }
     } catch (error) {
-      console.error(`抓取 @${username} 出错:`, error);
+      console.error(`Error scraping @${username}:`, error);
       results.push({
         username,
         tweetCount: 0,
@@ -455,11 +455,11 @@ async function scrapeTwitterUsers(usernames, options = {}) {
         error: error.message
       });
     }
-    
+
     // 添加间隔，避免触发限流
     if (i < usernames.length - 1) {
       const delay = options.delay || constants.BATCH_USER_DELAY;
-      console.log(`等待 ${delay/1000} 秒后继续下一个用户...`);
+      console.log(`Waiting ${delay/1000} seconds before continuing to next user...`);
       await throttle(delay);
     }
   }
@@ -492,19 +492,19 @@ function startScheduler(options = {}) {
   let intervalId = null;
   let isRunning = true;
 
-  console.log(`启动调度器，每隔 ${config.interval / 1000} 秒爬取一次`);
+  console.log(`Scheduler started, scraping every ${config.interval / 1000} seconds`);
 
   // 爬取函数
   async function performScrape() {
     if (!isRunning) return;
     if (isScraping) {
-      console.log('上一次爬取仍在进行中，跳过本次爬取');
+      console.log('Previous scraping still in progress, skipping this run');
       return;
     }
 
     isScraping = true;
     try {
-      console.log(`开始定时爬取，时间: ${new Date().toLocaleString()}`);
+      console.log(`Starting scheduled scrape at: ${new Date().toLocaleString()}`);
 
       await scrapeTwitter({
         limit: config.limit,
@@ -515,9 +515,9 @@ function startScheduler(options = {}) {
         username: config.username
       });
 
-      console.log(`定时爬取完成，时间: ${new Date().toLocaleString()}`);
+      console.log(`Scheduled scrape completed at: ${new Date().toLocaleString()}`);
     } catch (error) {
-      console.error('定时爬取出错:', error);
+      console.error('Scheduled scrape error:', error);
     } finally {
       isScraping = false;
     }
@@ -535,7 +535,7 @@ function startScheduler(options = {}) {
       isRunning = false;
       if (intervalId) {
         clearInterval(intervalId);
-        console.log('调度器已停止');
+        console.log('Scheduler stopped');
       }
     },
     isRunning: () => isRunning,
