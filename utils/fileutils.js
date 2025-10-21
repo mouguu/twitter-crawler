@@ -5,6 +5,7 @@
 
 const fs = require('fs').promises;
 const path = require('path');
+const timeUtils = require('./time');
 
 const DEFAULT_OUTPUT_ROOT = path.join(__dirname, '..', 'output');
 const CACHE_ROOT = path.join(__dirname, '..', '.cache');
@@ -77,8 +78,26 @@ async function createRunContext(options = {}) {
 
   const platform = sanitizeSegment(options.platform || DEFAULT_PLATFORM);
   const identifier = sanitizeSegment(options.identifier || DEFAULT_IDENTIFIER);
-  const timestampRaw = options.timestamp || new Date().toISOString();
-  const runTimestamp = timestampRaw.replace(/[:.]/g, '-');
+  const timezone = timeUtils.resolveTimezone(options.timezone);
+
+  let sourceDate = new Date();
+  if (options.timestamp) {
+    const overrideDate = new Date(options.timestamp);
+    if (!Number.isNaN(overrideDate.getTime())) {
+      sourceDate = overrideDate;
+    } else {
+      console.warn(`[fileutils] Invalid timestamp override "${options.timestamp}", using current time instead.`);
+    }
+  }
+
+  const timestampInfo = timeUtils.formatZonedTimestamp(sourceDate, timezone, {
+    includeMilliseconds: true,
+    includeOffset: true
+  });
+
+  const runTimestamp = timestampInfo.fileSafe;
+  const runTimestampIso = timestampInfo.iso;
+  const runTimestampUtc = sourceDate.toISOString();
   const runId = `run-${runTimestamp}`;
 
   const outputRoot = options.baseOutputDir
@@ -104,7 +123,10 @@ async function createRunContext(options = {}) {
     identifier,
     outputRoot,
     runId,
+    timezone,
     runTimestamp,
+    runTimestampIso,
+    runTimestampUtc,
     runDir,
     markdownDir,
     screenshotDir,

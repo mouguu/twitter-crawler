@@ -11,6 +11,7 @@ const { Command } = require('commander');
 const scraper = require('./scrape-unified');
 const fileUtils = require('./utils/fileutils');
 const markdownUtils = require('./utils/markdown');
+const timeUtils = require('./utils/time');
 // const mergeUtils = require('./utils/merge');
 
 // 创建命令行程序
@@ -28,7 +29,7 @@ program
   .option('-o, --output <dir>', 'Output directory', './output')
   .option('-m, --merge', 'Merge all results into a single file', false)
   .option('--merge-file <filename>', 'Merge file name', 'merged')
-  .option('--format <format>', 'Export format: md/json/csv', 'md');
+.option('--format <format>', 'Export format: md/json/csv', 'md');
 
 // Twitter命令
 program
@@ -44,6 +45,7 @@ program
   .option('--csv', 'Additionally export as CSV (consolidated into one file)', false)
   .option('--headless <boolean>', 'Run browser in headless mode', 'true')
   .option('-o, --output <dir>', 'Output directory', './output')
+  .option('--timezone <timezone>', 'Timezone for timestamp output (IANA name)')
   .option('-d, --debug', 'Enable debug mode with verbose logs')
   .option('-m, --merge', 'Merge all results into a single file', false)
   .option('--merge-file <filename>', 'Merge file name', 'merged')
@@ -59,6 +61,8 @@ program
       options.count = parseInt(options.count);
       options.headless = options.headless === 'true';
       const outputDir = path.resolve(options.output || './output');
+      const timezoneInput = options.timezone || timeUtils.getDefaultTimezone();
+      const timezone = timeUtils.resolveTimezone(timezoneInput);
       
       // 确保输出目录存在
       try {
@@ -69,6 +73,7 @@ program
       }
 
       console.log('🚀 Starting Twitter scraping task...');
+      console.log(`⏱️ Using timezone: ${timezone}`);
       
       // 辅助函数: 归一化输入为用户名
       const normalizeToUsername = (input) => {
@@ -155,7 +160,8 @@ program
         exportFormat: options.format,
         withReplies,
         exportCsv: !!options.csv,
-        exportJson: !!options.json
+        exportJson: !!options.json,
+        timezone
       };
       
       // 执行抓取（统一逻辑）
@@ -200,6 +206,7 @@ program
   .option('-c, --config <filepath>', 'Configuration file path', './crawler-config.json')
   .option('-i, --interval <minutes>', 'Scraping interval (minutes)', '30')
   .option('--headless <boolean>', 'Run browser in headless mode', 'true')
+  .option('--timezone <timezone>', 'Timezone for timestamp output (IANA name)')
   .action(async (options) => {
     try {
       // 检查配置文件是否存在
@@ -237,6 +244,13 @@ program
           
           // 加载配置
           const config = JSON.parse(fs.readFileSync(options.config, 'utf8'));
+
+          const timezoneInput =
+            (config.schedule && config.schedule.timezone) ||
+            options.timezone ||
+            timeUtils.getDefaultTimezone();
+          const timezone = timeUtils.resolveTimezone(timezoneInput);
+          console.log(`Timezone for this run: ${timezone}`);
           
           // 基本选项
           const scraperOptions = {
@@ -244,7 +258,8 @@ program
             headless: options.headless,
             mergeResults: options.parent.merge,
             mergeFilename: `${options.parent.mergeFile}-${getFormattedDate()}`,
-            exportFormat: options.parent.format
+            exportFormat: options.parent.format,
+            timezone
           };
           
           // 仅抓取Twitter
