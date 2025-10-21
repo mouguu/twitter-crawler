@@ -6,6 +6,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const fileUtils = require('./fileutils');
+const timeUtils = require('./time');
 
 /**
  * 生成单条推文的 Markdown 文件
@@ -23,7 +24,22 @@ async function saveTweetAsMarkdown(tweet, runContext, index = 0) {
     throw new Error('saveTweetAsMarkdown requires valid runContext.markdownDir');
   }
 
-  const date = new Date(tweet.time);
+  const timezone = runContext?.timezone || timeUtils.getDefaultTimezone();
+  let tweetTimestampIso = tweet.time;
+  try {
+    const timestampInfo = timeUtils.formatZonedTimestamp(tweet.time, timezone, {
+      includeMilliseconds: true,
+      includeOffset: true
+    });
+    tweetTimestampIso = timestampInfo.iso;
+  } catch (error) {
+    console.warn('[X] Failed to format tweet timestamp, falling back to raw value:', error.message);
+    const fallback = new Date(tweet.time);
+    if (!Number.isNaN(fallback.getTime())) {
+      tweetTimestampIso = fallback.toISOString();
+    }
+  }
+
   const urlSegment = Buffer.from(tweet.url).toString('base64url').substring(0, 8);
   const filename = `${String(index + 1).padStart(3, '0')}-${urlSegment}.md`;
   const filePath = path.join(runContext.markdownDir, filename);
@@ -33,8 +49,9 @@ async function saveTweetAsMarkdown(tweet, runContext, index = 0) {
     `platform: x`,
     `username: ${runContext.identifier}`,
     `runId: ${runContext.runId}`,
+    `timezone: ${timezone}`,
     `tweetIndex: ${index + 1}`,
-    `tweetTimestamp: ${date.toISOString()}`,
+    `tweetTimestamp: ${tweetTimestampIso}`,
     `url: ${tweet.url}`,
     `likes: ${tweet.likes || 0}`,
     `retweets: ${tweet.retweets || 0}`,
@@ -76,6 +93,7 @@ async function saveTweetsAsMarkdown(tweets, runContext, options = {}) {
   const batchSize = options.batchSize || 10;
   const savedFiles = [];
   const aggregatedSections = [];
+  const timezone = runContext?.timezone || timeUtils.getDefaultTimezone();
 
   for (let i = 0; i < tweets.length; i += batchSize) {
     const batch = tweets.slice(i, i + batchSize);
@@ -89,7 +107,17 @@ async function saveTweetsAsMarkdown(tweets, runContext, options = {}) {
   }
 
   tweets.forEach((tweet, index) => {
-    const date = tweet.time ? new Date(tweet.time) : null;
+    let formattedTimestamp = 'Unknown time';
+    if (tweet.time) {
+      try {
+        formattedTimestamp = timeUtils.formatReadableLocal(tweet.time, timezone);
+      } catch (error) {
+        const fallback = new Date(tweet.time);
+        formattedTimestamp = Number.isNaN(fallback.getTime())
+          ? 'Unknown time'
+          : fallback.toISOString();
+      }
+    }
     const metrics = [
       `❤️ ${tweet.likes || 0}`,
       `🔁 ${tweet.retweets || 0}`,
@@ -100,7 +128,7 @@ async function saveTweetsAsMarkdown(tweets, runContext, options = {}) {
     }
 
     aggregatedSections.push([
-      `## ${index + 1}. ${date ? date.toISOString() : 'Unknown time'}`,
+      `## ${index + 1}. ${formattedTimestamp}`,
       '',
       tweet.text || '(No text content)',
       '',
@@ -109,14 +137,22 @@ async function saveTweetsAsMarkdown(tweets, runContext, options = {}) {
     ].join('\n'));
   });
 
-  const indexContent = [
+  const headerLines = [
     '---',
     `platform: x`,
     `username: ${runContext.identifier}`,
     `runId: ${runContext.runId}`,
-    `runTimestamp: ${runContext.runTimestamp}`,
+    runContext.runTimestampIso
+      ? `runTimestamp: ${runContext.runTimestampIso}`
+      : `runTimestamp: ${runContext.runTimestamp}`,
+    runContext.runTimestampUtc ? `runTimestampUtc: ${runContext.runTimestampUtc}` : null,
+    `timezone: ${timezone}`,
     `tweetCount: ${tweets.length}`,
-    '---',
+    '---'
+  ].filter(Boolean);
+
+  const indexContent = [
+    ...headerLines,
     '',
     `# Twitter Timeline - @${runContext.identifier}`,
     '',

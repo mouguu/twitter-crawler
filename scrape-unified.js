@@ -19,6 +19,7 @@ const exportUtils = require('./utils/export');
 const screenshotUtils = require('./utils/screenshot');
 const retryUtils = require('./utils/retry');
 const validation = require('./utils/validation');
+const timeUtils = require('./utils/time');
 const constants = require('./config/constants');
 
 // 常量定义
@@ -111,12 +112,22 @@ async function scrapeTwitter(options = {}) {
     runContext = await fileUtils.createRunContext({
       platform: 'twitter',
       identifier: identifierForRun,
-      baseOutputDir: config.outputDir
+      baseOutputDir: config.outputDir,
+      timezone: config.timezone
     });
+  } else if (!runContext.timezone) {
+    runContext.timezone = timeUtils.resolveTimezone(config.timezone);
   }
+
+  const timezone = runContext.timezone || timeUtils.getDefaultTimezone();
   const cachePlatform = runContext.platform || 'twitter';
   const cacheIdentifier = runContext.identifier || fileUtils.sanitizeSegment(identifierForRun);
-  const runStartedAt = new Date().toISOString();
+  const runStartedDate = new Date();
+  const runStartedAt = runStartedDate.toISOString();
+  const runStartedAtLocal = timeUtils.formatZonedTimestamp(runStartedDate, timezone, {
+    includeMilliseconds: true,
+    includeOffset: true
+  }).iso;
   
   let browserManager = null;
   let page = null;
@@ -332,14 +343,24 @@ async function scrapeTwitter(options = {}) {
       screenshotPaths = await screenshotUtils.takeScreenshotsOfTweets(page, collectedTweets, { runContext });
     }
 
-    const runCompletedAt = new Date().toISOString();
+    const runCompletedDate = new Date();
+    const runCompletedAt = runCompletedDate.toISOString();
+    const runCompletedAtLocal = timeUtils.formatZonedTimestamp(runCompletedDate, timezone, {
+      includeMilliseconds: true,
+      includeOffset: true
+    }).iso;
     const metadata = {
       platform,
       username: config.username || null,
       runId: runContext.runId,
       runTimestamp: runContext.runTimestamp,
+      runTimestampIso: runContext.runTimestampIso,
+      runTimestampUtc: runContext.runTimestampUtc,
+      timezone,
       runStartedAt,
+      runStartedAtLocal,
       runCompletedAt,
+      runCompletedAtLocal,
       tweetCount: collectedTweets.length,
       withReplies: !!config.withReplies,
       exportCsv: !!config.exportCsv,
@@ -401,6 +422,7 @@ async function scrapeTwitterUsers(usernames, options = {}) {
   console.log(`Batch scraping tweets from ${usernames.length} Twitter users`);
 
   const results = [];
+  const resolvedTimezone = timeUtils.resolveTimezone(options.timezone);
 
   for (let i = 0; i < usernames.length; i++) {
     const username = usernames[i];
@@ -410,11 +432,13 @@ async function scrapeTwitterUsers(usernames, options = {}) {
       const runContext = await fileUtils.createRunContext({
         platform: 'twitter',
         identifier: username,
-        baseOutputDir: options.outputDir
+        baseOutputDir: options.outputDir,
+        timezone: resolvedTimezone
       });
 
       const userOptions = {
         ...options,
+        timezone: resolvedTimezone,
         username,
         limit: options.tweetCount || 20,
         runContext
