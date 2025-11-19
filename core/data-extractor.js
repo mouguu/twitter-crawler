@@ -187,6 +187,23 @@ async function extractTweetsFromPage(page) {
             // 提取推文 ID
             const tweetId = tweetUrl.split('/status/')[1];
 
+            // 增强分析：检查是否为回复
+            let isReply = false;
+            const replyContext = article.querySelector('div[dir="auto"] span');
+            if (replyContext && replyContext.innerText.includes('Replying to')) {
+              isReply = true;
+            }
+
+            // 增强分析：检查是否有引用推文 (Quoted Tweet)
+            let quotedContent = null;
+            // 通常引用推文是文章内的第二个 tweetText，或者特定的 div 结构
+            // 这是一个简单的启发式方法
+            const allTextNodes = article.querySelectorAll(SELECTORS.TWEET_TEXT);
+            if (allTextNodes.length > 1) {
+              // 如果有多个文本节点，第二个通常是引用内容
+              quotedContent = allTextNodes[1]?.innerText?.trim();
+            }
+
             return {
               text: tweetText,
               time: dateTime,
@@ -196,7 +213,9 @@ async function extractTweetsFromPage(page) {
               likes,
               retweets,
               replies,
-              hasMedia
+              hasMedia,
+              isReply,       // 新增
+              quotedContent  // 新增
             };
           } catch(e) {
             return null;

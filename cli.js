@@ -11,6 +11,7 @@ const { Command } = require('commander');
 const scraper = require('./scrape-unified');
 const fileUtils = require('./utils/fileutils');
 const markdownUtils = require('./utils/markdown');
+const aiExportUtils = require('./utils/ai-export');
 const timeUtils = require('./utils/time');
 // const mergeUtils = require('./utils/merge');
 
@@ -37,10 +38,15 @@ program
   .description('Scrape Twitter/X account information and tweets')
   .option('-u, --username <username>', 'Twitter username (without @)')
   .option('-U, --url <profileUrl>', 'Twitter/X profile URL (e.g., https://x.com/elonmusk)')
+  .option('--home', 'Scrape the home timeline (For You / Following) of the logged-in account')
+  .option('--thread <tweetUrl>', 'Scrape a specific tweet thread (e.g., https://x.com/username/status/123456)')
+  .option('--max-replies <number>', 'Maximum number of replies to scrape for thread mode', '100')
   .option('-f, --file <filepath>', 'File containing Twitter usernames (one per line)')
   .option('-c, --count <number>', 'Number of tweets to scrape per account', '20')
   .option('-s, --separate', 'Save each Twitter account separately', false)
   .option('--with-replies', 'Scrape with_replies tab (saved with same logic)', false)
+  .option('--likes', 'Also scrape user likes (useful for persona analysis)', false)
+  .option('--persona', 'Enable Persona Analysis mode (auto-generates AI prompt, includes replies)', false)
   .option('--json', 'Additionally export as JSON (consolidated into one file)', false)
   .option('--csv', 'Additionally export as CSV (consolidated into one file)', false)
   .option('--headless <boolean>', 'Run browser in headless mode', 'true')
@@ -53,9 +59,43 @@ program
   .action(async (options) => {
     try {
       // 验证并初始化选项
-      if (!options.username && !options.url && !options.file) {
-        console.error('Error: Please provide Twitter username, profile URL, or file containing usernames/URLs');
+      if (!options.username && !options.url && !options.file && !options.home && !options.thread) {
+        console.error('Error: Please provide Twitter username, profile URL, file, --home, or --thread');
         process.exit(1);
+      }
+      
+      // 处理 Thread 模式（优先处理，因为它是独立的功能）
+      if (options.thread) {
+        console.log('🧵 Thread Mode ENABLED');
+        const maxReplies = parseInt(options.maxReplies) || 100;
+        
+        const threadOptions = {
+          tweetUrl: options.thread,
+          maxReplies: maxReplies,
+          outputDir: path.resolve(options.output || './output'),
+          timezone: timeUtils.resolveTimezone(options.timezone || timeUtils.getDefaultTimezone()),
+          saveMarkdown: true,
+          exportJson: !!options.json,
+          exportCsv: !!options.csv,
+          generateAnalysis: true
+        };
+        
+        const result = await scraper.scrapeThread(threadOptions);
+        
+        if (result.success) {
+          console.log(`✅ Thread scraping completed!`);
+          console.log(`   - Original tweet: ${result.originalTweet ? 'Found' : 'Not found'}`);
+          console.log(`   - Replies scraped: ${result.replyCount}`);
+          console.log(`   - Total tweets: ${result.tweets.length}`);
+          if (result.runContext?.runDir) {
+            console.log(`   - Output directory: ${result.runContext.runDir}`);
+          }
+        } else {
+          console.error(`❌ Thread scraping failed: ${result.error}`);
+          process.exit(1);
+        }
+        
+        return; // Thread 模式完成后直接返回
       }
       
       options.count = parseInt(options.count);
@@ -122,6 +162,38 @@ program
       // 初始化用户列表
       let usernames = [];
       let withReplies = !!options.withReplies;
+
+      // 处理 Home 模式
+      if (options.home) {
+        console.log('🏠 Home Timeline Mode ENABLED');
+        // 我们使用一个特殊的占位符，scrape-unified.js 会识别它
+        // 但实际上 scrape-unified.js 的 scrapeTwitterUsers 是设计为遍历用户名的
+        // 所以我们需要稍微调整一下调用逻辑，或者把 "home" 当作一个特殊用户处理
+        
+        // 让我们看看 scrape-unified.js 的 scrapeTwitterUsers
+        // 它接受一个数组。我们可以传入 [null] 或者 ['home'] 吗？
+        // scrapeTwitterUsers 会用这个名字创建目录。
+        
+        // 更好的方式：直接调用 scrapeXFeed 或者构造一个特殊的 username 列表
+        // 但 scrapeTwitterUsers 内部有循环。
+        
+        // 让我们修改 scrape-unified.js 来更好地支持 Home，现在先暂时用一个特殊标记
+        // 如果我们传入 null，scrapeTwitter 会默认去 X_HOME_URL
+        usernames.push(null); 
+      }
+
+      // Persona 模式自动配置
+      if (options.persona) {
+        console.log('🧠 Persona Analysis Mode ENABLED');
+        console.log('   - Auto-enabling "with_replies" to capture interactions');
+        withReplies = true;
+        
+        if (options.count === 20) { // 如果用户使用的是默认值 (数字比较)
+           console.log('   - Bumping tweet count to 100 for better analysis depth');
+           options.count = 100;
+        }
+      }
+
       if (options.username) {
         const u = normalizeToUsername(options.username);
         if (u) usernames.push(u);
@@ -159,6 +231,7 @@ program
         mergeFilename: options.mergeFile,
         exportFormat: options.format,
         withReplies,
+        scrapeLikes: !!options.likes,
         exportCsv: !!options.csv,
         exportJson: !!options.json,
         timezone
@@ -166,6 +239,27 @@ program
       
       // 执行抓取（统一逻辑）
       const results = await scraper.scrapeTwitterUsers(usernames, scraperOptions);
+
+      // 统一生成 AI 分析文件 (无论是否开启 persona 模式，只要有数据就生成)
+      if (results && results.length > 0) {
+        console.log('\n🧠 Generating AI Analysis Prompts...');
+        for (const result of results) {
+          if (result.tweets && result.tweets.length > 0) {
+            // 决定使用哪种 Prompt 模板
+            let promptType = 'persona'; // 默认人物画像
+            if (!options.username && !options.url && !options.file && options.home) {
+              promptType = 'feed_analysis'; // 如果是 Home 模式，改为信息流分析
+            }
+            
+            await aiExportUtils.generatePersonaAnalysis(
+              result.tweets, 
+              result.profile, 
+              result.runContext,
+              promptType // 传入类型
+            );
+          }
+        }
+      }
 
       console.log(`✅ Completed! Base output directory: ${outputDir}`);
 

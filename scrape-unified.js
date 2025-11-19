@@ -33,6 +33,221 @@ const throttle = (ms) => new Promise(resolve => setTimeout(resolve, ms));
  ****************************/
 
 /**
+ * 抓取单条推文的完整线程（Thread）
+ * @param {Object} options - 配置选项
+ * @param {string} options.tweetUrl - 推文 URL (e.g., https://x.com/username/status/123456)
+ * @param {number} options.maxReplies - 最多抓取的回复数量（默认：100）
+ * @returns {Promise<{success: boolean, tweets: Array, originalTweet: Object}>}
+ */
+async function scrapeThread(options = {}) {
+  const platform = constants.PLATFORM_NAME;
+  const tweetUrl = options.tweetUrl;
+  const maxReplies = options.maxReplies || 100;
+
+  if (!tweetUrl || !tweetUrl.includes('/status/')) {
+    console.error(`[${platform.toUpperCase()}] Invalid tweet URL. Must contain '/status/'`);
+    return { success: false, tweets: [], error: 'Invalid tweet URL' };
+  }
+
+  // 从 URL 中提取推文 ID 和用户名
+  const urlMatch = tweetUrl.match(/x\.com\/([^\/]+)\/status\/(\d+)/);
+  if (!urlMatch) {
+    console.error(`[${platform.toUpperCase()}] Could not parse tweet URL: ${tweetUrl}`);
+    return { success: false, tweets: [], error: 'Could not parse tweet URL' };
+  }
+
+  const username = urlMatch[1];
+  const tweetId = urlMatch[2];
+  const identifier = `thread_${username}_${tweetId}`;
+
+  console.log(`[${platform.toUpperCase()}] Starting to scrape thread: ${tweetUrl}`);
+  console.log(`[${platform.toUpperCase()}] Max replies to scrape: ${maxReplies}`);
+
+  // 创建运行上下文
+  let runContext = options.runContext;
+  if (!runContext) {
+    runContext = await fileUtils.createRunContext({
+      platform: 'twitter',
+      identifier: identifier,
+      baseOutputDir: options.outputDir || './output',
+      timezone: options.timezone
+    });
+  }
+
+  let browserManager = null;
+  let page = null;
+  let originalTweet = null;
+  let allReplies = [];
+  const scrapedReplyIds = new Set();
+
+  try {
+    // 启动浏览器
+    browserManager = new BrowserManager();
+    await browserManager.launch({ headless: true });
+    page = await browserManager.createPage();
+    console.log(`[${platform.toUpperCase()}] Browser launched`);
+
+    // 加载 Cookies
+    try {
+      const cookieManager = new CookieManager();
+      const cookieInfo = await cookieManager.loadAndInject(page);
+      console.log(`[${platform.toUpperCase()}] Loaded ${cookieInfo.cookies.length} cookies`);
+    } catch (error) {
+      console.error(`[${platform.toUpperCase()}] Cookie error: ${error.message}`);
+      return { success: false, tweets: [], error: error.message };
+    }
+
+    // 导航到推文页面
+    console.log(`[${platform.toUpperCase()}] Navigating to ${tweetUrl}...`);
+    try {
+      await retryUtils.retryPageGoto(
+        page,
+        tweetUrl,
+        { waitUntil: 'networkidle2', timeout: constants.NAVIGATION_TIMEOUT },
+        {
+          ...constants.NAVIGATION_RETRY_CONFIG,
+          onRetry: (error, attempt) => {
+            console.log(`[${platform.toUpperCase()}] Navigation failed (attempt ${attempt}): ${error.message}`);
+          }
+        }
+      );
+    } catch (navError) {
+      console.error(`[${platform.toUpperCase()}] Navigation failed: ${navError.message}`);
+      return { success: false, tweets: [], error: navError.message };
+    }
+
+    // 等待推文加载
+    try {
+      await retryUtils.retryWaitForSelector(
+        page,
+        dataExtractor.X_SELECTORS.TWEET,
+        { timeout: constants.WAIT_FOR_TWEETS_TIMEOUT },
+        {
+          ...constants.SELECTOR_RETRY_CONFIG,
+          onRetry: (error, attempt) => {
+            console.log(`[${platform.toUpperCase()}] Waiting for tweet failed (attempt ${attempt}): ${error.message}`);
+          }
+        }
+      );
+      console.log(`[${platform.toUpperCase()}] Tweet loaded`);
+    } catch (waitError) {
+      console.error(`[${platform.toUpperCase()}] No tweet found: ${waitError.message}`);
+      return { success: false, tweets: [], error: waitError.message };
+    }
+
+    // 提取原推文（第一条推文通常是原推）
+    const tweetsOnPage = await dataExtractor.extractTweetsFromPage(page);
+    if (tweetsOnPage.length > 0) {
+      // 找到包含指定 tweetId 的推文（原推）
+      originalTweet = tweetsOnPage.find(t => t.id === tweetId || t.url.includes(tweetId));
+      if (!originalTweet && tweetsOnPage.length > 0) {
+        // 如果找不到，使用第一条作为原推
+        originalTweet = tweetsOnPage[0];
+      }
+      console.log(`[${platform.toUpperCase()}] Found original tweet: ${originalTweet?.text?.substring(0, 50)}...`);
+
+      // 其他推文可能是回复
+      tweetsOnPage.forEach(tweet => {
+        if (tweet.id !== originalTweet?.id && !scrapedReplyIds.has(tweet.id)) {
+          allReplies.push(tweet);
+          scrapedReplyIds.add(tweet.id);
+        }
+      });
+    }
+
+    // 滚动并抓取更多回复
+    let scrollAttempts = 0;
+    const maxScrollAttempts = Math.max(50, Math.ceil(maxReplies / 5));
+    let noNewRepliesCount = 0;
+    let previousTweetCount = tweetsOnPage.length;
+
+    while (allReplies.length < maxReplies && scrollAttempts < maxScrollAttempts) {
+      scrollAttempts++;
+      console.log(`[${platform.toUpperCase()}] Scraping replies attempt ${scrollAttempts}... (found ${allReplies.length} replies)`);
+
+      // 滚动到底部
+      await dataExtractor.scrollToBottom(page);
+      await throttle(constants.getScrollDelay());
+
+      // 等待新回复加载
+      const hasNewTweets = await dataExtractor.waitForNewTweets(
+        page,
+        previousTweetCount,
+        constants.WAIT_FOR_NEW_TWEETS_TIMEOUT
+      );
+
+      // 提取新回复
+      const newTweets = await dataExtractor.extractTweetsFromPage(page);
+      previousTweetCount = newTweets.length; // 更新计数
+      let addedCount = 0;
+
+      for (const tweet of newTweets) {
+        if (allReplies.length >= maxReplies) break;
+        if (tweet.id === originalTweet?.id) continue; // 跳过原推
+        if (!scrapedReplyIds.has(tweet.id)) {
+          allReplies.push(tweet);
+          scrapedReplyIds.add(tweet.id);
+          addedCount++;
+        }
+      }
+
+      if (addedCount === 0) {
+        noNewRepliesCount++;
+        if (noNewRepliesCount >= 3) {
+          console.log(`[${platform.toUpperCase()}] No new replies found after ${noNewRepliesCount} attempts, stopping...`);
+          break;
+        }
+      } else {
+        noNewRepliesCount = 0;
+      }
+
+      console.log(`[${platform.toUpperCase()}] Added ${addedCount} new replies. Total: ${allReplies.length}`);
+    }
+
+    console.log(`[${platform.toUpperCase()}] Thread scraping completed. Found ${allReplies.length} replies.`);
+
+    // 合并原推和回复
+    const allTweets = originalTweet ? [originalTweet, ...allReplies] : allReplies;
+
+    // 保存为 Markdown
+    if (options.saveMarkdown !== false && allTweets.length > 0) {
+      await markdownUtils.saveTweetsAsMarkdown(allTweets, runContext);
+    }
+
+    // 导出 JSON/CSV（如果启用）
+    if (options.exportJson && allTweets.length > 0) {
+      await exportUtils.exportToJson(allTweets, runContext);
+    }
+    if (options.exportCsv && allTweets.length > 0) {
+      await exportUtils.exportToCsv(allTweets, runContext);
+    }
+
+    // 生成 AI 分析文件（线程分析）
+    if (allTweets.length > 0 && options.generateAnalysis !== false) {
+      const aiExportUtils = require('./utils/ai-export');
+      await aiExportUtils.generateThreadAnalysis(allTweets, originalTweet, runContext);
+    }
+
+    return {
+      success: true,
+      tweets: allTweets,
+      originalTweet: originalTweet,
+      replies: allReplies,
+      replyCount: allReplies.length,
+      runContext
+    };
+
+  } catch (error) {
+    console.error(`[${platform.toUpperCase()}] Thread scraping failed:`, error.message);
+    return { success: false, tweets: [], error: error.message, runContext };
+  } finally {
+    if (browserManager) {
+      await browserManager.close();
+    }
+  }
+}
+
+/**
  * 抓取Twitter/X Feed
  * @param {Object} options - 配置选项
  * @param {string} options.username - Twitter用户名
@@ -44,10 +259,14 @@ async function scrapeXFeed(options = {}) {
   const limit = options.limit || 50;
   const platform = 'x';
   
-  if (!username) {
-    console.error(`[${platform.toUpperCase()}] Twitter username is required`);
-    return { success: false, tweets: [], error: 'Username is required' };
-  }
+  // 只有在非 Home 模式下才强制需要 username
+  // 我们通过判断 username 是否存在来决定
+  // 但调用者可能会传入 null
+  // 让我们放宽这个检查，具体的 URL 构造逻辑在 scrapeTwitter 里处理
+  // if (!username) {
+  //   console.error(`[${platform.toUpperCase()}] Twitter username is required`);
+  //   return { success: false, tweets: [], error: 'Username is required' };
+  // }
 
   console.log(`[${platform.toUpperCase()}] Starting to scrape tweets for user ${username}, limit=${limit}...`);
   
@@ -155,9 +374,16 @@ async function scrapeTwitter(options = {}) {
     }
 
     // 确定访问URL (是主页还是特定用户)
-    const targetUrl = config.username ? 
-      `https://x.com/${config.username}${config.withReplies ? '/with_replies' : ''}` : 
-      X_HOME_URL;
+    let targetUrl = X_HOME_URL;
+    if (config.username) {
+      if (config.tab === 'likes') {
+        targetUrl = `https://x.com/${config.username}/likes`;
+      } else if (config.withReplies || config.tab === 'replies') {
+        targetUrl = `https://x.com/${config.username}/with_replies`;
+      } else {
+        targetUrl = `https://x.com/${config.username}`;
+      }
+    }
     
     // 导航到Twitter页面
     console.log(`[${platform.toUpperCase()}] Navigating to ${targetUrl}...`);
@@ -426,12 +652,13 @@ async function scrapeTwitterUsers(usernames, options = {}) {
 
   for (let i = 0; i < usernames.length; i++) {
     const username = usernames[i];
-    console.log(`[${i+1}/${usernames.length}] Scraping tweets from user @${username}`);
+    const displayName = username || 'home_timeline';
+    console.log(`[${i+1}/${usernames.length}] Scraping tweets from ${displayName}`);
     
     try {
       const runContext = await fileUtils.createRunContext({
         platform: 'twitter',
-        identifier: username,
+        identifier: displayName,
         baseOutputDir: options.outputDir,
         timezone: resolvedTimezone
       });
@@ -439,41 +666,94 @@ async function scrapeTwitterUsers(usernames, options = {}) {
       const userOptions = {
         ...options,
         timezone: resolvedTimezone,
-        username,
+        username: username, // 这里保留 null
         limit: options.tweetCount || 20,
         runContext
       };
       
+      // 1. 抓取主页/回复
       const result = await scrapeXFeed(userOptions);
       
+      // 2. 如果启用了 Likes 抓取，额外抓取 Likes
+      let likesResult = null;
+      if (options.scrapeLikes && username) { // 只有指定了用户才能抓 Like
+        console.log(`[Likes] Starting to scrape likes for user @${username}...`);
+        // 复用同一个 runContext，但可能需要区分文件？
+        // 为了简单，我们把 Likes 放在同一个 run 目录下，但文件名不同
+        // 或者，我们可以把 Likes 视为一种特殊的 "tweets"
+        
+        // 我们需要稍微修改 scrapeTwitter 让他知道这是 Likes
+        // 但目前的架构是把所有东西都存为 tweets.json/md
+        // 我们可以创建一个子目录或者前缀
+        
+        // 实际上，为了 AI 分析方便，我们最好把 Likes 存到一个单独的变量里，最后合并
+        // 但 scrapeXFeed 是直接写文件的。
+        
+        // 方案：再次调用 scrapeXFeed，但是传入 tab='likes'
+        // 并且修改 runContext 或者 output 路径，以免覆盖？
+        // 不，我们可以让 scrapeTwitter 支持追加模式，或者我们接受覆盖（不推荐）
+        
+        // 更好的方案：
+        // 我们让 scrapeTwitter 返回 tweets 数组，我们在这一层做合并？
+        // 不行，因为 scrapeTwitter 内部已经写文件了。
+        
+        // 让我们简单点：
+        // 如果抓取 Likes，我们生成一个单独的 markdown 文件 "likes.md"
+        // 我们需要修改 scrapeTwitter 让它支持自定义输出文件名吗？
+        // 或者我们只是把 Likes 的结果拿回来，手动处理 AI Export。
+        
+        const likesOptions = {
+          ...userOptions,
+          tab: 'likes',
+          saveMarkdown: false, // 我们自己处理 Likes 的 Markdown
+          saveScreenshots: false,
+          exportCsv: false,
+          exportJson: false
+        };
+        
+        likesResult = await scrapeXFeed(likesOptions);
+        if (likesResult.success) {
+           console.log(`[Likes] Successfully scraped ${likesResult.tweets.length} liked tweets.`);
+           // 标记这些推文为 [LIKED]
+           likesResult.tweets.forEach(t => t.isLiked = true);
+        }
+      }
+
       if (result.success) {
+        // 合并 Likes 到结果中，以便 AI Export 使用
+        const allTweets = [...result.tweets];
+        if (likesResult && likesResult.success) {
+          allTweets.push(...likesResult.tweets);
+        }
+
         results.push({
-          username,
+          username: username || 'home_timeline', // 确保不为 null
           tweetCount: result.tweets.length,
-          tweets: result.tweets,
+          likedCount: likesResult?.tweets?.length || 0,
+          tweets: allTweets, // 包含主页推文和点赞推文
           profile: result.profile || null,
           runDir: result.runContext?.runDir,
           runContext: result.runContext
         });
         
         if (result.runContext?.runDir) {
-          console.log(`Successfully scraped ${result.tweets.length} tweets from @${username}, output directory: ${result.runContext.runDir}`);
+          console.log(`Successfully scraped ${result.tweets.length} tweets from ${username ? '@' + username : 'Home Timeline'}, output directory: ${result.runContext.runDir}`);
         } else {
-          console.log(`Successfully scraped ${result.tweets.length} tweets from @${username}`);
+          console.log(`Successfully scraped ${result.tweets.length} tweets from ${username ? '@' + username : 'Home Timeline'}`);
         }
       } else {
-        console.error(`Failed to scrape @${username}: ${result.error || 'Unknown error'}`);
+        console.error(`Failed to scrape ${username ? '@' + username : 'Home Timeline'}: ${result.error || 'Unknown error'}`);
         results.push({
-          username,
+          username: username || 'home_timeline',
           tweetCount: 0,
           tweets: [],
           error: result.error
         });
       }
     } catch (error) {
-      console.error(`Error scraping @${username}:`, error);
+      console.error(`Error scraping ${username ? '@' + username : 'Home Timeline'}:`, error);
       results.push({
-        username,
+        username: username || 'home_timeline',
         tweetCount: 0,
         tweets: [],
         error: error.message
@@ -581,6 +861,7 @@ module.exports = {
   scrapeTwitter,
   scrapeXFeed,
   scrapeTwitterUsers,
+  scrapeThread, // 新增：线程抓取
 
   // 调度器功能
   startScheduler,
