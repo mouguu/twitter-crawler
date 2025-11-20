@@ -272,6 +272,59 @@ export async function waitForNewTweets(page: Page, previousCount: number, timeou
 /**
  * 滚动页面到底部
  */
+/**
+ * 智能滚动页面到底部 (Mimicking Crawlee's Infinite Scroll)
+ * 监控网络请求活动，确保数据加载完成
+ */
+export async function scrollToBottomSmart(page: Page, timeout: number = 5000): Promise<void> {
+    // 1. 设置网络监听
+    let requestCount = 0;
+    const relevantTypes = ['xhr', 'fetch', 'websocket', 'other'];
+
+    const onRequest = (req: any) => {
+        if (relevantTypes.includes(req.resourceType())) {
+            requestCount++;
+        }
+    };
+
+    page.on('request', onRequest);
+
+    // 2. 执行滚动
+    await page.evaluate(() => {
+        window.scrollTo(0, document.body.scrollHeight);
+    });
+
+    // 3. 智能等待 (等待网络空闲)
+    const checkInterval = 500;
+    let stableIntervals = 0;
+    const requiredStableIntervals = 3; // 连续 3 次检查 (1.5秒) 请求数没有变化，认为加载完毕
+    let lastRequestCount = requestCount;
+
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < timeout) {
+        await new Promise(r => setTimeout(r, checkInterval));
+
+        if (requestCount === lastRequestCount) {
+            stableIntervals++;
+        } else {
+            stableIntervals = 0;
+            lastRequestCount = requestCount;
+        }
+
+        // 如果网络稳定了，并且至少过了一小段时间
+        if (stableIntervals >= requiredStableIntervals) {
+            break;
+        }
+    }
+
+    // 清理监听器
+    page.off('request', onRequest);
+}
+
+/**
+ * 简单的滚动到底部 (Legacy)
+ */
 export async function scrollToBottom(page: Page): Promise<void> {
     await page.evaluate(() => {
         window.scrollTo(0, document.body.scrollHeight);

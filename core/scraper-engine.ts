@@ -2,6 +2,10 @@ import * as path from 'path';
 import { Page } from 'puppeteer';
 import { BrowserManager } from './browser-manager';
 import { CookieManager } from './cookie-manager';
+import { SessionManager, Session } from './session-manager';
+import { RequestQueue } from './request-queue'; // Import RequestQueue
+import { ErrorSnapshotter } from './error-snapshotter';
+import { FingerprintManager } from './fingerprint-manager';
 import * as dataExtractor from './data-extractor';
 import { NavigationService } from './navigation-service';
 import { RateLimitManager } from './rate-limit-manager';
@@ -29,6 +33,8 @@ export interface ScrapeTimelineConfig {
     outputDir?: string;
     tab?: 'likes' | 'replies';
     withReplies?: boolean;
+    stopAtTweetId?: string; // Stop scraping when this tweet ID is encountered
+    sinceTimestamp?: number; // Stop scraping if tweet is older than this timestamp (ms)
 }
 
 export interface ScrapeTimelineResult {
@@ -61,6 +67,11 @@ export class ScraperEngine {
     private eventBus: ScraperEventBus;
     private navigationService: NavigationService;
     private rateLimitManager: RateLimitManager;
+    private sessionManager: SessionManager;
+    private requestQueue: RequestQueue; // Add RequestQueue
+    private errorSnapshotter: ErrorSnapshotter;
+    private fingerprintManager: FingerprintManager;
+    private currentSession: Session | null = null;
     private browserManager: BrowserManager | null;
     private page: Page | null;
     private stopSignal: boolean;
@@ -70,6 +81,10 @@ export class ScraperEngine {
         this.eventBus = eventBusInstance;
         this.navigationService = new NavigationService(this.eventBus);
         this.rateLimitManager = new RateLimitManager(this.eventBus);
+        this.sessionManager = new SessionManager();
+        this.requestQueue = new RequestQueue(); // Initialize RequestQueue
+        this.errorSnapshotter = new ErrorSnapshotter();
+        this.fingerprintManager = new FingerprintManager();
         this.browserManager = null;
         this.page = null;
         this.stopSignal = false;
@@ -82,21 +97,69 @@ export class ScraperEngine {
 
     async init(): Promise<void> {
         this.browserManager = new BrowserManager();
-        await this.browserManager.launch({ headless: true });
-        this.page = await this.browserManager.createPage();
+        await this.browserManager.init({ headless: true });
+        // We do NOT create the page here anymore. 
+        // The page is created in loadCookies() to ensure it's tied to a session and fingerprint.
+
+        // Initialize Managers
+        await this.sessionManager.init();
+        // RequestQueue auto-loads state in constructor
+
         this.eventBus.emitLog('Browser launched and configured');
     }
 
     async loadCookies(): Promise<boolean> {
-        if (!this.page) {
-            this.eventBus.emitError(new Error('Page not initialized'));
+        if (!this.browserManager) {
+            this.eventBus.emitError(new Error('BrowserManager not initialized'));
             return false;
         }
 
+        if (!this.page) {
+            // Get current session (cookie file)
+            this.currentSession = this.sessionManager.getSession();
+            if (!this.currentSession) {
+                this.eventBus.emitError(new Error('No active sessions available'));
+                return false;
+            }
+            this.eventBus.emitLog(`Using session: ${path.basename(this.currentSession.filePath)}`, 'info');
+
+            // Create page
+            const page = await this.browserManager.newPage();
+            this.page = page;
+
+            // Inject Fingerprint
+            // We use the cookie file name as the session ID to ensure the same account gets the same fingerprint
+            const sessionId = path.basename(this.currentSession.filePath);
+            this.eventBus.emitLog(`Injecting fingerprint for session: ${sessionId}`, 'info');
+            await this.fingerprintManager.injectFingerprint(page, sessionId);
+
+            // Load cookies
+            await this.browserManager.loadCookies(page, this.currentSession.filePath);
+            this.eventBus.emitLog(`Loaded session: ${this.currentSession.id}`);
+            return true;
+        }
+
+        // 1. Try to get a session from SessionManager
+        this.currentSession = this.sessionManager.getSession();
+
+        if (this.currentSession) {
+            try {
+                await this.sessionManager.injectSession(this.page, this.currentSession);
+                this.eventBus.emitLog(`Loaded session: ${this.currentSession.id}`);
+                return true;
+            } catch (error: any) {
+                this.eventBus.emitError(new Error(`Failed to inject session ${this.currentSession.id}: ${error.message}`));
+                this.sessionManager.markBad(this.currentSession.id);
+                return false;
+            }
+        }
+
+        // 2. Fallback to legacy single-file loading (env.json or cookies/twitter-cookies.json)
+        // This ensures backward compatibility if no multi-session files are found
         try {
             const cookieManager = new CookieManager();
             const cookieInfo = await cookieManager.loadAndInject(this.page);
-            this.eventBus.emitLog(`Loaded ${cookieInfo.cookies.length} cookies from ${cookieInfo.source}`);
+            this.eventBus.emitLog(`Loaded legacy cookies from ${cookieInfo.source}`);
             return true;
         } catch (error: any) {
             this.eventBus.emitError(new Error(`Cookie error: ${error.message}`));
@@ -179,6 +242,24 @@ export class ScraperEngine {
             let addedInAttempt = 0;
 
             for (const tweet of tweetsOnPage) {
+                // Check stop condition (Incremental Scraping)
+                if (config.stopAtTweetId && tweet.id === config.stopAtTweetId) {
+                    this.eventBus.emitLog(`Reached last scraped tweet ID: ${tweet.id}. Stopping.`);
+                    // Stop the outer loop as well
+                    scrollAttempts = maxScrollAttempts;
+                    break;
+                }
+
+                // Check time condition (Lookback Period)
+                if (config.sinceTimestamp) {
+                    const tweetTime = new Date(tweet.time).getTime();
+                    if (!isNaN(tweetTime) && tweetTime < config.sinceTimestamp) {
+                        this.eventBus.emitLog(`Reached time limit: ${tweet.time}. Stopping.`);
+                        scrollAttempts = maxScrollAttempts;
+                        break;
+                    }
+                }
+
                 if (collectedTweets.length < limit && !scrapedUrls.has(tweet.url)) {
                     collectedTweets.push(tweet);
                     scrapedUrls.add(tweet.url);
@@ -210,9 +291,10 @@ export class ScraperEngine {
             }
 
             // Scroll
-            await dataExtractor.scrollToBottom(this.page);
-            await throttle(constants.getScrollDelay());
-            await dataExtractor.waitForNewTweets(this.page, tweetsOnPage.length, constants.WAIT_FOR_NEW_TWEETS_TIMEOUT);
+            // Smart Scroll (Mimicking Crawlee)
+            await dataExtractor.scrollToBottomSmart(this.page, constants.WAIT_FOR_NEW_TWEETS_TIMEOUT);
+            // Double check DOM update
+            await dataExtractor.waitForNewTweets(this.page, tweetsOnPage.length, 2000);
         }
 
         // Save Results
@@ -285,9 +367,10 @@ export class ScraperEngine {
                 if (this.stopSignal || (this.shouldStopFunction && this.shouldStopFunction())) break;
 
                 scrollAttempts++;
-                await dataExtractor.scrollToBottom(this.page);
-                await throttle(constants.getScrollDelay());
-                await dataExtractor.waitForNewTweets(this.page, tweetsOnPage.length, constants.WAIT_FOR_NEW_TWEETS_TIMEOUT);
+                // Smart Scroll (Mimicking Crawlee)
+                await dataExtractor.scrollToBottomSmart(this.page, constants.WAIT_FOR_NEW_TWEETS_TIMEOUT);
+                // Double check DOM update
+                await dataExtractor.waitForNewTweets(this.page, tweetsOnPage.length, 2000);
 
                 const newTweets = await dataExtractor.extractTweetsFromPage(this.page);
                 for (const tweet of newTweets) {

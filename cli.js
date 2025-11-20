@@ -440,6 +440,36 @@ Example config file (crawler-config.json):
 
 // 直接运行
 if (require.main === module) {
+  program
+    .command('monitor')
+    .description('Monitor multiple users for new tweets and generate a daily report')
+    .requiredOption('-u, --users <users>', 'Comma-separated list of usernames (e.g. elonmusk,trump)')
+    .action(async (options) => {
+      try {
+        const { ScraperEngine } = require('./core/scraper-engine');
+        const { MonitorService } = require('./core/monitor-service');
+
+        const engine = new ScraperEngine();
+        await engine.init();
+        const success = await engine.loadCookies();
+        if (!success) {
+          console.error('Failed to load cookies. Exiting.');
+          process.exit(1);
+        }
+
+        const monitor = new MonitorService(engine);
+        const usernames = options.users.split(',').map(u => u.trim());
+
+        await monitor.runMonitor(usernames);
+
+        await engine.close();
+        process.exit(0);
+      } catch (error) {
+        console.error('Monitor failed:', error);
+        process.exit(1);
+      }
+    });
+
   program.parse(process.argv);
 }
 

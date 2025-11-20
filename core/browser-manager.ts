@@ -31,9 +31,9 @@ export class BrowserManager {
     }
 
     /**
-     * 启动浏览器
+     * 启动浏览器 (Renamed from launch to match ScraperEngine usage)
      */
-    async launch(options: BrowserLaunchOptions = {}): Promise<void> {
+    async init(options: BrowserLaunchOptions = {}): Promise<void> {
         // 禁用代理环境变量
         delete process.env.HTTP_PROXY;
         delete process.env.HTTPS_PROXY;
@@ -48,15 +48,25 @@ export class BrowserManager {
         };
 
         console.log('[BrowserManager] Launching with args:', launchOptions.args);
-        this.browser = await puppeteer.launch(launchOptions);
+
+        try {
+            this.browser = await puppeteer.launch(launchOptions);
+            console.log('[BrowserManager] Browser launched successfully');
+        } catch (error) {
+            console.error('[BrowserManager] Failed to launch browser:', error);
+            throw error;
+        }
     }
 
     /**
      * 创建新页面并配置
      */
-    async createPage(options: BrowserLaunchOptions = {}): Promise<Page> {
+    /**
+     * 创建新页面并配置 (Renamed to newPage to match usage)
+     */
+    async newPage(options: BrowserLaunchOptions = {}): Promise<Page> {
         if (!this.browser) {
-            throw new Error('Browser not launched. Call launch() first.');
+            throw new Error('[BrowserManager] Browser not initialized. Call init() first.');
         }
 
         this.page = await this.browser.newPage();
@@ -82,6 +92,27 @@ export class BrowserManager {
 
         const typesToBlock = blockedTypes || constants.BLOCKED_RESOURCE_TYPES;
 
+        // 1. 尝试使用 CDP (Chrome DevTools Protocol) 进行更高效的底层屏蔽 (Mimicking Crawlee)
+        try {
+            const client = await this.page.target().createCDPSession();
+            await client.send('Network.enable');
+
+            // 常见静态资源后缀
+            const patterns = [
+                '*.jpg', '*.jpeg', '*.png', '*.gif', '*.svg', '*.webp',
+                '*.woff', '*.woff2', '*.ttf', '*.eot',
+                '*.mp4', '*.webm', '*.avi', '*.mov',
+                '*.css', // Twitter 的 CSS 可能会影响布局，但通常不影响数据抓取，屏蔽可大幅提速
+                '*.ico'
+            ];
+
+            await client.send('Network.setBlockedURLs', { urls: patterns });
+            console.log('[BrowserManager] Enabled CDP resource blocking for static assets (High Performance)');
+        } catch (e) {
+            console.warn('[BrowserManager] Failed to enable CDP blocking, falling back to standard interception', e);
+        }
+
+        // 2. Puppeteer 层面的拦截 (作为兜底，处理没有后缀但类型匹配的资源)
         await this.page.setRequestInterception(true);
         this.page.on('request', (req: HTTPRequest) => {
             const resourceType = req.resourceType();
@@ -111,6 +142,29 @@ export class BrowserManager {
             throw new Error('Browser not launched. Call launch() first.');
         }
         return this.browser;
+    }
+
+    /**
+     * 加载 Cookies
+     */
+    async loadCookies(page: Page, cookieFilePath: string): Promise<void> {
+        try {
+            const fs = require('fs');
+            const parsed = JSON.parse(fs.readFileSync(cookieFilePath, 'utf-8'));
+
+            // Support both array format and object format with "cookies" key
+            const cookies = Array.isArray(parsed) ? parsed : parsed.cookies;
+
+            if (!Array.isArray(cookies)) {
+                throw new Error('Invalid cookie file format');
+            }
+
+            await page.setCookie(...cookies);
+            console.log(`[BrowserManager] Loaded cookies from ${cookieFilePath}`);
+        } catch (error) {
+            console.error(`[BrowserManager] Failed to load cookies: ${error}`);
+            throw error;
+        }
     }
 
     /**
@@ -167,7 +221,7 @@ export class BrowserManager {
  */
 export async function createBrowserManager(options: BrowserLaunchOptions = {}): Promise<BrowserManager> {
     const manager = new BrowserManager();
-    await manager.launch(options);
-    await manager.createPage(options);
+    await manager.init(options);
+    await manager.newPage(options);
     return manager;
 }

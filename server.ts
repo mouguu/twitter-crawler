@@ -145,6 +145,67 @@ app.post('/api/scrape', async (req: Request, res: Response) => {
     }
 });
 
+// API: Monitor
+app.post('/api/monitor', async (req: Request, res: Response) => {
+    try {
+        const { users, lookbackHours, keywords } = req.body;
+        if (!users || !Array.isArray(users) || users.length === 0) {
+            return res.status(400).json({ error: 'Invalid users list' });
+        }
+
+        console.log(`Received monitor request for: ${users.join(', ')}`);
+
+        isScrapingActive = true;
+        shouldStopScraping = false;
+
+        // Dynamic import to avoid circular dependencies or initialization issues
+        const { ScraperEngine } = require('./core/scraper-engine');
+        const { MonitorService } = require('./core/monitor-service');
+
+        const engine = new ScraperEngine(() => shouldStopScraping);
+        await engine.init();
+        const success = await engine.loadCookies();
+
+        if (!success) {
+            await engine.close();
+            return res.status(500).json({ error: 'Failed to load cookies' });
+        }
+
+        const monitor = new MonitorService(engine);
+        await monitor.runMonitor(users, {
+            lookbackHours: lookbackHours ? parseFloat(lookbackHours) : undefined,
+            keywords: keywords ? keywords.split(',').map((k: string) => k.trim()).filter(Boolean) : undefined
+        });
+
+        await engine.close();
+
+        // Check for report file
+        const dateStr = new Date().toISOString().split('T')[0];
+        const reportPath = path.join(process.cwd(), 'output', 'reports', `daily_report_${dateStr}.md`);
+        let downloadUrl = null;
+
+        if (fs.existsSync(reportPath)) {
+            downloadUrl = `/api/download?path=${encodeURIComponent(reportPath)}`;
+        }
+
+        res.json({
+            success: true,
+            message: 'Monitor run completed',
+            downloadUrl
+        });
+
+    } catch (error: any) {
+        console.error('Monitor error:', error.message);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    } finally {
+        isScrapingActive = false;
+        shouldStopScraping = false;
+    }
+});
+
 // API: Manual Stop
 app.post('/api/stop', (req: Request, res: Response) => {
     console.log('Received manual stop request');

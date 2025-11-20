@@ -1,131 +1,219 @@
-# Twitter/X Crawler
+# Twitter/X Crawler & Analyzer
 
-A Node.js tool for scraping content from Twitter/X. Extract user profiles and tweets with flexible output options.
+A powerful, full-featured tool to scrape, archive, and analyze Twitter/X content. Designed for researchers, archivists, and AI developers, it supports scraping Profiles, Threads, Home Timelines, and Search results with flexible output formats.
 
-## Features
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Node](https://img.shields.io/badge/node-%3E%3D16-green.svg)
+![TypeScript](https://img.shields.io/badge/typescript-%5E5.0-blue)
 
-- Scrape Twitter/X user profiles and metadata
-- Extract tweets with media flag, likes, retweets, and reply counts
-- Export as Markdown, JSON, or CSV
-- Batch processing from username lists
-- Optional scheduled crawling
+## 🚀 Features
 
-## Installation
+- **Multi-Mode Scraping**:
+  - **User Profiles**: Scrape tweets, replies, and pinned tweets from any public profile.
+  - **Threads**: Archive complete conversation threads, including nested replies.
+  - **Home Timeline**: Scrape your personal "For You" or "Following" feed (requires login).
+  - **Likes**: Extract tweets liked by a specific user.
+- **AI-Powered Analysis**:
+  - **Persona Mode**: Automatically generates AI prompts and analysis based on scraped user data.
+  - **Smart Exports**: Outputs clean Markdown and JSON optimized for LLM context windows.
+- **Modern Web Interface**: A beautiful, responsive React UI to manage scraping tasks visually.
+- **Robust & Stealthy**: Built with Puppeteer and Stealth plugins to handle dynamic content and rate limits.
+- **Flexible Output**:
+  - Structured JSON/CSV for data analysis.
+  - Markdown for reading and LLM ingestion.
+  - Automatic media detection.
+
+---
+
+## 📦 Installation
 
 ### Prerequisites
-
-- Node.js 16 or later
-- npm or yarn
+- **Node.js** 16 or higher
+- **npm** or **yarn**
 
 ### Setup
 
-1. Clone the repository:
+1. **Clone the repository**
    ```bash
    git clone https://github.com/yourusername/twitter-crawler.git
    cd twitter-crawler
    ```
 
-2. Install dependencies:
+2. **Install dependencies**
    ```bash
    npm install
    ```
 
-3. No extra browser install needed; Puppeteer downloads Chromium automatically on install.
+3. **Configure Cookies (Recommended)**
+   To access age-restricted content, search, or avoid rate limits, provide your Twitter cookies.
+   - Create an `env.json` file in the root directory:
+     ```json
+     {
+       "COOKIES": [
+         {
+           "name": "auth_token",
+           "value": "YOUR_AUTH_TOKEN_HERE",
+           "domain": ".x.com",
+           "path": "/",
+           "secure": true
+         },
+         {
+           "name": "ct0",
+           "value": "YOUR_CT0_HERE",
+           "domain": ".x.com",
+           "path": "/",
+           "secure": true
+         }
+       ]
+     }
+     ```
+   - *Alternatively, you can place a standard Puppeteer cookie JSON file at `./cookies/twitter-cookies.json`.*
 
-## Usage
+---
 
-The crawler offers multiple commands through its CLI interface. Here are some common usage examples:
+## 🖥️ Web Interface
 
-### Output Layout
+The easiest way to use the crawler is through the built-in web interface.
 
-Each scrape run now writes into a dedicated folder so results stay organized:
+1. **Start the server**
+   ```bash
+   npm run dev
+   ```
+   *Or directly via:* `npx ts-node server.ts`
 
-- Root: `./output/twitter/<username>/run-YYYY-MM-DDTHH-MM-SS/`
-- Contents: `tweets.json`, `tweets.csv`, `index.md`, per-tweet Markdown under `markdown/`, optional screenshots under `screenshots/`
-- Metadata: `metadata.json` summarises the run (counts, profile info, selected options)
-- Cache files such as seen-URL lists are stored separately under `./.cache/twitter/<username>.json`
+2. **Open your browser**
+   Navigate to `http://localhost:3000`.
 
-You can override the root directory with `-o/--output`.
+3. **Use the UI**
+   - Enter a Twitter username, Tweet URL, or Search query.
+   - Select options (Crawl Likes, Max Tweets, etc.).
+   - Click **Start Scraping**.
+   - Download the resulting Markdown/JSON artifacts directly from the browser.
 
-### Twitter Scraping
+---
 
+## 💻 CLI Usage
+
+For automation and batch processing, use the Command Line Interface.
+
+### Basic Commands
+
+**Scrape a Profile**
 ```bash
-# Scrape a single Twitter user's tweets
-node cli.js twitter -u elonmusk -c 50 -o ./output
+# Scrape 50 tweets from @elonmusk
+node cli.js twitter -u elonmusk -c 50
 
-# Or pass a profile URL directly
-node cli.js twitter -U https://x.com/elonmusk -c 50 -o ./output
-
-# Scrape multiple Twitter users from a file
-node cli.js twitter -f twitter_accounts.txt -c 20 -o ./output --merge
-
-# (Optional) Run headful for debugging
-node cli.js twitter -u username --headless false
+# Save to a specific folder
+node cli.js twitter -u elonmusk -o ./my-data
 ```
 
-### Scheduling
-
+**Scrape a Thread**
 ```bash
-# Schedule crawling every 60 minutes
-node cli.js schedule -c ./crawler-config.json -i 60 -o ./output
+# Archive a specific thread with up to 100 replies
+node cli.js twitter --thread https://x.com/username/status/123456789 --max-replies 100
 ```
 
-### See All Examples
-
+**Scrape Home Timeline**
 ```bash
-node cli.js examples
+# Scrape your own "For You" feed (requires valid cookies)
+node cli.js twitter --home -c 50
 ```
 
-## Configuration File
+### Advanced Options
 
-For scheduled crawling, create a JSON configuration file:
+**Persona Analysis**
+Generates a comprehensive AI prompt based on the user's tweets and reply style.
+```bash
+node cli.js twitter -u elonmusk --persona
+```
+
+**Scrape Likes**
+```bash
+node cli.js twitter -u elonmusk --likes
+```
+
+**Batch Processing**
+Scrape multiple accounts from a file (one username/URL per line).
+```bash
+node cli.js twitter -f accounts.txt --merge
+```
+
+**Export Formats**
+```bash
+# Export as JSON and CSV in addition to Markdown
+node cli.js twitter -u elonmusk --json --csv
+```
+
+### Full CLI Help
+```bash
+node cli.js --help
+```
+
+---
+
+## 📂 Output Structure
+
+Results are organized by target and timestamp to prevent overwriting.
+
+```text
+output/
+└── twitter/
+    └── {username}/
+        └── run-{timestamp}/
+            ├── index.md           # Main summary and content (Markdown)
+            ├── tweets.json        # Full raw data (JSON)
+            ├── tweets.csv         # Tabular data (CSV)
+            ├── metadata.json      # Run statistics and config
+            ├── markdown/          # Individual tweet markdown files
+            └── screenshots/       # Captured screenshots (if enabled)
+```
+
+---
+
+## ⚙️ Configuration
+
+### `crawler-config.json`
+Used for scheduled tasks or default settings.
 
 ```json
 {
   "twitter": {
-    "usernames": ["elonmusk", "BillGates"],
+    "usernames": ["user1", "user2"],
     "tweetCount": 50,
-    "separateFiles": true,
-    "useAxios": false
+    "separateFiles": true
+  },
+  "schedule": {
+    "interval": 60,
+    "timezone": "UTC"
   }
 }
 ```
 
-## Authentication and Cookies
+### Scheduled Runs
+Run the crawler periodically based on your config:
+```bash
+node cli.js schedule -c crawler-config.json
+```
 
-The crawler uses cookies for authenticated access to Twitter/X:
+---
 
-- Twitter cookies: Prefer `env.json` at project root (object with `cookies` array). Fallback path supported: `./cookies/twitter-cookies.json`.
+## 🛠️ Development
 
-These files should follow the standard format used by Puppeteer's browser context.
+- **Run Tests**: `npm test`
+- **Build Frontend**: `cd frontend && npm run build`
+- **Linting**: `npm run lint` (if configured)
 
-## Advanced Configuration
+## 🤝 Contributing
 
-Edit the constants in `scrape-unified.js` to customize:
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-- User agents
-- Request timeouts
-- Retry strategies
-- CSS selectors for content extraction
+## 📄 License
 
-## Troubleshooting
+This project is licensed under the MIT License.
 
-### Common Issues
+## ⚠️ Disclaimer
 
-1. **Rate Limiting**: If you're being rate-limited:
-   - Reduce the number of requests
-   - Use longer intervals between requests
-   - Use authenticated cookies
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Disclaimer
-
-This tool is for educational purposes only. Be sure to comply with the Terms of Service of the respective platforms and respect rate limits. The authors are not responsible for any misuse of this tool.
-
-## Acknowledgments
-
-- [Puppeteer](https://pptr.dev/) with Stealth plugin for browser automation
-- [Commander.js](https://github.com/tj/commander.js/) for CLI interface 
+This tool is for **educational and research purposes only**.
+- Respect Twitter/X's Terms of Service and Robots.txt.
+- Use rate limiting to avoid stressing their servers.
+- The authors are not responsible for any misuse of this tool.

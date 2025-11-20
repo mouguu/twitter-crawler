@@ -6,7 +6,7 @@ function cn(...inputs: any[]) {
     return twMerge(clsx(inputs));
 }
 
-type TabType = 'profile' | 'thread' | 'search';
+type TabType = 'profile' | 'thread' | 'search' | 'monitor';
 
 interface Progress {
     current: number;
@@ -28,6 +28,10 @@ function App() {
     const [deleteMerged, setDeleteMerged] = useState(true);
     const [clearCache, setClearCache] = useState(false);
 
+    // Monitor Options
+    const [lookbackHours, setLookbackHours] = useState(24);
+    const [keywords, setKeywords] = useState('');
+
     const logEndRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -48,9 +52,10 @@ function App() {
         };
     }, []);
 
-    useEffect(() => {
-        logEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [logs]);
+    // Auto-scroll removed as per user request
+    // useEffect(() => {
+    //     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    // }, [logs]);
 
     const handleScrape = async () => {
         setIsScraping(true);
@@ -59,24 +64,36 @@ function App() {
         setProgress({ current: 0, target: limit });
 
         try {
-            const response = await fetch('/api/scrape', {
+            let endpoint = '/api/scrape';
+            let body: any = {
+                type: activeTab,
+                input,
+                limit,
+                likes: scrapeLikes,
+                mergeResults,
+                deleteMerged,
+                clearCache
+            };
+
+            if (activeTab === 'monitor') {
+                endpoint = '/api/monitor';
+                body = {
+                    users: input.split(',').map(u => u.trim()).filter(Boolean),
+                    lookbackHours,
+                    keywords
+                };
+            }
+
+            const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    type: activeTab,
-                    input,
-                    limit,
-                    likes: scrapeLikes,
-                    mergeResults,
-                    deleteMerged,
-                    clearCache
-                })
+                body: JSON.stringify(body)
             });
 
             const result = await response.json();
             if (result.success) {
                 setDownloadUrl(result.downloadUrl);
-                setLogs(prev => [...prev, `✅ Scraping completed! Download available.`]);
+                setLogs(prev => [...prev, `✅ Operation completed! ${result.downloadUrl ? 'Download available.' : ''}`]);
             } else {
                 setLogs(prev => [...prev, `❌ Error: ${result.error}`]);
             }
@@ -150,7 +167,7 @@ function App() {
 
                 {/* Tabs */}
                 <div className="flex space-x-12 mb-12">
-                    {(['profile', 'thread', 'search'] as const).map((tab) => (
+                    {(['profile', 'thread', 'search', 'monitor'] as const).map((tab) => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
@@ -171,7 +188,8 @@ function App() {
                         <div className="relative group">
                             <label className="absolute left-0 -top-6 text-sm text-rust font-serif pointer-events-none">
                                 {activeTab === 'profile' ? 'Username or Profile URL' :
-                                    activeTab === 'thread' ? 'Tweet URL' : 'Search Query / Hashtag'}
+                                    activeTab === 'thread' ? 'Tweet URL' :
+                                        activeTab === 'monitor' ? 'Usernames (comma separated)' : 'Search Query / Hashtag'}
                             </label>
                             <input
                                 type="text"
@@ -180,93 +198,126 @@ function App() {
                                 className="w-full bg-transparent border-b border-stone py-4 focus:outline-none focus:border-rust transition-colors text-2xl font-serif text-charcoal placeholder-stone/30"
                                 placeholder={
                                     activeTab === 'profile' ? 'e.g. elonmusk' :
-                                        activeTab === 'thread' ? 'https://x.com/...' : 'e.g. #AI'
+                                        activeTab === 'thread' ? 'https://x.com/...' :
+                                            activeTab === 'monitor' ? 'elonmusk, realdonaldtrump, nasa' : 'e.g. #AI'
                                 }
                             />
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-end">
-                            <div className="relative">
-                                <input
-                                    type="number"
-                                    value={limit}
-                                    onChange={(e) => setLimit(parseInt(e.target.value))}
-                                    min="10"
-                                    max="1000"
-                                    className="peer w-full bg-transparent border-b border-stone py-2 focus:outline-none focus:border-rust transition-colors text-xl font-serif text-charcoal"
-                                />
-                                <label className="absolute left-0 -top-6 text-sm text-rust font-serif">
-                                    {activeTab === 'thread' ? 'Max Replies' : 'Limit (Tweets)'}
-                                </label>
-                            </div>
-
-                            <div className="flex flex-col space-y-4">
-                                {activeTab === 'profile' && (
-                                    <label className="flex items-center space-x-4 cursor-pointer group select-none">
-                                        <div className="w-6 h-6 border border-stone rounded-full flex items-center justify-center group-hover:border-rust transition-colors">
-                                            <div className={cn("w-3 h-3 bg-rust rounded-full transition-opacity checkbox-indicator", scrapeLikes ? "opacity-100" : "opacity-0")}></div>
-                                        </div>
-                                        <input type="checkbox" checked={scrapeLikes} onChange={(e) => setScrapeLikes(e.target.checked)} className="hidden" />
-                                        <span className="font-serif text-xl text-stone group-hover:text-charcoal transition-colors">Scrape Likes</span>
+                        {activeTab !== 'monitor' ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-end">
+                                <div className="relative">
+                                    <input
+                                        type="number"
+                                        value={limit}
+                                        onChange={(e) => setLimit(parseInt(e.target.value))}
+                                        min="10"
+                                        max="1000"
+                                        className="peer w-full bg-transparent border-b border-stone py-2 focus:outline-none focus:border-rust transition-colors text-xl font-serif text-charcoal"
+                                    />
+                                    <label className="absolute left-0 -top-6 text-sm text-rust font-serif">
+                                        {activeTab === 'thread' ? 'Max Replies' : 'Limit (Tweets)'}
                                     </label>
-                                )}
+                                </div>
 
-                                {(activeTab === 'profile' || activeTab === 'search') && (
-                                    <>
+                                <div className="flex flex-col space-y-4">
+                                    {activeTab === 'profile' && (
                                         <label className="flex items-center space-x-4 cursor-pointer group select-none">
                                             <div className="w-6 h-6 border border-stone rounded-full flex items-center justify-center group-hover:border-rust transition-colors">
-                                                <div className={cn("w-3 h-3 bg-rust rounded-full transition-opacity checkbox-indicator", mergeResults ? "opacity-100" : "opacity-0")}></div>
+                                                <div className={cn("w-3 h-3 bg-rust rounded-full transition-opacity checkbox-indicator", scrapeLikes ? "opacity-100" : "opacity-0")}></div>
                                             </div>
-                                            <input type="checkbox" checked={mergeResults} onChange={(e) => setMergeResults(e.target.checked)} className="hidden" />
-                                            <span className="font-serif text-xl text-stone group-hover:text-charcoal transition-colors">Merge Results</span>
+                                            <input type="checkbox" checked={scrapeLikes} onChange={(e) => setScrapeLikes(e.target.checked)} className="hidden" />
+                                            <span className="font-serif text-xl text-stone group-hover:text-charcoal transition-colors">Scrape Likes</span>
                                         </label>
+                                    )}
 
-                                        <label className="flex items-center space-x-4 cursor-pointer group select-none">
-                                            <div className="w-6 h-6 border border-stone rounded-full flex items-center justify-center group-hover:border-rust transition-colors">
-                                                <div className={cn("w-3 h-3 bg-rust rounded-full transition-opacity checkbox-indicator", deleteMerged ? "opacity-100" : "opacity-0")}></div>
-                                            </div>
-                                            <input type="checkbox" checked={deleteMerged} onChange={(e) => setDeleteMerged(e.target.checked)} className="hidden" />
-                                            <span className="font-serif text-xl text-stone group-hover:text-charcoal transition-colors">Delete Individual Files</span>
-                                        </label>
-                                    </>
-                                )}
+                                    {(activeTab === 'profile' || activeTab === 'search') && (
+                                        <>
+                                            <label className="flex items-center space-x-4 cursor-pointer group select-none">
+                                                <div className="w-6 h-6 border border-stone rounded-full flex items-center justify-center group-hover:border-rust transition-colors">
+                                                    <div className={cn("w-3 h-3 bg-rust rounded-full transition-opacity checkbox-indicator", mergeResults ? "opacity-100" : "opacity-0")}></div>
+                                                </div>
+                                                <input type="checkbox" checked={mergeResults} onChange={(e) => setMergeResults(e.target.checked)} className="hidden" />
+                                                <span className="font-serif text-xl text-stone group-hover:text-charcoal transition-colors">Merge Results</span>
+                                            </label>
 
-                                <label className="flex items-center gap-4 cursor-pointer group select-none">
-                                    <div className="w-6 h-6 border border-stone rounded-full flex items-center justify-center group-hover:border-rust transition-colors">
-                                        <div className={cn("w-3 h-3 bg-rust rounded-full transition-opacity checkbox-indicator", clearCache ? "opacity-100" : "opacity-0")}></div>
-                                    </div>
-                                    <input type="checkbox" checked={clearCache} onChange={(e) => setClearCache(e.target.checked)} className="hidden" />
-                                    <span className="font-serif text-xl text-stone group-hover:text-charcoal transition-colors">Clear Cache</span>
-                                </label>
+                                            <label className="flex items-center space-x-4 cursor-pointer group select-none">
+                                                <div className="w-6 h-6 border border-stone rounded-full flex items-center justify-center group-hover:border-rust transition-colors">
+                                                    <div className={cn("w-3 h-3 bg-rust rounded-full transition-opacity checkbox-indicator", deleteMerged ? "opacity-100" : "opacity-0")}></div>
+                                                </div>
+                                                <input type="checkbox" checked={deleteMerged} onChange={(e) => setDeleteMerged(e.target.checked)} className="hidden" />
+                                                <span className="font-serif text-xl text-stone group-hover:text-charcoal transition-colors">Delete Individual Files</span>
+                                            </label>
+                                        </>
+                                    )}
+
+                                    <label className="flex items-center gap-4 cursor-pointer group select-none">
+                                        <div className="w-6 h-6 border border-stone rounded-full flex items-center justify-center group-hover:border-rust transition-colors">
+                                            <div className={cn("w-3 h-3 bg-rust rounded-full transition-opacity checkbox-indicator", clearCache ? "opacity-100" : "opacity-0")}></div>
+                                        </div>
+                                        <input type="checkbox" checked={clearCache} onChange={(e) => setClearCache(e.target.checked)} className="hidden" />
+                                        <span className="font-serif text-xl text-stone group-hover:text-charcoal transition-colors">Clear Cache</span>
+                                    </label>
+                                </div>
                             </div>
-                        </div>
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="mt-20 flex gap-4 items-center">
-                        {!isScraping ? (
-                            <button
-                                onClick={handleScrape}
-                                disabled={!input}
-                                className="group px-10 py-4 border border-charcoal rounded-full hover:bg-charcoal hover:text-washi transition-all duration-500 uppercase tracking-widest text-sm flex items-center gap-4 disabled:opacity-50 disabled:cursor-not-allowed font-serif"
-                            >
-                                <span className="group-hover:translate-x-1 transition-transform duration-300">Begin Extraction</span>
-                                <i className="ph ph-arrow-right group-hover:translate-x-1 transition-transform duration-300"></i>
-                            </button>
                         ) : (
-                            <button
-                                onClick={handleStop}
-                                className="px-8 py-4 border border-rust rounded-full hover:bg-rust hover:text-washi transition-all duration-500 uppercase tracking-widest text-sm text-rust font-serif"
-                            >
-                                Stop
-                            </button>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-end">
+                                <div className="relative">
+                                    <input
+                                        type="number"
+                                        value={lookbackHours}
+                                        onChange={(e) => setLookbackHours(parseInt(e.target.value))}
+                                        min="1"
+                                        max="168"
+                                        className="peer w-full bg-transparent border-b border-stone py-2 focus:outline-none focus:border-rust transition-colors text-xl font-serif text-charcoal"
+                                    />
+                                    <label className="absolute left-0 -top-6 text-sm text-rust font-serif">
+                                        Lookback Period (Hours)
+                                    </label>
+                                </div>
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        value={keywords}
+                                        onChange={(e) => setKeywords(e.target.value)}
+                                        className="peer w-full bg-transparent border-b border-stone py-2 focus:outline-none focus:border-rust transition-colors text-xl font-serif text-charcoal"
+                                        placeholder="e.g. AI, Mars, Crypto"
+                                    />
+                                    <label className="absolute left-0 -top-6 text-sm text-rust font-serif">
+                                        Keywords Filter (Optional)
+                                    </label>
+                                </div>
+                            </div>
                         )}
                     </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="mt-20 flex gap-4 items-center">
+                    {!isScraping ? (
+                        <button
+                            onClick={handleScrape}
+                            disabled={!input}
+                            className="group px-10 py-4 border border-charcoal rounded-full hover:bg-charcoal hover:text-washi transition-all duration-500 uppercase tracking-widest text-sm flex items-center gap-4 disabled:opacity-50 disabled:cursor-not-allowed font-serif"
+                        >
+                            <span className="group-hover:translate-x-1 transition-transform duration-300">
+                                {activeTab === 'monitor' ? 'Start Monitor' : 'Begin Extraction'}
+                            </span>
+                            <i className="ph ph-arrow-right group-hover:translate-x-1 transition-transform duration-300"></i>
+                        </button>
+                    ) : (
+                        <button
+                            onClick={handleStop}
+                            className="px-8 py-4 border border-rust rounded-full hover:bg-rust hover:text-washi transition-all duration-500 uppercase tracking-widest text-sm text-rust font-serif"
+                        >
+                            Stop
+                        </button>
+                    )}
                 </div>
             </section>
 
             {/* Results / Logs Section */}
-            <section id="results" className="py-16 px-6 bg-charcoal text-washi min-h-[40vh] relative transition-colors duration-1000 border-t border-white/5">
+            < section id="results" className="py-16 px-6 bg-charcoal text-washi min-h-[40vh] relative transition-colors duration-1000 border-t border-white/5" >
                 <div className="max-w-4xl mx-auto">
 
                     {/* Status & Progress */}
@@ -340,8 +391,8 @@ function App() {
                 <div className="absolute bottom-4 left-0 w-full text-center text-stone/20 text-[10px] uppercase tracking-[0.3em] font-sans">
                     © 2024 Mono no Aware
                 </div>
-            </section>
-        </div>
+            </section >
+        </div >
     );
 }
 
