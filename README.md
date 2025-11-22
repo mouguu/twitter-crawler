@@ -180,6 +180,63 @@ node cli.js schedule -c crawler-config.json
 
 ---
 
+## 🔧 Technical Architecture
+
+This project goes beyond simple scraping scripts by implementing enterprise-grade features for reliability and stealth.
+
+### 🛡️ Advanced Fingerprinting
+To avoid detection, the crawler uses `fingerprint-injector` to inject realistic browser fingerprints into every Puppeteer session.
+- **Canvas & WebGL Noise**: Randomizes rendering outputs to defeat canvas fingerprinting.
+- **AudioContext**: Modifies audio stack processing.
+- **Hardware Concurrency & Device Memory**: Emulates consistent hardware specs matching the User-Agent.
+
+### ⚡ Adaptive Rate Limiting
+The `RateLimitManager` implements a smart backoff strategy:
+- **Dynamic Delays**: Adjusts sleep time between actions based on success rates.
+- **Token Bucket**: Manages request quotas to stay within safe limits.
+- **Auto-Rotation**: Automatically switches to a different session/account if a rate limit (429) is detected.
+
+### 🔄 Session Management & Rotation
+- **Multi-Account Support**: The `SessionManager` loads multiple cookie files from the `cookies/` directory.
+- **Health Checks**: Monitors session validity and marks sessions as "bad" if authentication fails.
+- **Automatic Rotation**: Seamlessly rotates through available accounts during long scraping tasks to distribute load.
+
+### 📸 Error Snapshotting
+Debugging headless browsers can be difficult. The `ErrorSnapshotter` automatically captures context when an error occurs:
+- **Screenshots**: Saves a PNG of the browser state at the moment of failure.
+- **HTML Dumps**: Saves the full page source to analyze DOM structure.
+- **Logs**: Correlates browser console logs with the error.
+
+---
+
+## 🔌 API Reference
+
+The server exposes a RESTful API for integrating with other tools.
+
+### `POST /api/scrape`
+Trigger a scraping task.
+```json
+{
+  "type": "profile",      // "profile", "thread", "search"
+  "input": "elonmusk",    // Username, URL, or Query
+  "limit": 50,            // Max tweets
+  "likes": false,         // Scrape likes tab?
+  "mergeResults": false
+}
+```
+
+### `POST /api/stop`
+Gracefully stop the current scraping task.
+
+### `GET /api/progress`
+Server-Sent Events (SSE) stream for real-time progress updates.
+- Events: `scrape:progress`, `log:message`, `scrape:complete`
+
+### `GET /api/download?path={path}`
+Download generated artifacts (Markdown, JSON, CSV).
+
+---
+
 ## 🛠️ Development
 
 - **Run Tests**: `npm test`

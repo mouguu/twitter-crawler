@@ -13,6 +13,60 @@ const fileUtils = require('./dist/utils/fileutils');
 const markdownUtils = require('./dist/utils/markdown');
 const aiExportUtils = require('./utils/ai-export');
 const timeUtils = require('./dist/utils/time');
+const readline = require('readline');
+const eventBus = require('./dist/core/event-bus').default;
+
+// Progress Bar Helper
+function monitorProgress(debugMode) {
+  let lastProgress = null;
+
+  const updateBar = (current, total, action) => {
+    lastProgress = { current, total, action };
+    const width = 30;
+    const percentage = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0;
+    const filled = Math.round((width * percentage) / 100);
+    const empty = width - filled;
+    const bar = '█'.repeat(filled) + '░'.repeat(empty);
+
+    readline.clearLine(process.stdout, 0);
+    readline.cursorTo(process.stdout, 0);
+    process.stdout.write(`[${bar}] ${current}/${total} (${percentage}%) | ${action}`);
+  };
+
+  const onProgress = (data) => {
+    updateBar(data.current, data.target, data.action);
+  };
+
+  const onLog = (data) => {
+    // In debug mode, show all logs. Otherwise only show warnings/errors to keep UI clean.
+    // However, ScraperEngine emits 'info' logs for important events like "Loaded session".
+    // We might want to show those but clear the bar first.
+    if (debugMode || data.level === 'error' || data.level === 'warn' || data.level === 'info') {
+      readline.clearLine(process.stdout, 0);
+      readline.cursorTo(process.stdout, 0);
+
+      // Format timestamp
+      const time = new Date().toLocaleTimeString();
+      console.log(`[${time}] [${data.level.toUpperCase()}] ${data.message}`);
+
+      if (lastProgress) {
+        updateBar(lastProgress.current, lastProgress.total, lastProgress.action);
+      }
+    }
+  };
+
+  eventBus.on('scrape:progress', onProgress);
+  eventBus.on('log:message', onLog);
+
+  return () => {
+    eventBus.off('scrape:progress', onProgress);
+    eventBus.off('log:message', onLog);
+    // Clear the progress bar line one last time
+    readline.clearLine(process.stdout, 0);
+    readline.cursorTo(process.stdout, 0);
+  };
+}
+
 // const mergeUtils = require('./utils/merge');
 
 // 创建命令行程序
@@ -83,7 +137,9 @@ program
           sessionId: options.session
         };
 
+        const stopMonitoring = monitorProgress(options.debug);
         const result = await scraper.scrapeThread(threadOptions);
+        stopMonitoring();
 
         if (result.success) {
           console.log(`✅ Thread scraping completed!`);
@@ -242,7 +298,9 @@ program
       };
 
       // 执行抓取（统一逻辑）
+      const stopMonitoring = monitorProgress(options.debug);
       const results = await scraper.scrapeTwitterUsers(usernames, scraperOptions);
+      stopMonitoring();
 
       // 统一生成 AI 分析文件 (无论是否开启 persona 模式，只要有数据就生成)
       if (results && results.length > 0) {
