@@ -44,30 +44,13 @@ A powerful, full-featured tool to scrape, archive, and analyze Twitter/X content
    npm install
    ```
 
-3. **Configure Cookies (Recommended)**
-   To access age-restricted content, search, or avoid rate limits, provide your Twitter cookies.
-   - Create an `env.json` file in the root directory:
-     ```json
-     {
-       "COOKIES": [
-         {
-           "name": "auth_token",
-           "value": "YOUR_AUTH_TOKEN_HERE",
-           "domain": ".x.com",
-           "path": "/",
-           "secure": true
-         },
-         {
-           "name": "ct0",
-           "value": "YOUR_CT0_HERE",
-           "domain": ".x.com",
-           "path": "/",
-           "secure": true
-         }
-       ]
-     }
-     ```
-   - *Alternatively, you can place a standard Puppeteer cookie JSON file at `./cookies/twitter-cookies.json`.*
+3. **Configure Cookies (Required)**
+   To access age-restricted content, search, or avoid rate limits, you must provide Twitter cookies.
+
+   - **Export Cookies**: Use a browser extension like "EditThisCookie" or "Cookie-Editor" to export your Twitter cookies as JSON while logged in to X.com.
+   - **Place in Directory**: Save the exported JSON file into the `cookies/` directory in the project root.
+     - Example: `cookies/my-account.json`
+   - **Multiple Accounts (Rotation)**: You can place multiple JSON files in the `cookies/` directory (e.g., `account1.json`, `account2.json`). The crawler will automatically rotate through them to distribute the load and reduce the risk of rate limiting.
 
 ---
 

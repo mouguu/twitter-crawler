@@ -174,11 +174,11 @@ interface EnvCookieDataResult {
 }
 
 /**
- * 验证 env.json 格式的 Cookie 数据
+ * 验证 Cookie file 格式的 Cookie 数据
  */
 export function validateEnvCookieData(envData: any): EnvCookieDataResult {
   if (!envData || typeof envData !== 'object') {
-    return { valid: false, error: 'env.json 内容必须是对象' };
+    return { valid: false, error: 'Cookie file content must be an object' };
   }
 
   let cookies: any;
@@ -193,7 +193,7 @@ export function validateEnvCookieData(envData: any): EnvCookieDataResult {
   } else {
     return {
       valid: false,
-      error: 'env.json 必须是 Cookie 数组，或包含 cookies 字段的对象'
+      error: 'Cookie file must be an array of cookies or an object containing a "cookies" field'
     };
   }
 
