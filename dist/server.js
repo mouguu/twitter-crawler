@@ -44,6 +44,7 @@ const scraper = __importStar(require("./scrape-unified"));
 const event_bus_1 = __importDefault(require("./core/event-bus"));
 const stop_signal_1 = require("./core/stop-signal");
 const path_utils_1 = require("./utils/path-utils");
+const api_key_1 = require("./middleware/api-key");
 const app = (0, express_1.default)();
 const PORT = 3000;
 const OUTPUT_ROOT = path.resolve(process.cwd(), 'output');
@@ -53,6 +54,7 @@ let lastDownloadUrl = null;
 // Middleware
 app.use(express_1.default.json());
 app.use(express_1.default.static(path.join(__dirname, 'public')));
+app.use('/api', api_key_1.apiKeyMiddleware);
 // API: Scrape
 app.post('/api/scrape', async (req, res) => {
     try {

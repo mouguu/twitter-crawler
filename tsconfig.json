@@ -13,6 +13,7 @@
     "include": [
         "core/**/*",
         "utils/**/*",
+        "middleware/**/*",
         "tests/**/*",
         "server.ts",
         "scrape-unified.ts"

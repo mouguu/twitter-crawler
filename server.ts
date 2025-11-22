@@ -6,6 +6,7 @@ import eventBusInstance from './core/event-bus';
 import { ScrapeProgressData, LogMessageData } from './core/event-bus';
 import { getShouldStopScraping, resetShouldStopScraping, setShouldStopScraping } from './core/stop-signal';
 import { isPathInsideBase } from './utils/path-utils';
+import { apiKeyMiddleware } from './middleware/api-key';
 
 const app = express();
 const PORT = 3000;
@@ -18,6 +19,7 @@ let lastDownloadUrl: string | null = null;
 // Middleware
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/api', apiKeyMiddleware);
 
 // API: Scrape
 app.post('/api/scrape', async (req: Request, res: Response) => {
