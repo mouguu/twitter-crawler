@@ -4,13 +4,15 @@ import * as fs from 'fs';
 import * as scraper from './scrape-unified';
 import eventBusInstance from './core/event-bus';
 import { ScrapeProgressData, LogMessageData } from './core/event-bus';
+import { getShouldStopScraping, resetShouldStopScraping, setShouldStopScraping } from './core/stop-signal';
+import { isPathInsideBase } from './utils/path-utils';
 
 const app = express();
 const PORT = 3000;
+const OUTPUT_ROOT = path.resolve(process.cwd(), 'output');
 
 // Global state for manual stop
 let isScrapingActive = false;
-let shouldStopScraping = false;
 let lastDownloadUrl: string | null = null;
 
 // Middleware
@@ -25,7 +27,7 @@ app.post('/api/scrape', async (req: Request, res: Response) => {
         console.log(`Received scrape request: Type=${type}, Input=${input}, Limit=${limit}`);
 
         // Reset stop flag and set active state
-        shouldStopScraping = false;
+        resetShouldStopScraping();
         isScrapingActive = true;
         lastDownloadUrl = null; // Clear previous result
 
@@ -116,7 +118,7 @@ app.post('/api/scrape', async (req: Request, res: Response) => {
     } finally {
         // Reset scraping state
         isScrapingActive = false;
-        shouldStopScraping = false;
+        resetShouldStopScraping();
     }
 });
 
@@ -131,13 +133,13 @@ app.post('/api/monitor', async (req: Request, res: Response) => {
         console.log(`Received monitor request for: ${users.join(', ')}`);
 
         isScrapingActive = true;
-        shouldStopScraping = false;
+        resetShouldStopScraping();
 
         // Dynamic import to avoid circular dependencies or initialization issues
         const { ScraperEngine } = require('./core/scraper-engine');
         const { MonitorService } = require('./core/monitor-service');
 
-        const engine = new ScraperEngine(() => shouldStopScraping);
+        const engine = new ScraperEngine(() => getShouldStopScraping());
         await engine.init();
         const success = await engine.loadCookies();
 
@@ -177,7 +179,7 @@ app.post('/api/monitor', async (req: Request, res: Response) => {
         });
     } finally {
         isScrapingActive = false;
-        shouldStopScraping = false;
+        resetShouldStopScraping();
     }
 });
 
@@ -192,7 +194,7 @@ app.post('/api/stop', (req: Request, res: Response) => {
         });
     }
 
-    shouldStopScraping = true;
+    setShouldStopScraping(true);
     console.log('Stop flag set. Waiting for scraper to terminate gracefully...');
 
     res.json({
@@ -247,7 +249,7 @@ export function broadcastProgress(data: ScrapeProgressData): void {
 app.get('/api/status', (req: Request, res: Response) => {
     res.json({
         isActive: isScrapingActive,
-        shouldStop: shouldStopScraping
+        shouldStop: getShouldStopScraping()
     });
 });
 
@@ -261,13 +263,19 @@ app.get('/api/result', (req: Request, res: Response) => {
 
 // API: Download
 app.get('/api/download', (req: Request, res: Response) => {
-    const filePath = req.query.path as string;
-    if (!filePath || !fs.existsSync(filePath)) {
+    const filePathParam = typeof req.query.path === 'string' ? req.query.path : '';
+    const resolvedPath = path.resolve(filePathParam);
+
+    if (!filePathParam || !isPathInsideBase(resolvedPath, OUTPUT_ROOT)) {
+        return res.status(400).send('Invalid file path');
+    }
+
+    if (!fs.existsSync(resolvedPath)) {
         return res.status(404).send('File not found');
     }
 
     // Generate a better filename
-    const basename = path.basename(filePath);
+    const basename = path.basename(resolvedPath);
 
     let downloadName = basename;
     if (basename === 'tweets.md' || basename === 'index.md') {
@@ -275,15 +283,10 @@ app.get('/api/download', (req: Request, res: Response) => {
         downloadName = `twitter-scrape-${timestamp}.md`;
     }
 
-    res.download(filePath, downloadName);
+    res.download(resolvedPath, downloadName);
 });
 
 // Start Server
 app.listen(PORT, () => {
     console.log(`Server running at http://localhost:${PORT}`);
 });
-
-// Export stop flag for scraper to check
-export function getShouldStopScraping(): boolean {
-    return shouldStopScraping;
-}

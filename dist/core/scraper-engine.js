@@ -55,7 +55,7 @@ const screenshotUtils = __importStar(require("../utils/screenshot"));
 const constants = __importStar(require("../config/constants"));
 const throttle = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 class ScraperEngine {
-    constructor(shouldStopFunction) {
+    constructor(shouldStopFunction, options = {}) {
         this.currentSession = null;
         this.eventBus = event_bus_1.default;
         this.navigationService = new navigation_service_1.NavigationService(this.eventBus);
@@ -68,13 +68,17 @@ class ScraperEngine {
         this.page = null;
         this.stopSignal = false;
         this.shouldStopFunction = shouldStopFunction;
+        this.browserOptions = {
+            headless: options.headless ?? true,
+            ...(options.browserOptions || {})
+        };
     }
     setStopSignal(value) {
         this.stopSignal = value;
     }
     async init() {
         this.browserManager = new browser_manager_1.BrowserManager();
-        await this.browserManager.init({ headless: true });
+        await this.browserManager.init(this.browserOptions);
         // We do NOT create the page here anymore. 
         // The page is created in loadCookies() to ensure it's tied to a session and fingerprint.
         // Initialize Managers
@@ -194,6 +198,15 @@ class ScraperEngine {
         let scrollAttempts = 0;
         const maxScrollAttempts = Math.max(50, Math.ceil(limit / 5));
         let noNewTweetsConsecutiveAttempts = 0;
+        let profileInfo = null;
+        if (config.collectProfileInfo) {
+            try {
+                profileInfo = await dataExtractor.extractProfileInfo(this.page);
+            }
+            catch (error) {
+                this.eventBus.emitLog(`Failed to extract profile info: ${error.message}`, 'warn');
+            }
+        }
         while (collectedTweets.length < limit && scrollAttempts < maxScrollAttempts) {
             if (this.stopSignal || (this.shouldStopFunction && this.shouldStopFunction())) {
                 this.eventBus.emitLog('Manual stop signal received.');
@@ -233,26 +246,21 @@ class ScraperEngine {
             });
             if (addedInAttempt === 0) {
                 noNewTweetsConsecutiveAttempts++;
-                if (noNewTweetsConsecutiveAttempts >= 3) {
-                    // Try refresh
-                    try {
-                        await this.navigationService.reloadPage(this.page);
-                        noNewTweetsConsecutiveAttempts = 0;
-                        continue;
-                    }
-                    catch (e) {
-                        break;
-                    }
+                // If 2 consecutive attempts with no new tweets, assume we've reached the end
+                if (noNewTweetsConsecutiveAttempts >= 2) {
+                    this.eventBus.emitLog(`No new tweets detected after 2 attempts. Collected ${collectedTweets.length} tweets (target was ${limit}). Finishing...`);
+                    break;
                 }
             }
             else {
                 noNewTweetsConsecutiveAttempts = 0;
             }
             // Scroll
-            // Smart Scroll (Mimicking Crawlee)
-            await dataExtractor.scrollToBottomSmart(this.page, constants.WAIT_FOR_NEW_TWEETS_TIMEOUT);
-            // Double check DOM update
-            await dataExtractor.waitForNewTweets(this.page, tweetsOnPage.length, 2000);
+            // Use very short timeouts when no new tweets to speed up detection
+            const scrollTimeout = noNewTweetsConsecutiveAttempts > 0 ? 1000 : constants.WAIT_FOR_NEW_TWEETS_TIMEOUT;
+            const domWaitTimeout = noNewTweetsConsecutiveAttempts > 0 ? 500 : 2000;
+            await dataExtractor.scrollToBottomSmart(this.page, scrollTimeout);
+            await dataExtractor.waitForNewTweets(this.page, tweetsOnPage.length, domWaitTimeout);
         }
         // Save Results
         if (collectedTweets.length > 0) {
@@ -265,7 +273,7 @@ class ScraperEngine {
             if (saveScreenshots)
                 await screenshotUtils.takeScreenshotsOfTweets(this.page, collectedTweets, { runContext });
         }
-        return { success: true, tweets: collectedTweets, runContext };
+        return { success: true, tweets: collectedTweets, runContext, profile: profileInfo };
     }
     async scrapeThread(options) {
         if (!this.page) {

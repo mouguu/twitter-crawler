@@ -1,12 +1,13 @@
 import * as path from 'path';
 import { Page } from 'puppeteer';
-import { BrowserManager } from './browser-manager';
+import { BrowserLaunchOptions, BrowserManager } from './browser-manager';
 import { CookieManager } from './cookie-manager';
 import { SessionManager, Session } from './session-manager';
 import { RequestQueue } from './request-queue'; // Import RequestQueue
 import { ErrorSnapshotter } from './error-snapshotter';
 import { FingerprintManager } from './fingerprint-manager';
 import * as dataExtractor from './data-extractor';
+import { ProfileInfo } from './data-extractor';
 import { NavigationService } from './navigation-service';
 import { RateLimitManager } from './rate-limit-manager';
 import eventBusInstance, { ScraperEventBus } from './event-bus';
@@ -19,6 +20,11 @@ import * as screenshotUtils from '../utils/screenshot';
 import * as constants from '../config/constants';
 
 const throttle = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
+
+export interface ScraperEngineOptions {
+    headless?: boolean;
+    browserOptions?: BrowserLaunchOptions;
+}
 
 export interface ScrapeTimelineConfig {
     username?: string;
@@ -35,12 +41,14 @@ export interface ScrapeTimelineConfig {
     withReplies?: boolean;
     stopAtTweetId?: string; // Stop scraping when this tweet ID is encountered
     sinceTimestamp?: number; // Stop scraping if tweet is older than this timestamp (ms)
+    collectProfileInfo?: boolean;
 }
 
 export interface ScrapeTimelineResult {
     success: boolean;
     tweets: Tweet[];
     runContext?: RunContext;
+    profile?: ProfileInfo | null;
     error?: string;
 }
 
@@ -52,6 +60,7 @@ export interface ScrapeThreadOptions {
     exportCsv?: boolean;
     exportJson?: boolean;
     outputDir?: string;
+    headless?: boolean;
 }
 
 export interface ScrapeThreadResult {
@@ -76,8 +85,9 @@ export class ScraperEngine {
     private page: Page | null;
     private stopSignal: boolean;
     private shouldStopFunction?: () => boolean;
+    private browserOptions: BrowserLaunchOptions;
 
-    constructor(shouldStopFunction?: () => boolean) {
+    constructor(shouldStopFunction?: () => boolean, options: ScraperEngineOptions = {}) {
         this.eventBus = eventBusInstance;
         this.navigationService = new NavigationService(this.eventBus);
         this.rateLimitManager = new RateLimitManager(this.eventBus);
@@ -89,6 +99,10 @@ export class ScraperEngine {
         this.page = null;
         this.stopSignal = false;
         this.shouldStopFunction = shouldStopFunction;
+        this.browserOptions = {
+            headless: options.headless ?? true,
+            ...(options.browserOptions || {})
+        };
     }
 
     setStopSignal(value: boolean): void {
@@ -97,7 +111,7 @@ export class ScraperEngine {
 
     async init(): Promise<void> {
         this.browserManager = new BrowserManager();
-        await this.browserManager.init({ headless: true });
+        await this.browserManager.init(this.browserOptions);
         // We do NOT create the page here anymore. 
         // The page is created in loadCookies() to ensure it's tied to a session and fingerprint.
 
@@ -230,6 +244,15 @@ export class ScraperEngine {
         let scrollAttempts = 0;
         const maxScrollAttempts = Math.max(50, Math.ceil(limit / 5));
         let noNewTweetsConsecutiveAttempts = 0;
+        let profileInfo: ProfileInfo | null = null;
+
+        if (config.collectProfileInfo) {
+            try {
+                profileInfo = await dataExtractor.extractProfileInfo(this.page);
+            } catch (error: any) {
+                this.eventBus.emitLog(`Failed to extract profile info: ${error.message}`, 'warn');
+            }
+        }
 
         while (collectedTweets.length < limit && scrollAttempts < maxScrollAttempts) {
             if (this.stopSignal || (this.shouldStopFunction && this.shouldStopFunction())) {
@@ -303,7 +326,7 @@ export class ScraperEngine {
             if (saveScreenshots) await screenshotUtils.takeScreenshotsOfTweets(this.page, collectedTweets, { runContext });
         }
 
-        return { success: true, tweets: collectedTweets, runContext };
+        return { success: true, tweets: collectedTweets, runContext, profile: profileInfo };
     }
 
     async scrapeThread(options: ScrapeThreadOptions): Promise<ScrapeThreadResult> {

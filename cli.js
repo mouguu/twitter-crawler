@@ -8,11 +8,11 @@
 const path = require('path');
 const fs = require('fs');
 const { Command } = require('commander');
-const scraper = require('./scrape-unified');
-const fileUtils = require('./utils/fileutils');
-const markdownUtils = require('./utils/markdown');
+const scraper = require('./dist/scrape-unified');
+const fileUtils = require('./dist/utils/fileutils');
+const markdownUtils = require('./dist/utils/markdown');
 const aiExportUtils = require('./utils/ai-export');
-const timeUtils = require('./utils/time');
+const timeUtils = require('./dist/utils/time');
 // const mergeUtils = require('./utils/merge');
 
 // 创建命令行程序
@@ -77,7 +77,8 @@ program
           saveMarkdown: true,
           exportJson: !!options.json,
           exportCsv: !!options.csv,
-          generateAnalysis: true
+          generateAnalysis: true,
+          headless: options.headless
         };
 
         const result = await scraper.scrapeThread(threadOptions);
