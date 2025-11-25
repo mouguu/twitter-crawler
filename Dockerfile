@@ -8,10 +8,18 @@ RUN apt-get update && \
 
 WORKDIR /app
 COPY package*.json ./
+# Install server deps
 RUN npm ci
 
+# Install frontend deps (cached separately)
+COPY frontend/package*.json ./frontend/
+RUN cd frontend && npm ci
+
+# Copy source
 COPY . .
-RUN npm run build
+
+# Build frontend into /app/public and then build server
+RUN npm run build --prefix frontend && npm run build
 
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV PORT=3000
