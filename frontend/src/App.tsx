@@ -13,6 +13,21 @@ interface Progress {
     target: number;
 }
 
+interface PerformanceStats {
+    totalDuration: number;
+    navigationTime: number;
+    scrollTime: number;
+    extractionTime: number;
+    tweetsCollected: number;
+    tweetsPerSecond: number;
+    scrollCount: number;
+    sessionSwitches: number;
+    rateLimitHits: number;
+    peakMemoryUsage: number;
+    currentMemoryUsage: number;
+    phases?: { name: string; duration: number; percentage: number }[];
+}
+
 function App() {
     const [activeTab, setActiveTab] = useState<TabType>('profile');
     const [input, setInput] = useState('');
@@ -21,6 +36,7 @@ function App() {
     const [logs, setLogs] = useState<string[]>([]);
     const [progress, setProgress] = useState<Progress>({ current: 0, target: 0 });
     const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+    const [performanceStats, setPerformanceStats] = useState<PerformanceStats | null>(null);
     const [apiKey, setApiKey] = useState<string>(''); // applied key
     const [apiKeyInput, setApiKeyInput] = useState<string>(''); // input buffer
 
@@ -65,17 +81,38 @@ function App() {
 
         const eventSource = new EventSource(url);
 
-        eventSource.onmessage = (event) => {
+        const handleLog = (event: MessageEvent) => {
             const data = JSON.parse(event.data);
+            setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${data.level?.toUpperCase?.() || 'INFO'}: ${data.message}`]);
+        };
 
-            if (data.type === 'log') {
-                setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${data.level.toUpperCase()}: ${data.message}`]);
-            } else if (data.type === 'progress') {
-                setProgress({ current: data.current, target: data.target });
+        const handleProgress = (event: MessageEvent) => {
+            const data = JSON.parse(event.data);
+            setProgress({ current: data.current, target: data.target });
+        };
+
+        const handlePerformance = (event: MessageEvent) => {
+            const data = JSON.parse(event.data);
+            if (data.stats) {
+                setPerformanceStats(data.stats);
             }
         };
 
+        // Explicitly listen to named SSE events; keep onmessage as a fallback for older payloads.
+        eventSource.addEventListener('log', handleLog);
+        eventSource.addEventListener('progress', handleProgress);
+        eventSource.addEventListener('performance', handlePerformance);
+        eventSource.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.type === 'log') return handleLog(event);
+            if (data.type === 'progress') return handleProgress(event);
+            if (data.type === 'performance') return handlePerformance(event);
+        };
+
         return () => {
+            eventSource.removeEventListener('log', handleLog);
+            eventSource.removeEventListener('progress', handleProgress);
+            eventSource.removeEventListener('performance', handlePerformance);
             eventSource.close();
         };
     }, [apiKey]);
@@ -113,6 +150,7 @@ function App() {
         setIsScraping(true);
         setLogs([]);
         setDownloadUrl(null);
+        setPerformanceStats(null);
         setProgress({ current: 0, target: limit });
 
         try {
@@ -144,6 +182,9 @@ function App() {
             const result = await response.json();
             if (result.success) {
                 setDownloadUrl(result.downloadUrl);
+                if (result.performance) {
+                    setPerformanceStats(result.performance);
+                }
                 setLogs(prev => [...prev, `✅ Operation completed! ${result.downloadUrl ? 'Download available.' : ''}`]);
             } else {
                 setLogs(prev => [...prev, `❌ Error: ${result.error}`]);
@@ -285,6 +326,7 @@ function App() {
                                         type="number"
                                         value={limit}
                                         onChange={(e) => setLimit(parseInt(e.target.value))}
+                                        onWheel={(e) => e.currentTarget.blur()}
                                         min="10"
                                         max="1000"
                                         className="peer w-full bg-transparent border-b border-stone py-2 focus:outline-none focus:border-rust transition-colors text-xl font-serif text-charcoal"
@@ -333,6 +375,7 @@ function App() {
                                         type="number"
                                         value={lookbackHours}
                                         onChange={(e) => setLookbackHours(parseInt(e.target.value))}
+                                        onWheel={(e) => e.currentTarget.blur()}
                                         min="1"
                                         max="168"
                                         className="peer w-full bg-transparent border-b border-stone py-2 focus:outline-none focus:border-rust transition-colors text-xl font-serif text-charcoal"
@@ -453,6 +496,100 @@ function App() {
                             )}
                         </div>
                     </div>
+
+                    {/* Performance Statistics */}
+                    {performanceStats && (
+                        <div className="mt-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                            <h3 className="text-[10px] uppercase tracking-[0.2em] text-stone/30 mb-4 font-sans">Performance Metrics</h3>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                {/* Total Duration */}
+                                <div className="p-4 border border-white/10 rounded-sm bg-white/5">
+                                    <p className="text-[10px] uppercase tracking-wider text-stone/50 mb-1">Duration</p>
+                                    <p className="text-xl font-display text-rust">
+                                        {performanceStats.totalDuration < 60000 
+                                            ? `${(performanceStats.totalDuration / 1000).toFixed(1)}s`
+                                            : `${Math.floor(performanceStats.totalDuration / 60000)}m ${((performanceStats.totalDuration % 60000) / 1000).toFixed(0)}s`
+                                        }
+                                    </p>
+                                </div>
+                                
+                                {/* Tweets/Second */}
+                                <div className="p-4 border border-white/10 rounded-sm bg-white/5">
+                                    <p className="text-[10px] uppercase tracking-wider text-stone/50 mb-1">Speed</p>
+                                    <p className="text-xl font-display text-rust">{performanceStats.tweetsPerSecond.toFixed(2)} <span className="text-xs text-stone/50">t/s</span></p>
+                                </div>
+                                
+                                {/* Scroll Count */}
+                                <div className="p-4 border border-white/10 rounded-sm bg-white/5">
+                                    <p className="text-[10px] uppercase tracking-wider text-stone/50 mb-1">Scrolls</p>
+                                    <p className="text-xl font-display text-washi/80">{performanceStats.scrollCount}</p>
+                                </div>
+                                
+                                {/* Peak Memory */}
+                                <div className="p-4 border border-white/10 rounded-sm bg-white/5">
+                                    <p className="text-[10px] uppercase tracking-wider text-stone/50 mb-1">Peak Memory</p>
+                                    <p className="text-xl font-display text-washi/80">{performanceStats.peakMemoryUsage.toFixed(0)} <span className="text-xs text-stone/50">MB</span></p>
+                                </div>
+                            </div>
+                            
+                            {/* Detailed Breakdown */}
+                            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {/* Time Breakdown */}
+                                <div className="p-4 border border-white/10 rounded-sm bg-white/5">
+                                    <p className="text-[10px] uppercase tracking-wider text-stone/50 mb-3">Time Breakdown</p>
+                                    <div className="space-y-2 text-xs">
+                                        <div className="flex justify-between">
+                                            <span className="text-stone/60">Navigation</span>
+                                            <span className="text-washi/80">{(performanceStats.navigationTime / 1000).toFixed(2)}s</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-stone/60">Scrolling</span>
+                                            <span className="text-washi/80">{(performanceStats.scrollTime / 1000).toFixed(2)}s</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-stone/60">Extraction</span>
+                                            <span className="text-washi/80">{(performanceStats.extractionTime / 1000).toFixed(2)}s</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                {/* Session Stats */}
+                                <div className="p-4 border border-white/10 rounded-sm bg-white/5">
+                                    <p className="text-[10px] uppercase tracking-wider text-stone/50 mb-3">Session Health</p>
+                                    <div className="space-y-2 text-xs">
+                                        <div className="flex justify-between">
+                                            <span className="text-stone/60">Session Switches</span>
+                                            <span className={performanceStats.sessionSwitches > 0 ? "text-yellow-400" : "text-green-400"}>{performanceStats.sessionSwitches}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-stone/60">Rate Limits Hit</span>
+                                            <span className={performanceStats.rateLimitHits > 0 ? "text-red-400" : "text-green-400"}>{performanceStats.rateLimitHits}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                {/* Efficiency */}
+                                <div className="p-4 border border-white/10 rounded-sm bg-white/5">
+                                    <p className="text-[10px] uppercase tracking-wider text-stone/50 mb-3">Efficiency</p>
+                                    <div className="space-y-2 text-xs">
+                                        <div className="flex justify-between">
+                                            <span className="text-stone/60">Tweets/Scroll</span>
+                                            <span className="text-washi/80">
+                                                {performanceStats.scrollCount > 0 
+                                                    ? (performanceStats.tweetsCollected / performanceStats.scrollCount).toFixed(1)
+                                                    : 'N/A'
+                                                }
+                                            </span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-stone/60">Total Tweets</span>
+                                            <span className="text-rust font-medium">{performanceStats.tweetsCollected}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 <div className="absolute bottom-4 left-0 w-full text-center text-stone/20 text-[10px] uppercase tracking-[0.3em] font-sans">

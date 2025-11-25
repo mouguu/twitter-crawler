@@ -1,6 +1,6 @@
 /**
  * File utilities and run directory helpers for Twitter Crawler
- * 统一管理输出结构、缓存与目录创建
+ * 统一管理输出结构与目录创建
  */
 
 import { promises as fs } from 'fs';
@@ -8,7 +8,6 @@ import * as path from 'path';
 import * as timeUtils from './time';
 
 const DEFAULT_OUTPUT_ROOT = path.resolve(process.cwd(), 'output');
-const CACHE_ROOT = path.resolve(process.cwd(), '.cache');
 
 const DEFAULT_PLATFORM = 'twitter';
 const DEFAULT_IDENTIFIER = 'timeline';
@@ -43,18 +42,15 @@ export async function ensureDirExists(dir: string): Promise<boolean> {
 }
 
 /**
- * 确保基础输出与缓存目录存在
+ * 确保基础输出目录存在
  */
 export async function ensureBaseStructure(): Promise<boolean> {
-  await Promise.all([
-    ensureDirExists(DEFAULT_OUTPUT_ROOT),
-    ensureDirExists(CACHE_ROOT)
-  ]);
+  await ensureDirExists(DEFAULT_OUTPUT_ROOT);
   return true;
 }
 
 /**
- * 兼容旧函数名称，保留调用但现在只保证基础结构存在
+ * 兼容旧函数名称
  */
 export async function ensureDirectories(): Promise<boolean> {
   return ensureBaseStructure();
@@ -158,63 +154,6 @@ export async function createRunContext(options: RunContextOptions = {}): Promise
 }
 
 /**
- * 获取缓存文件路径
- */
-export function getCacheFilePath(platform: string = DEFAULT_PLATFORM, identifier: string = DEFAULT_IDENTIFIER): string {
-  const safePlatform = sanitizeSegment(platform);
-  const safeIdentifier = sanitizeSegment(identifier);
-  return path.join(CACHE_ROOT, safePlatform, `${safeIdentifier}.json`);
-}
-
-/**
- * 加载已抓取URL集合
- */
-export async function loadSeenUrls(platform: string = DEFAULT_PLATFORM, identifier: string = DEFAULT_IDENTIFIER): Promise<Set<string>> {
-  const cacheFile = getCacheFilePath(platform, identifier);
-  await ensureDirExists(path.dirname(cacheFile));
-  try {
-    const data = await fs.readFile(cacheFile, 'utf-8');
-    const parsed = JSON.parse(data);
-    if (Array.isArray(parsed)) {
-      console.log(`[${platform}] Loaded ${parsed.length} scraped URLs (${identifier})`);
-      return new Set(parsed);
-    }
-    return new Set();
-  } catch (error: any) {
-    if (error.code !== 'ENOENT') {
-      console.warn(`[${platform}] Failed to load scraped URLs (${identifier}): ${error.message}`);
-    }
-    return new Set();
-  }
-}
-
-/**
- * 保存已抓取URL集合
- */
-export async function saveSeenUrls(platform: string = DEFAULT_PLATFORM, identifier: string = DEFAULT_IDENTIFIER, urls: Set<string>): Promise<boolean> {
-  if (!urls || !(urls instanceof Set)) {
-    console.error('saveSeenUrls requires Set type urls');
-    return false;
-  }
-
-  const cacheFile = getCacheFilePath(platform, identifier);
-  await ensureDirExists(path.dirname(cacheFile));
-
-  try {
-    await fs.writeFile(
-      cacheFile,
-      JSON.stringify(Array.from(urls), null, 2),
-      'utf-8'
-    );
-    console.log(`[${platform}] Saved ${urls.size} scraped URLs (${identifier})`);
-    return true;
-  } catch (error: any) {
-    console.error(`[${platform}] Failed to save scraped URLs (${identifier}):`, error.message);
-    return false;
-  }
-}
-
-/**
  * 生成今天的日期字符串，格式为 YYYY-MM-DD
  */
 export function getTodayString(): string {
@@ -244,7 +183,4 @@ export async function getMarkdownFiles(dir: string): Promise<string[]> {
   }
 }
 
-export {
-  DEFAULT_OUTPUT_ROOT,
-  CACHE_ROOT
-};
+export { DEFAULT_OUTPUT_ROOT };

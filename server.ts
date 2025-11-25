@@ -204,7 +204,8 @@ app.post('/api/scrape', async (req: Request, res: Response) => {
                         deleteMerged
                     });
                 } else {
-                    return res.status(400).json({ error: 'Invalid scrape type' });
+                    res.status(400).json({ error: 'Invalid scrape type' });
+                    return;
                 }
 
                 if (result && result.success) {
@@ -224,18 +225,19 @@ app.post('/api/scrape', async (req: Request, res: Response) => {
                         const downloadUrl = `/api/download?path=${encodeURIComponent(runContext.markdownIndexPath)}`;
                         lastDownloadUrl = downloadUrl; // Save for later retrieval
                         console.log('[DEBUG] Sending success response with downloadUrl:', runContext.markdownIndexPath);
-                        return res.json({
+                        res.json({
                             success: true,
                             message: 'Scraping completed successfully!',
                             downloadUrl,
                             stats: {
                                 count: result.tweets ? result.tweets.length : 0
-                            }
+                            },
+                            performance: result.performance || null
                         });
                     } else {
                         // No file path found
                         console.error('[DEBUG] No markdownIndexPath found in runContext');
-                        return res.status(500).json({
+                        res.status(500).json({
                             success: false,
                             error: 'Scraping finished but output file not found.'
                         });
@@ -244,7 +246,7 @@ app.post('/api/scrape', async (req: Request, res: Response) => {
                 } else {
                     // Error
                     console.error('Scraping failed:', result?.error || 'Unknown error');
-                    return res.status(500).json({
+                    res.status(500).json({
                         success: false,
                         error: result?.error || 'Scraping failed'
                     });
@@ -283,7 +285,8 @@ app.post('/api/monitor', async (req: Request, res: Response) => {
         try {
             const { users, lookbackHours, keywords } = req.body;
             if (!users || !Array.isArray(users) || users.length === 0) {
-                return res.status(400).json({ error: 'Invalid users list' });
+                res.status(400).json({ error: 'Invalid users list' });
+                return;
             }
 
             console.log(`Received monitor request for: ${users.join(', ')}`);
@@ -301,7 +304,8 @@ app.post('/api/monitor', async (req: Request, res: Response) => {
 
             if (!success) {
                 await engine.close();
-                return res.status(500).json({ error: 'Failed to load cookies' });
+                res.status(500).json({ error: 'Failed to load cookies' });
+                return;
             }
 
             const monitor = new MonitorService(engine);
@@ -373,31 +377,42 @@ app.get('/api/progress', (req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
 
+    const sendEvent = (event: string, payload: Record<string, any>) => {
+        res.write(`event: ${event}\n`);
+        res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    };
+
     // Send initial message
-    res.write(`data: ${JSON.stringify({ type: 'connected', message: 'Progress stream connected' })}\n\n`);
+    sendEvent('connected', { type: 'connected', message: 'Progress stream connected' });
 
     // Listener for progress events
     const onProgress = (data: ScrapeProgressData) => {
-        res.write(`data: ${JSON.stringify({ type: 'progress', ...data })}\n\n`);
+        sendEvent('progress', { type: 'progress', ...data });
     };
 
     const onLog = (data: LogMessageData) => {
-        res.write(`data: ${JSON.stringify({ type: 'log', ...data })}\n\n`);
+        sendEvent('log', { type: 'log', ...data });
+    };
+
+    const onPerformance = (data: any) => {
+        sendEvent('performance', { type: 'performance', ...data });
     };
 
     const onError = (error: Error) => {
         console.error('[Scraper Error]', error);
-        res.write(`data: ${JSON.stringify({ type: 'log', level: 'error', message: error.message })}\n\n`);
+        sendEvent('log', { type: 'log', level: 'error', message: error.message });
     };
 
     eventBusInstance.on('scrape:progress', onProgress);
     eventBusInstance.on('log:message', onLog);
+    eventBusInstance.on('performance:update', onPerformance);
     eventBusInstance.on('scrape:error', onError);
 
     // Remove listeners on disconnect
     req.on('close', () => {
         eventBusInstance.off('scrape:progress', onProgress);
         eventBusInstance.off('log:message', onLog);
+        eventBusInstance.off('performance:update', onPerformance);
         eventBusInstance.off('scrape:error', onError);
         console.log('[SSE] Client disconnected');
     });

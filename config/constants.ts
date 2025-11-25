@@ -41,22 +41,22 @@ export const BLOCKED_RESOURCE_TYPES = ['image', 'media', 'font'];
 /**
  * 页面导航超时时间（毫秒）
  */
-export const NAVIGATION_TIMEOUT = 60000;
+export const NAVIGATION_TIMEOUT = 30000;
 
 /**
  * 等待推文选择器超时时间（毫秒）
  */
-export const WAIT_FOR_TWEETS_TIMEOUT = 45000;
+export const WAIT_FOR_TWEETS_TIMEOUT = 20000;
 
 /**
  * 页面刷新后等待推文超时时间（毫秒）
  */
-export const WAIT_FOR_TWEETS_AFTER_REFRESH_TIMEOUT = 75000;
+export const WAIT_FOR_TWEETS_AFTER_REFRESH_TIMEOUT = 30000;
 
 /**
  * 等待新推文加载的超时时间（毫秒）
  */
-export const WAIT_FOR_NEW_TWEETS_TIMEOUT = 3000;
+export const WAIT_FOR_NEW_TWEETS_TIMEOUT = 2000;
 
 // ==================== 重试配置 ====================
 
@@ -64,8 +64,8 @@ export const WAIT_FOR_NEW_TWEETS_TIMEOUT = 3000;
  * 页面导航重试配置
  */
 export const NAVIGATION_RETRY_CONFIG = {
-    maxRetries: 3,
-    baseDelay: 2000
+    maxRetries: 2,
+    baseDelay: 1000
 };
 
 /**
@@ -73,7 +73,7 @@ export const NAVIGATION_RETRY_CONFIG = {
  */
 export const SELECTOR_RETRY_CONFIG = {
     maxRetries: 2,
-    baseDelay: 2000
+    baseDelay: 1000
 };
 
 /**
@@ -81,7 +81,7 @@ export const SELECTOR_RETRY_CONFIG = {
  */
 export const REFRESH_RETRY_CONFIG = {
     maxRetries: 2,
-    baseDelay: 2000
+    baseDelay: 1000
 };
 
 // ==================== 爬取策略配置 ====================
@@ -95,22 +95,22 @@ export const MAX_CONSECUTIVE_NO_NEW_TWEETS = 3;
 /**
  * 滚动延迟基础时间（毫秒）
  */
-export const SCROLL_DELAY_BASE = 1500;
+export const SCROLL_DELAY_BASE = 800;
 
 /**
  * 滚动延迟随机抖动时间（毫秒）
  */
-export const SCROLL_DELAY_JITTER = 1500;
+export const SCROLL_DELAY_JITTER = 500;
 
 /**
  * 刷新后等待延迟基础时间（毫秒）
  */
-export const REFRESH_WAIT_DELAY_BASE = 1000;
+export const REFRESH_WAIT_DELAY_BASE = 500;
 
 /**
  * 刷新后等待延迟随机抖动时间（毫秒）
  */
-export const REFRESH_WAIT_DELAY_JITTER = 1000;
+export const REFRESH_WAIT_DELAY_JITTER = 500;
 
 /**
  * 计算滚动延迟时间
@@ -133,7 +133,7 @@ export function getRefreshWaitDelay(): number {
 /**
  * 批处理用户之间的默认延迟（毫秒）
  */
-export const BATCH_USER_DELAY = 5000;
+export const BATCH_USER_DELAY = 2000;
 
 // ==================== 调度器配置 ====================
 

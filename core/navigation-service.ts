@@ -26,11 +26,11 @@ export class NavigationService {
                 url,
                 {
                     waitUntil: 'networkidle2',
-                    timeout: options.timeout || 30000
+                    timeout: options.timeout || 25000
                 },
                 {
                     maxRetries,
-                    baseDelay: 1000,
+                    baseDelay: 800,
                     onRetry: (error: any, attempt: number) => {
                         this._log(`Navigation failed (attempt ${attempt}/${maxRetries}): ${error.message}`, 'warn');
                     }
@@ -50,10 +50,10 @@ export class NavigationService {
             await retryUtils.retryWaitForSelector(
                 page,
                 dataExtractor.X_SELECTORS.TWEET,
-                { timeout: options.timeout || 25000 },
+                { timeout: options.timeout || 20000 },
                 {
                     maxRetries,
-                    baseDelay: 1000,
+                    baseDelay: 800,
                     onRetry: (error: any, attempt: number) => {
                         this._log(`Waiting for tweets failed (attempt ${attempt}/${maxRetries}): ${error.message}`, 'warn');
                     }

@@ -3,13 +3,13 @@ import { Page } from 'puppeteer';
 import { BrowserLaunchOptions, BrowserManager } from './browser-manager';
 import { CookieManager } from './cookie-manager';
 import { SessionManager, Session } from './session-manager';
-import { RequestQueue } from './request-queue'; // Import RequestQueue
 import { ErrorSnapshotter } from './error-snapshotter';
 import { FingerprintManager } from './fingerprint-manager';
 import * as dataExtractor from './data-extractor';
 import { ProfileInfo } from './data-extractor';
 import { NavigationService } from './navigation-service';
 import { RateLimitManager } from './rate-limit-manager';
+import { PerformanceMonitor, PerformanceStats } from './performance-monitor';
 import eventBusInstance, { ScraperEventBus } from './event-bus';
 import * as fileUtils from '../utils/fileutils';
 import { RunContext } from '../utils/fileutils';
@@ -52,6 +52,7 @@ export interface ScrapeTimelineResult {
     runContext?: RunContext;
     profile?: ProfileInfo | null;
     error?: string;
+    performance?: PerformanceStats;
 }
 
 export interface ScrapeThreadOptions {
@@ -73,6 +74,7 @@ export interface ScrapeThreadResult {
     replies?: Tweet[];
     runContext?: RunContext;
     error?: string;
+    performance?: PerformanceStats;
 }
 
 export class ScraperEngine {
@@ -80,9 +82,10 @@ export class ScraperEngine {
     private navigationService: NavigationService;
     private rateLimitManager: RateLimitManager;
     private sessionManager: SessionManager;
-    private requestQueue: RequestQueue; // Add RequestQueue
     private errorSnapshotter: ErrorSnapshotter;
     private fingerprintManager: FingerprintManager;
+    private performanceMonitor: PerformanceMonitor;
+    private lastPerformanceEmit: number = 0;
     private currentSession: Session | null = null;
     private browserManager: BrowserManager | null;
     private page: Page | null;
@@ -96,9 +99,9 @@ export class ScraperEngine {
         this.navigationService = new NavigationService(this.eventBus);
         this.sessionManager = new SessionManager(undefined, this.eventBus);
         this.rateLimitManager = new RateLimitManager(this.sessionManager, this.eventBus);
-        this.requestQueue = new RequestQueue(); // Initialize RequestQueue
         this.errorSnapshotter = new ErrorSnapshotter();
         this.fingerprintManager = new FingerprintManager();
+        this.performanceMonitor = new PerformanceMonitor();
         this.browserManager = null;
         this.page = null;
         this.stopSignal = false;
@@ -139,6 +142,21 @@ export class ScraperEngine {
         this.eventBus.emitLog(`Loaded session: ${session.id}${session.username ? ` (${session.username})` : ''}`);
     }
 
+    private emitPerformanceUpdate(force: boolean = false): void {
+        const now = Date.now();
+        if (!force && now - this.lastPerformanceEmit < 1000) {
+            return;
+        }
+
+        this.lastPerformanceEmit = now;
+        try {
+            const stats = this.performanceMonitor.getStats();
+            this.eventBus.emitPerformance({ stats });
+        } catch (error: any) {
+            this.eventBus.emitLog(`Performance emit failed: ${error.message}`, 'warn');
+        }
+    }
+
     async init(): Promise<void> {
         this.browserManager = new BrowserManager();
         await this.browserManager.init(this.browserOptions);
@@ -147,7 +165,6 @@ export class ScraperEngine {
 
         // Initialize Managers
         await this.sessionManager.init();
-        // RequestQueue auto-loads state in constructor
 
         this.eventBus.emitLog('Browser launched and configured');
     }
@@ -183,10 +200,10 @@ export class ScraperEngine {
         // This ensures backward compatibility if no multi-session files are found
         try {
             const cookieManager = new CookieManager();
-            const cookieInfo = await cookieManager.loadAndInject(this.page);
+            const cookieInfo = await cookieManager.loadAndInject(this.page!);
             const fallbackSessionId = cookieInfo.source ? path.basename(cookieInfo.source) : 'legacy-cookies';
 
-            await this.fingerprintManager.injectFingerprint(this.page, fallbackSessionId);
+            await this.fingerprintManager.injectFingerprint(this.page!, fallbackSessionId);
             this.currentSession = {
                 id: fallbackSessionId,
                 cookies: cookieInfo.cookies,
@@ -208,6 +225,11 @@ export class ScraperEngine {
         if (!this.page) {
             return { success: false, tweets: [], error: 'Page not initialized' };
         }
+
+        // Start performance monitoring
+        this.performanceMonitor.reset();
+        this.performanceMonitor.start();
+        this.emitPerformanceUpdate(true);
 
         let {
             username, limit = 50, mode = 'timeline', searchQuery,
@@ -247,6 +269,7 @@ export class ScraperEngine {
         // Navigation with Retry & Rate Limit Handling
         let navigationSuccess = false;
         let attempts = 0;
+        this.performanceMonitor.startPhase('navigation');
         while (!navigationSuccess && attempts < 3) {
             try {
                 await this.navigationService.navigateToUrl(this.page, targetUrl);
@@ -254,9 +277,11 @@ export class ScraperEngine {
                 navigationSuccess = true;
             } catch (error: any) {
                 if (this.rateLimitManager.isRateLimitError(error)) {
+                    this.performanceMonitor.recordRateLimit();
                     const rotatedSession = await this.rateLimitManager.handleRateLimit(this.page, attempts, error, this.currentSession?.id);
                     if (!rotatedSession) throw error;
 
+                    this.performanceMonitor.recordSessionSwitch();
                     await this.applySession(rotatedSession, { refreshFingerprint: true, clearExistingCookies: true });
                     // Reset attempts after rotating to give the new session full retry budget
                     attempts = 0;
@@ -267,6 +292,8 @@ export class ScraperEngine {
             }
             attempts++;
         }
+        this.performanceMonitor.endPhase();
+        this.emitPerformanceUpdate();
 
         // Scraping Loop
         let scrollAttempts = 0;
@@ -289,7 +316,12 @@ export class ScraperEngine {
             }
 
             scrollAttempts++;
+            
+            // Extract tweets
+            this.performanceMonitor.startPhase('extraction');
             const tweetsOnPage = await dataExtractor.extractTweetsFromPage(this.page);
+            this.performanceMonitor.endPhase();
+            
             let addedInAttempt = 0;
 
             for (const tweet of tweetsOnPage) {
@@ -328,9 +360,46 @@ export class ScraperEngine {
             if (addedInAttempt === 0) {
                 noNewTweetsConsecutiveAttempts++;
 
-                // If 2 consecutive attempts with no new tweets, assume we've reached the end
-                if (noNewTweetsConsecutiveAttempts >= 2) {
-                    this.eventBus.emitLog(`No new tweets detected after 2 attempts. Collected ${collectedTweets.length} tweets (target was ${limit}). Finishing...`);
+                // After 3 consecutive attempts with no new tweets, try session rotation
+                if (noNewTweetsConsecutiveAttempts >= 3) {
+                    // Check if we have other sessions to try
+                    const nextSession = this.sessionManager.getNextSession(undefined, this.currentSession?.id);
+                    
+                    if (nextSession && nextSession.id !== this.currentSession?.id) {
+                        this.eventBus.emitLog(`No new tweets after ${noNewTweetsConsecutiveAttempts} attempts. Rotating to session: ${nextSession.id}`, 'warn');
+                        
+                        // Mark current session as potentially rate-limited
+                        if (this.currentSession) {
+                            this.sessionManager.markBad(this.currentSession.id, 'soft-rate-limit');
+                        }
+                        
+                        this.performanceMonitor.recordSessionSwitch();
+                        this.performanceMonitor.recordRateLimit();
+                        
+                        // Switch session
+                        try {
+                            this.performanceMonitor.startPhase('session-switch');
+                            await this.sessionManager.injectSession(this.page!, nextSession);
+                            await this.fingerprintManager.injectFingerprint(this.page!, nextSession.id);
+                            this.currentSession = nextSession;
+                            
+                            // Re-navigate to the page
+                            await this.navigationService.navigateToUrl(this.page!, targetUrl);
+                            await this.navigationService.waitForTweets(this.page!);
+                            this.performanceMonitor.endPhase();
+                            this.emitPerformanceUpdate();
+                            
+                            noNewTweetsConsecutiveAttempts = 0;
+                            this.eventBus.emitLog(`Switched to session ${nextSession.id}, continuing scrape...`);
+                            continue;
+                        } catch (switchError: any) {
+                            this.performanceMonitor.endPhase();
+                            this.eventBus.emitLog(`Failed to switch session: ${switchError.message}`, 'error');
+                        }
+                    }
+                    
+                    // No more sessions or switch failed, stop
+                    this.eventBus.emitLog(`No new tweets detected after ${noNewTweetsConsecutiveAttempts} attempts. Collected ${collectedTweets.length} tweets (target was ${limit}). Finishing...`);
                     break;
                 }
             } else {
@@ -338,27 +407,43 @@ export class ScraperEngine {
             }
 
             // Scroll
-            // Use very short timeouts when no new tweets to speed up detection
+            this.performanceMonitor.startPhase('scroll');
+            this.performanceMonitor.recordScroll();
             const scrollTimeout = noNewTweetsConsecutiveAttempts > 0 ? 1000 : constants.WAIT_FOR_NEW_TWEETS_TIMEOUT;
-            const domWaitTimeout = noNewTweetsConsecutiveAttempts > 0 ? 500 : 2000;
+            const domWaitTimeout = noNewTweetsConsecutiveAttempts > 0 ? 500 : 1500;
 
             await dataExtractor.scrollToBottomSmart(this.page, scrollTimeout);
             await dataExtractor.waitForNewTweets(this.page, tweetsOnPage.length, domWaitTimeout);
+            this.performanceMonitor.endPhase();
+            
+            // Update tweet count for performance tracking
+            this.performanceMonitor.recordTweets(collectedTweets.length);
+            this.emitPerformanceUpdate();
         }
 
         // Save Results
+        this.performanceMonitor.startPhase('save-results');
         if (collectedTweets.length > 0) {
             if (saveMarkdown) await markdownUtils.saveTweetsAsMarkdown(collectedTweets, runContext);
             if (exportCsv) await exportUtils.exportToCsv(collectedTweets, runContext);
             if (exportJson) await exportUtils.exportToJson(collectedTweets, runContext);
             if (saveScreenshots) await screenshotUtils.takeScreenshotsOfTweets(this.page, collectedTweets, { runContext });
         }
+        this.performanceMonitor.endPhase();
 
         if (this.currentSession) {
             this.sessionManager.markGood(this.currentSession.id);
         }
 
-        return { success: true, tweets: collectedTweets, runContext, profile: profileInfo };
+        // Stop performance monitoring and get report
+        this.performanceMonitor.stop();
+        this.emitPerformanceUpdate(true);
+        const performanceStats = this.performanceMonitor.getStats();
+        
+        // Log performance report
+        this.eventBus.emitLog(this.performanceMonitor.getReport());
+
+        return { success: true, tweets: collectedTweets, runContext, profile: profileInfo, performance: performanceStats };
     }
 
     async scrapeThread(options: ScrapeThreadOptions): Promise<ScrapeThreadResult> {

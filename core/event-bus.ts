@@ -13,6 +13,10 @@ export interface ScrapeCompleteData {
     [key: string]: any;
 }
 
+export interface PerformanceUpdateData {
+    stats: any;
+}
+
 export interface LogMessageData {
     message: string;
     level: string;
@@ -25,6 +29,7 @@ export class ScraperEventBus extends EventEmitter {
         SCRAPE_COMPLETE: string;
         SCRAPE_ERROR: string;
         LOG_MESSAGE: string;
+        PERFORMANCE_UPDATE: string;
     };
 
     constructor() {
@@ -33,7 +38,8 @@ export class ScraperEventBus extends EventEmitter {
             SCRAPE_PROGRESS: 'scrape:progress',
             SCRAPE_COMPLETE: 'scrape:complete',
             SCRAPE_ERROR: 'scrape:error',
-            LOG_MESSAGE: 'log:message'
+            LOG_MESSAGE: 'log:message',
+            PERFORMANCE_UPDATE: 'performance:update'
         };
     }
 
@@ -51,6 +57,10 @@ export class ScraperEventBus extends EventEmitter {
 
     emitLog(message: string, level: string = 'info'): void {
         this.emit(this.events.LOG_MESSAGE, { message, level, timestamp: new Date() });
+    }
+
+    emitPerformance(data: PerformanceUpdateData): void {
+        this.emit(this.events.PERFORMANCE_UPDATE, data);
     }
 }
 

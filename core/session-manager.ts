@@ -65,7 +65,7 @@ export class SessionManager {
     }
 
     /**
-     * 获取下一个可用 Session (轮询策略)
+     * 获取下一个可用 Session (按健康度排序，优先选择错误少的)
      */
     getNextSession(preferredId?: string, excludeId?: string): Session | null {
         const activeSessions = this.sessions.filter(s => !s.isRetired);
@@ -77,18 +77,28 @@ export class SessionManager {
             if (preferred) return preferred;
         }
 
-        const eligibleSessions = excludeId
-            ? activeSessions.filter(s => s.id !== excludeId.replace('.json', ''))
+        const normalizedExclude = excludeId ? excludeId.replace('.json', '') : undefined;
+        const eligibleSessions = normalizedExclude
+            ? activeSessions.filter(s => s.id !== normalizedExclude)
             : activeSessions;
 
         if (eligibleSessions.length === 0) {
             return null;
         }
 
-        const session = eligibleSessions[this.currentSessionIndex % eligibleSessions.length];
-        this.currentSessionIndex = (this.currentSessionIndex + 1) % eligibleSessions.length;
+        // 按错误次数排序，优先选择错误最少的 session
+        const sorted = [...eligibleSessions].sort((a, b) => {
+            // 优先选择错误少的
+            if (a.errorCount !== b.errorCount) {
+                return a.errorCount - b.errorCount;
+            }
+            // 错误相同则选择使用次数少的
+            return a.usageCount - b.usageCount;
+        });
 
-        return session;
+        const selected = sorted[0];
+        this._log(`Selected session: ${selected.id} (errors: ${selected.errorCount}, usage: ${selected.usageCount})`);
+        return selected;
     }
 
     /**
@@ -141,7 +151,7 @@ export class SessionManager {
                 await page.deleteCookie(...existingCookies);
             }
         }
-        await page.setCookie(...session.cookies);
+        await page.setCookie(...(session.cookies as Parameters<typeof page.setCookie>));
     }
 
     private _log(message: string, level: 'info' | 'warn' | 'error' = 'info'): void {

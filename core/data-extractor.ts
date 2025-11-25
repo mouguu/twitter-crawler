@@ -295,9 +295,9 @@ export async function scrollToBottomSmart(page: Page, timeout: number = 5000): P
     });
 
     // 3. 智能等待 (等待网络空闲)
-    const checkInterval = 500;
+    const checkInterval = 200;
     let stableIntervals = 0;
-    const requiredStableIntervals = 3; // 连续 3 次检查 (1.5秒) 请求数没有变化，认为加载完毕
+    const requiredStableIntervals = 2; // 连续 2 次检查网络稳定再继续
     let lastRequestCount = requestCount;
 
     const startTime = Date.now();

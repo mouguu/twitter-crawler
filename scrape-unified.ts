@@ -10,6 +10,9 @@ import {
     ScrapeThreadOptions,
     ScrapeThreadResult
 } from './core/scraper-engine';
+
+// Re-export types for consumers
+export type { ScrapeTimelineResult, ScrapeThreadResult };
 import { getShouldStopScraping } from './core/stop-signal';
 import * as markdownUtils from './utils/markdown';
 import * as exportUtils from './utils/export';

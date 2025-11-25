@@ -71,7 +71,13 @@ if (process.env.NODE_ENV !== 'production') {
   );
 }
 
-export type ModuleLogger = ReturnType<typeof createModuleLogger>;
+export interface ModuleLogger {
+  info: (message: string, meta?: Record<string, unknown>) => void;
+  warn: (message: string, meta?: Record<string, unknown>) => void;
+  error: (message: string, meta?: Record<string, unknown>) => void;
+  debug: (message: string, meta?: Record<string, unknown>) => void;
+  verbose: (message: string, meta?: Record<string, unknown>) => void;
+}
 
 export function createModuleLogger(module: string): ModuleLogger {
   return {
