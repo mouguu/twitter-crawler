@@ -22,8 +22,8 @@ COPY . .
 RUN npm run build --prefix frontend && npm run build
 
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
-ENV PORT=5000
-EXPOSE 5000
+ENV PORT=5001
+EXPOSE 5001
 
 COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh

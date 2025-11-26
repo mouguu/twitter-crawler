@@ -11,7 +11,7 @@ import { apiKeyMiddleware } from './middleware/api-key';
 import { RequestQueue, RequestTask } from './core/request-queue';
 
 const app = express();
-const PORT = Number(process.env.PORT) || 5000;
+const PORT = Number(process.env.PORT) || 5001;
 // Align with utils/fileutils (process.cwd()/output) while keeping legacy dist/output compatibility
 const OUTPUT_ROOT = fileUtils.getDefaultOutputRoot();
 const LEGACY_OUTPUT_ROOT = path.resolve(__dirname, 'output');

@@ -65,7 +65,7 @@ The easiest way to use the crawler is through the built-in web interface.
    *Or directly via:* `npx ts-node server.ts`
 
 2. **Open your browser**
-   Navigate to `http://localhost:5000`.
+   Navigate to `http://localhost:5001`.
 
 3. **Use the UI**
    - Enter a Twitter username, Tweet URL, or Search query.
