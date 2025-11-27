@@ -745,8 +745,13 @@ app.get("/api/sessions", async (req, res) => {
     const sessions = await cookieManager.listSessions();
     res.json({ success: true, sessions });
   } catch (error: any) {
-    console.error("Failed to list sessions:", error);
-    res.status(500).json({ success: false, error: error.message });
+    if (error.code === "COOKIE_LOAD_FAILED" || error.message?.includes("No cookie files found")) {
+      console.warn("[WARN] /api/sessions: No cookies found (this is normal on first run)");
+      res.json({ success: true, sessions: [] }); // Return empty list instead of error
+    } else {
+      console.error("Failed to list sessions:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
   }
 });
 

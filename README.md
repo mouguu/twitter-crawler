@@ -34,7 +34,7 @@ A powerful, full-featured tool to scrape, archive, and analyze Twitter/X content
 ### Prerequisites
 
 - **Node.js** 16 or higher
-- **npm** or **yarn**
+- **pnpm** (recommended) or **npm**
 
 ### Setup
 
@@ -45,27 +45,14 @@ A powerful, full-featured tool to scrape, archive, and analyze Twitter/X content
    cd twitter-crawler
    ```
 
-2. **Install backend dependencies**
+2. **Install dependencies**
 
    ```bash
-   npm install
+   pnpm install
+   cd frontend && pnpm install && cd ..
    ```
 
-3. **Install frontend dependencies**
-
-   ```bash
-   npm run install:frontend
-   ```
-
-4. **Build & sync the frontend bundle (only required after frontend changes)**
-
-   ```bash
-   npm run deploy:frontend
-   ```
-
-   This command compiles the Vite UI (`frontend/`) and copies the output into the root `public/` directory that Express serves.
-
-5. **Configure Cookies (Required)**
+3. **Configure Cookies (Required)**
    To access age-restricted content, search, or avoid rate limits, you must provide Twitter cookies.
 
    - **Export Cookies**: Use a browser extension like "EditThisCookie" or "Cookie-Editor" to export your Twitter cookies as JSON while logged in to X.com.
@@ -82,15 +69,16 @@ The easiest way to use the crawler is through the built-in web interface.
 1. **Start the server**
 
    ```bash
-   # For development (with auto-rebuild)
-   npm run dev:all
+   # Recommended: Fast start with Vite dev server (HMR enabled)
+   pnpm run dev:fast
 
-   # Or production mode
-   npm run dev
+   # Or: Production simulation mode (builds frontend to static files)
+   pnpm run dev
    ```
 
 2. **Open your browser**
-   Navigate to `http://localhost:5001`.
+   - If using `dev:fast`: Navigate to `http://localhost:5173`
+   - If using `dev`: Navigate to `http://localhost:5001`
 
 3. **Use the UI**
    - Enter a Twitter username, Tweet URL, or Search query.
@@ -102,37 +90,29 @@ The easiest way to use the crawler is through the built-in web interface.
 
 ## 🛠️ Development Mode
 
-For active development with auto-rebuild:
+For active development:
 
-### Option 1: Full Development Experience (Recommended)
+### Option 1: Fast Development (Recommended)
 
 ```bash
-npm run dev:all
+pnpm run dev:fast
 ```
 
 This starts:
+- **Backend server** (port 5001) with auto-restart
+- **Frontend Vite server** (port 5173) with Hot Module Replacement (HMR)
+- **Access**: `http://localhost:5173`
 
-- **Backend server** with auto-restart on code changes
-- **Frontend build** in watch mode - auto-rebuilds when files change
-- Both run concurrently with color-coded logs
-
-**Perfect for**: Frontend + Backend development
-
-### Option 2: Backend Only
+### Option 2: Production Simulation
 
 ```bash
-npm run dev:watch
+pnpm run dev
 ```
 
-Backend server with auto-restart. Frontend needs manual rebuild.
-
-### Option 3: Production Mode
-
-```bash
-npm run dev
-```
-
-Standard server startup. Requires manual build for frontend changes.
+This starts:
+- **Backend server** (port 5001)
+- **Frontend build watcher** (compiles to `public/` on change)
+- **Access**: `http://localhost:5001` (Backend serves the frontend)
 
 ---
 
