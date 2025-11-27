@@ -125,6 +125,8 @@ export class ScraperEngine {
     /** 是否为纯 API 模式（不启动浏览器） */
     private apiOnlyMode: boolean;
     private progressManager: ProgressManager;
+    /** 是否允许自动轮换 session（由前端传入） */
+    private enableRotation: boolean = true;
 
     private xApiClient: XApiClient | null = null;
 
@@ -260,13 +262,25 @@ export class ScraperEngine {
     }
 
     async loadCookies(enableRotation: boolean = true): Promise<boolean> {
+        // Persist the toggle for downstream logic (API empty-response handling, error handling)
+        this.enableRotation = enableRotation !== false;
+
         // Configure RateLimitManager
         if (this.rateLimitManager) {
-            this.rateLimitManager.setEnableRotation(enableRotation);
+            this.rateLimitManager.setEnableRotation(this.enableRotation);
+            // Surface the toggle to the UI logs for clarity
+            this.eventBus.emitLog(
+                this.enableRotation
+                    ? 'Auto-rotation enabled: will switch sessions on rate limits.'
+                    : 'Auto-rotation disabled: will stay on the current session and stop on rate limits.',
+                this.enableRotation ? 'info' : 'warn'
+            );
+        } else {
+            console.error('[ScraperEngine] WARNING: rateLimitManager is null!');
         }
         // 纯 API 模式：只加载 cookies 初始化 API 客户端
         if (this.apiOnlyMode) {
-            return this.loadCookiesApiOnly();
+            return this.loadCookiesApiOnly(this.enableRotation);
         }
 
         // 浏览器模式：需要 BrowserManager
@@ -299,7 +313,7 @@ export class ScraperEngine {
         // 2. Fallback to legacy single-file loading (env.json or cookies/twitter-cookies.json)
         // This ensures backward compatibility if no multi-session files are found
         try {
-            const cookieManager = new CookieManager();
+            const cookieManager = new CookieManager({ enableRotation: this.enableRotation });
             const cookieInfo = await cookieManager.loadAndInject(this.page!);
             const fallbackSessionId = cookieInfo.source ? path.basename(cookieInfo.source) : 'legacy-cookies';
 
@@ -327,7 +341,7 @@ export class ScraperEngine {
      * 纯 API 模式下加载 cookies
      * 只初始化 API 客户端，不涉及浏览器操作
      */
-    private async loadCookiesApiOnly(): Promise<boolean> {
+    private async loadCookiesApiOnly(enableRotation: boolean = true): Promise<boolean> {
         // 1. 尝试从 SessionManager 获取 session
         const nextSession = this.sessionManager.getNextSession(this.preferredSessionId);
 
@@ -340,7 +354,7 @@ export class ScraperEngine {
 
         // 2. Fallback to CookieManager
         try {
-            const cookieManager = new CookieManager();
+            const cookieManager = new CookieManager({ enableRotation });
             const cookieInfo = await cookieManager.load();
             const fallbackSessionId = cookieInfo.source ? path.basename(cookieInfo.source) : 'legacy-cookies';
 
@@ -568,6 +582,12 @@ export class ScraperEngine {
                     // 3. 如果只有1-2个session尝试过 → 继续切换尝试更多session
                     const likelyRealEnd = sessionsAtThisCursor >= 3 || !hasMoreSessions;
                     
+                    // 如果不允许轮换，则在空响应时直接停止，避免误判后自动切换
+                    if (!this.enableRotation) {
+                        this.eventBus.emitLog(`Auto-rotation disabled. Stopping at cursor ${cursorValue} after empty response. Collected: ${collectedTweets.length}/${limit}`, 'warn');
+                        break;
+                    }
+
                     // 如果连续2次空响应且还没尝试足够多的session，尝试切换
                     // 确保至少尝试所有4个session（account1,2,3,4）才能判断为真实末尾
                     if (consecutiveEmptyResponses >= 2 && attemptedSessions.size < 4 && !likelyRealEnd) {
@@ -721,6 +741,12 @@ export class ScraperEngine {
                 if (error.message.includes('429') || error.message.includes('Authentication failed') || consecutiveErrors >= 3) {
                     this.performanceMonitor.recordRateLimit();
                     const waitStartTime = Date.now();
+                    
+                    if (!this.enableRotation) {
+                        this.eventBus.emitLog(`Auto-rotation disabled. Stopping after error: ${error.message}`, 'warn');
+                        break;
+                    }
+
                     this.eventBus.emitLog(`API Error: ${error.message}. Attempting session rotation...`, 'warn');
                     
                     // 直接获取所有可用session，选择第一个未尝试的（避免getNextSession的排序问题）

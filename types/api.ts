@@ -31,6 +31,7 @@ export interface MonitorRequest {
   users: string[];
   lookbackHours?: number;
   keywords?: string;
+  enableRotation?: boolean;
 }
 
 // ============================================================================
