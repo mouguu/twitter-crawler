@@ -1,6 +1,9 @@
 /**
  * Result helper utilities for consistent success/failure handling.
  * 提供统一的结果处理工具，用于处理成功/失败场景
+ * 
+ * 注意：当前代码库中实际使用的是特定结果类型（如 ScrapeTimelineResult, ScrapeThreadResult），
+ * 而不是这个通用的 Result 类型。此文件保留为未来统一结果格式的备选方案。
  */
 
 /**

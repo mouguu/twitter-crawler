@@ -59,7 +59,7 @@ async function enqueueSequentialTask(
     });
 
     if (!queuedTask) {
-        throw new Error('Task is already queued or was handled recently');
+        throw ScraperErrors.invalidConfiguration('Task is already queued or was handled recently', { taskType: taskInfo.type });
     }
 
     const completion = new Promise<void>((resolve, reject) => {
@@ -181,12 +181,12 @@ app.post('/api/scrape', async (req: Request, res: Response) => {
                 if (type === 'profile') {
                     // Profile Scrape - 统一使用 ScraperEngine
                     const username = input.replace('@', '').replace('https://x.com/', '').replace('/', '');
-                    const useGraphql = mode === 'graphql';
+                    const scrapeMode = mode === 'graphql' ? 'graphql' : 'puppeteer';
+                    const apiOnly = scrapeMode === 'graphql';  // graphql 模式不需要浏览器
                     
-                    // 使用 apiOnly 模式可以避免启动浏览器（对于 GraphQL 模式）
                     const engine = new ScraperEngine(
                         () => getShouldStopScraping(),
-                        { apiOnly: useGraphql }
+                        { apiOnly }
                     );
                     
                     try {
@@ -201,11 +201,11 @@ app.post('/api/scrape', async (req: Request, res: Response) => {
                             username,
                             limit: parseInt(limit),
                             saveMarkdown: true,
-                            scrapeMode: useGraphql ? 'graphql' : 'puppeteer'
+                            scrapeMode
                         });
                         
                         // 如果需要抓取 likes，使用 DOM 模式单独处理
-                        if (likes && !useGraphql && result) {
+                        if (likes && scrapeMode !== 'graphql' && result) {
                             const likesResult = await engine.scrapeTimeline({
                                 username,
                                 tab: 'likes',
@@ -224,11 +224,12 @@ app.post('/api/scrape', async (req: Request, res: Response) => {
 
                 } else if (type === 'thread') {
                     // Thread Scrape - 统一使用 ScraperEngine
-                    const useGraphql = mode !== 'puppeteer';
+                    const scrapeMode = mode === 'puppeteer' ? 'puppeteer' : 'graphql';
+                    const apiOnly = scrapeMode === 'graphql';  // graphql 模式不需要浏览器
                     
                     const engine = new ScraperEngine(
                         () => getShouldStopScraping(),
-                        { apiOnly: useGraphql }
+                        { apiOnly }
                     );
                     
                     try {
@@ -243,7 +244,7 @@ app.post('/api/scrape', async (req: Request, res: Response) => {
                         tweetUrl: input,
                         maxReplies: parseInt(limit),
                             saveMarkdown: true,
-                            scrapeMode: useGraphql ? 'graphql' : 'puppeteer'
+                            scrapeMode
                     });
                     } finally {
                         await engine.close();
@@ -251,12 +252,12 @@ app.post('/api/scrape', async (req: Request, res: Response) => {
 
                 } else if (type === 'search') {
                     // Search Scrape - 统一使用 ScraperEngine
-                    const useGraphql = mode === 'graphql';
+                    const scrapeMode = mode === 'graphql' ? 'graphql' : 'puppeteer';
+                    const apiOnly = scrapeMode === 'graphql';  // graphql 模式不需要浏览器
                     
-                    // 使用 apiOnly 模式可以避免启动浏览器（对于 GraphQL 模式）
                     const engine = new ScraperEngine(
                         () => getShouldStopScraping(),
-                        { apiOnly: useGraphql }
+                        { apiOnly }
                     );
                     
                     try {
@@ -272,7 +273,7 @@ app.post('/api/scrape', async (req: Request, res: Response) => {
                             searchQuery: input,
                         limit: parseInt(limit),
                         saveMarkdown: true,
-                            scrapeMode: useGraphql ? 'graphql' : 'puppeteer'
+                            scrapeMode
                     });
                     } finally {
                         await engine.close();

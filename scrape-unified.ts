@@ -65,13 +65,15 @@ export interface ScrapeTwitterUserResult {
 
 export async function scrapeXFeed(options: ScrapeXFeedOptions = {}): Promise<ScrapeTimelineResult> {
     // 根据 scrapeMode 决定是否启动浏览器
+    // apiOnly = true 时只初始化 API 客户端，不启动浏览器（适用于 graphql 模式）
+    // apiOnly = false 时需要启动浏览器（适用于 puppeteer 模式）
     const scrapeMode = options.scrapeMode || 'graphql';
     const apiOnly = scrapeMode === 'graphql';
     
     const engine = new ScraperEngine(getShouldStopScraping, { 
         headless: options.headless, 
         sessionId: options.sessionId,
-        apiOnly 
+        apiOnly  // 从 scrapeMode 推导：graphql -> true, puppeteer -> false
     });
 
     try {
@@ -98,14 +100,14 @@ export async function scrapeXFeed(options: ScrapeXFeedOptions = {}): Promise<Scr
 }
 
 export async function scrapeSearch(options: ScrapeSearchOptions): Promise<ScrapeTimelineResult> {
-    // 搜索模式默认使用 GraphQL API（更快）
+    // 搜索模式默认使用 GraphQL API（更快，无需启动浏览器）
     const scrapeMode = 'graphql';
-    const apiOnly = true;
+    const apiOnly = true;  // 搜索模式固定使用 API 模式
     
     const engine = new ScraperEngine(getShouldStopScraping, { 
         headless: options.headless, 
         sessionId: options.sessionId,
-        apiOnly 
+        apiOnly  // API 模式不需要浏览器
     });
     try {
         await engine.init();
@@ -130,12 +132,12 @@ export async function scrapeSearch(options: ScrapeSearchOptions): Promise<Scrape
 export async function scrapeThread(options: ScrapeThreadOptions): Promise<ScrapeThreadResult> {
     // 根据 scrapeMode 决定是否启动浏览器
     const scrapeMode = options.scrapeMode || 'graphql';
-    const apiOnly = scrapeMode === 'graphql';
+    const apiOnly = scrapeMode === 'graphql';  // graphql 模式不需要浏览器
     
     const engine = new ScraperEngine(getShouldStopScraping, { 
         headless: options.headless, 
         sessionId: options.sessionId,
-        apiOnly 
+        apiOnly  // 从 scrapeMode 推导
     });
     try {
         await engine.init();
@@ -164,14 +166,14 @@ export async function scrapeTwitterUsers(
         return [];
     }
 
-    // 批量爬取默认使用 GraphQL API（更快），但如果需要 likes 则可能需要浏览器
-    // 这里先使用 API 模式，如果需要 likes 会在后续处理
-    const apiOnly = !options.scrapeLikes;
+    // 批量爬取默认使用 GraphQL API（更快）
+    // 如果需要抓取 likes，则必须使用浏览器（DOM 模式），因为 likes API 可能不可用
+    const apiOnly = !options.scrapeLikes;  // 抓取 likes 时需要浏览器
     
     const engine = new ScraperEngine(getShouldStopScraping, { 
         headless: options.headless, 
         sessionId: options.sessionId,
-        apiOnly 
+        apiOnly  // scrapeLikes = true 时需要浏览器
     });
     const results: ScrapeTwitterUserResult[] = [];
 

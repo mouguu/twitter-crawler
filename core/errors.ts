@@ -151,6 +151,10 @@ export const ScraperErrors = {
 
 /**
  * 错误结果类型（用于统一返回格式）
+ * 
+ * 注意：当前代码库中实际使用的是特定结果类型（如 ScrapeTimelineResult, ScrapeThreadResult），
+ * 这些类型包含 success 字段和特定数据字段（tweets, runContext 等）。
+ * 此处的 Result/ErrorResult/SuccessResult 类型保留为未来统一错误处理的备选方案。
  */
 export interface ErrorResult {
     success: false;

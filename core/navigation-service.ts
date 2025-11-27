@@ -1,8 +1,7 @@
 import { Page } from 'puppeteer';
 import * as retryUtils from '../utils/retry';
 import * as constants from '../config/constants';
-// @ts-ignore
-import * as dataExtractor from './data-extractor';
+import { X_SELECTORS } from './data-extractor';
 import { ScraperEventBus } from './event-bus';
 import { ScraperErrors } from './errors';
 
@@ -50,7 +49,7 @@ export class NavigationService {
         try {
             await retryUtils.retryWaitForSelector(
                 page,
-                dataExtractor.X_SELECTORS.TWEET,
+                X_SELECTORS.TWEET,
                 { timeout: options.timeout || 20000 },
                 {
                     maxRetries,
@@ -73,7 +72,7 @@ export class NavigationService {
                 async () => {
                     await page.reload({ waitUntil: 'networkidle2', timeout: constants.NAVIGATION_TIMEOUT });
                     this._log('Page refreshed, waiting for tweets to reload...');
-                    await page.waitForSelector(dataExtractor.X_SELECTORS.TWEET, {
+                    await page.waitForSelector(X_SELECTORS.TWEET, {
                         timeout: constants.WAIT_FOR_TWEETS_AFTER_REFRESH_TIMEOUT
                     });
                 },
