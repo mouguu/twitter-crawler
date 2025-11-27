@@ -437,6 +437,10 @@ export class ScraperEngine {
         let consecutiveEmptyResponses = 0;  // 跟踪连续空响应次数（有游标但无tweets）
         const attemptedSessions = new Set<string>();
         if (this.currentSession) attemptedSessions.add(this.currentSession.id);
+        
+        // 智能判断系统：区分真实时间线末尾 vs API限制
+        const cursorHistory: Array<{ cursor: string; sessionId: string; hasTweets: boolean }> = [];  // 游标历史
+        const emptyCursorSessions = new Map<string, Set<string>>();  // 记录哪些session在哪些游标位置返回空
 
         while (collectedTweets.length < limit) {
             if (this.stopSignal || (this.shouldStopFunction && this.shouldStopFunction())) {
@@ -496,29 +500,134 @@ export class ScraperEngine {
                     this.eventBus.emitLog(`Reached end of timeline (last page). (Collected: ${collectedTweets.length}/${limit})`);
                     // 继续处理这一页的tweets，然后退出
                 } else if (tweets.length === 0) {
-                    // 有游标但tweets为空，可能是API临时问题或到达了时间线的某个边界
-                    // 但为了避免无限循环，检查连续空响应次数
+                    // 有游标但tweets为空，需要智能判断：真实末尾 vs API限制
                     consecutiveEmptyResponses++;
+                    const currentSessionId = this.currentSession?.id || 'unknown';
                     
-                    // 如果连续3次空响应，说明这个游标位置确实没有推文了
-                    // 可能的原因：
-                    // 1. 到达了API返回的边界（虽然游标还在，但API不再返回该位置的推文）
-                    // 2. 时间线在那个位置确实没有推文
-                    if (consecutiveEmptyResponses >= 3) {
-                        this.eventBus.emitLog(`Received ${consecutiveEmptyResponses} consecutive empty responses with cursor. This may indicate reaching API boundary or timeline gap. Stopping. (Collected: ${collectedTweets.length}/${limit})`, 'warn');
-                        this.eventBus.emitLog(`Note: Twitter/X API may have limits on how far back in timeline can be accessed. Try using 'puppeteer' mode for deeper timeline access.`, 'info');
+                    // 分析游标值的变化模式（用于判断是否到达API边界）
+                    const cursorValue = nextCursor || '';
+                    const cursorNumMatch = cursorValue.match(/\d+/);
+                    const cursorNum = cursorNumMatch ? BigInt(cursorNumMatch[0]) : null;
+                    
+                    // 检查游标是否接近最小值或不再变化
+                    if (cursorHistory.length > 0) {
+                        const lastCursor = cursorHistory[cursorHistory.length - 1]?.cursor;
+                        const lastCursorMatch = lastCursor?.match(/\d+/);
+                        const lastCursorNum = lastCursorMatch ? BigInt(lastCursorMatch[0]) : null;
+                        
+                        if (cursorNum && lastCursorNum && cursorNum === lastCursorNum) {
+                            this.eventBus.emitLog(`[DIAGNOSIS] Cursor value unchanged (${cursorValue}), may have reached API boundary`, 'warn');
+                        } else if (cursorNum && lastCursorNum && cursorNum < lastCursorNum) {
+                            // 游标值在减小但变化很小，可能是接近边界
+                            const diff = Number(lastCursorNum - cursorNum);
+                            if (diff < 10) {
+                                this.eventBus.emitLog(`[DIAGNOSIS] Cursor decreasing very slowly (diff: ${diff}), may be near API limit`, 'warn');
+                            }
+                        }
+                    }
+                    
+                    // 记录这个游标位置的空响应情况
+                    if (!emptyCursorSessions.has(nextCursor || '')) {
+                        emptyCursorSessions.set(nextCursor || '', new Set());
+                    }
+                    emptyCursorSessions.get(nextCursor || '')?.add(currentSessionId);
+                    cursorHistory.push({ cursor: nextCursor || '', sessionId: currentSessionId, hasTweets: false });
+                    
+                    // 分析可能的原因
+                    if (consecutiveEmptyResponses === 1) {
+                        this.eventBus.emitLog(`[DIAGNOSIS] First empty response at cursor ${cursorValue}. Possible reasons: API limit (~800-900 tweets), rate limit, or timeline end.`, 'info');
+                    }
+                    
+                    // 智能判断：检查这个游标位置是否已经被多个session验证过
+                    const sessionsAtThisCursor = emptyCursorSessions.get(nextCursor || '')?.size || 0;
+                    
+                    // 直接使用attemptedSessions来判断，不需要调用getNextSession（避免产生误导性日志）
+                    const allActiveSessions = this.sessionManager.getAllActiveSessions();
+                    const hasMoreSessions = allActiveSessions.some(s => !attemptedSessions.has(s.id));
+                    
+                    // 判断逻辑（更保守，确保尝试所有session）：
+                    // 1. 如果≥3个session都在同一游标位置返回空 → 可能是真实末尾（之前是≥2，改为≥3更保守）
+                    // 2. 如果所有session都尝试过且都返回空 → 很可能是真实末尾
+                    // 3. 如果只有1-2个session尝试过 → 继续切换尝试更多session
+                    const likelyRealEnd = sessionsAtThisCursor >= 3 || !hasMoreSessions;
+                    
+                    // 如果连续2次空响应且还没尝试足够多的session，尝试切换
+                    // 确保至少尝试所有4个session（account1,2,3,4）才能判断为真实末尾
+                    if (consecutiveEmptyResponses >= 2 && attemptedSessions.size < 4 && !likelyRealEnd) {
+                        // 直接获取所有可用session，然后选择第一个未尝试的
+                        const allActiveSessions = this.sessionManager.getAllActiveSessions();
+                        const untriedSessions = allActiveSessions.filter(s => !attemptedSessions.has(s.id));
+                        
+                        let nextSession: Session | null = null;
+                        
+                        if (untriedSessions.length > 0) {
+                            // 选择第一个未尝试的session（简单策略，按session列表顺序）
+                            nextSession = untriedSessions[0];
+                            this.eventBus.emitLog(`Found ${untriedSessions.length} untried session(s): ${untriedSessions.map(s => s.id).join(', ')}`, 'debug');
+                        }
+                        
+                        if (nextSession) {
+                            try {
+                                await this.applySession(nextSession, { refreshFingerprint: false, clearExistingCookies: true });
+                                attemptedSessions.add(nextSession.id);
+                                consecutiveEmptyResponses = 0;  // 重置计数器，给新session机会
+                                this.performanceMonitor.recordSessionSwitch();
+                                this.eventBus.emitLog(`Switched to session: ${nextSession.id} (${attemptedSessions.size} session(s) tried: ${Array.from(attemptedSessions).join(', ')}). Retrying same cursor...`, 'info');
+                                
+                                // 切换session后立即重试，最小延迟
+                                const retryDelay = 200 + Math.random() * 300;  // 200-500ms
+                                await throttle(retryDelay);
+                                continue;  // 使用新session重试相同的游标
+                            } catch (e: any) {
+                                this.eventBus.emitLog(`Session rotation failed: ${e.message}`, 'error');
+                                // 将这个session标记为已尝试，即使失败
+                                attemptedSessions.add(nextSession.id);
+                            }
+                        } else {
+                            this.eventBus.emitLog(`No more untried sessions available. All sessions have been tested: ${Array.from(attemptedSessions).join(', ')}`, 'warn');
+                        }
+                    }
+                    
+                    // 判断是否应该停止
+                    // 停止条件：
+                    // 1. 连续3次空响应 且 至少有2个session验证过（真实末尾）
+                    // 2. 所有session都尝试过且都返回空（真实末尾）
+                    // 3. 连续5次空响应（保守策略，避免无限循环）
+                    // 4. 已尝试所有可用session（account1,2,3,4都试过）
+                    const allSessionsTried = attemptedSessions.size >= 4;  // 假设有4个session
+                    const shouldStop = 
+                        (consecutiveEmptyResponses >= 3 && likelyRealEnd) ||
+                        (allSessionsTried && sessionsAtThisCursor >= attemptedSessions.size) ||
+                        (consecutiveEmptyResponses >= 5);
+                    
+                    if (shouldStop) {
+                        const triedSessionsList = Array.from(attemptedSessions).join(', ');
+                        const reason = allSessionsTried 
+                            ? `All ${attemptedSessions.size} sessions (${triedSessionsList}) confirmed empty at this cursor - likely reached Twitter/X API limit (~${collectedTweets.length} tweets)`
+                            : likelyRealEnd
+                            ? `Multiple sessions (${sessionsAtThisCursor}) confirmed empty at this cursor position - likely reached timeline end`
+                            : `Maximum retry attempts (${consecutiveEmptyResponses}) reached`;
+                        this.eventBus.emitLog(`${reason}. Stopping. (Collected: ${collectedTweets.length}/${limit})`, 'warn');
+                        if (collectedTweets.length < limit) {
+                            this.eventBus.emitLog(`Analysis: Twitter/X GraphQL API appears to have a limit of ~${collectedTweets.length} tweets per request chain.`, 'info');
+                            this.eventBus.emitLog(`Recommendation: Use 'puppeteer' mode (DOM scraping) for deeper timeline access beyond API limits.`, 'info');
+                        }
                         break;
                     }
                     
-                    // 增加延迟并重试（可能是Rate Limit的前兆）
-                    const retryDelay = 8000 + Math.random() * 4000;  // 8-12秒延迟
-                    this.eventBus.emitLog(`Received empty tweets but cursor exists (attempt ${consecutiveEmptyResponses}/3). Waiting ${Math.round(retryDelay)}ms before retry...`, 'warn');
+                    // 空响应时最小延迟重试
+                    const retryDelay = 500 + Math.random() * 500;  // 500-1000ms（之前是4-6秒）
+                    this.eventBus.emitLog(`Empty response (${sessionsAtThisCursor} session(s) tried at this cursor, attempt ${consecutiveEmptyResponses}). Retrying in ${Math.round(retryDelay)}ms...`, 'warn');
                     cursor = nextCursor;
                     await throttle(retryDelay);
                     continue;
                 } else {
                     // 有tweets且游标有效，重置连续空响应计数
                     consecutiveEmptyResponses = 0;
+                    // 记录成功的游标位置（用于分析）
+                    if (nextCursor) {
+                        cursorHistory.push({ cursor: nextCursor, sessionId: this.currentSession?.id || 'unknown', hasTweets: true });
+                    }
                 }
 
                 let addedCount = 0;
@@ -564,10 +673,10 @@ export class ScraperEngine {
                 cursor = nextCursor;
                 consecutiveErrors = 0;
 
-                // Rate limit handling / Sleep
-                // 增加延迟以避免触发Rate Limit：基础5秒 + 随机2秒抖动
-                const delay = 5000 + Math.random() * 2000;
-                this.eventBus.emitLog(`Waiting ${Math.round(delay)}ms before next request to avoid rate limits...`, 'debug');
+                // 最小延迟以避免被检测为机器人：100-500ms随机抖动
+                // 只有在遇到错误时才增加延迟
+                const baseDelay = consecutiveErrors > 0 ? 2000 : 100;  // 正常时几乎不等待，错误时才等待
+                const delay = baseDelay + Math.random() * 400;
                 await throttle(delay);
 
             } catch (error: any) {
@@ -581,11 +690,21 @@ export class ScraperEngine {
                     const waitStartTime = Date.now();
                     this.eventBus.emitLog(`API Error: ${error.message}. Attempting session rotation...`, 'warn');
                     
-                    const nextSession = this.sessionManager.getNextSession(undefined, this.currentSession?.id);
+                    // 直接获取所有可用session，选择第一个未尝试的（避免getNextSession的排序问题）
+                    const allActiveSessions = this.sessionManager.getAllActiveSessions();
+                    const untriedSessions = allActiveSessions.filter(s => !attemptedSessions.has(s.id));
                     
-                    if (nextSession && !attemptedSessions.has(nextSession.id)) {
+                    let nextSession: Session | null = null;
+                    
+                    if (untriedSessions.length > 0) {
+                        // 选择第一个未尝试的session
+                        nextSession = untriedSessions[0];
+                        this.eventBus.emitLog(`Found ${untriedSessions.length} untried session(s) for rotation: ${untriedSessions.map(s => s.id).join(', ')}`, 'debug');
+                    }
+                    
+                    if (nextSession) {
                         try {
-                            await this.applySession(nextSession, { refreshFingerprint: true, clearExistingCookies: true });
+                            await this.applySession(nextSession, { refreshFingerprint: false, clearExistingCookies: true });
                             attemptedSessions.add(nextSession.id);
                             consecutiveErrors = 0;
                             this.performanceMonitor.recordSessionSwitch();
@@ -594,19 +713,26 @@ export class ScraperEngine {
                             // Update performance stats after session switch
                             this.performanceMonitor.recordTweets(collectedTweets.length);
                             this.emitPerformanceUpdate();
+                            this.eventBus.emitLog(`Switched to session: ${nextSession.id} (${attemptedSessions.size} session(s) tried: ${Array.from(attemptedSessions).join(', ')}). Retrying...`, 'info');
                             // Retry the same request with new session
                             continue;
                         } catch (e: any) {
                             this.eventBus.emitLog(`Session rotation failed: ${e.message}`, 'error');
+                            // 即使失败也标记为已尝试
+                            attemptedSessions.add(nextSession.id);
                         }
-                    } else {
-                        this.eventBus.emitLog('No more sessions available or all attempted. Stopping.', 'error');
+                    }
+                    
+                    // 如果没有更多未尝试的session，检查是否所有session都尝试过
+                    if (untriedSessions.length === 0) {
+                        this.eventBus.emitLog(`All ${attemptedSessions.size} session(s) (${Array.from(attemptedSessions).join(', ')}) have been tried. Rate limit may be account-wide or IP-based. Stopping.`, 'error');
                         break;
                     }
                 } else {
                     this.performanceMonitor.recordApiRequest(0, true); // 记录重试
                     this.eventBus.emitLog(`Transient error: ${error.message}. Retrying...`, 'warn');
-                    const waitTime = 5000;
+                    // 激进策略：短暂延迟后立即重试
+                    const waitTime = 500 + Math.random() * 500;  // 500-1000ms（之前是5000ms）
                     await throttle(waitTime);
                     this.performanceMonitor.recordRateLimitWait(waitTime);
                     // Update performance stats after error handling
@@ -646,10 +772,37 @@ export class ScraperEngine {
             const tweets = parseTweetsFromInstructions(instructions);
             const nextCursor = extractNextCursor(instructions);
             
-            // 调试日志：显示解析详情
-            if (instructions.length === 0) {
-                this.eventBus.emitLog(`[DEBUG] No instructions found in API response`, 'warn');
-            } else {
+            // 详细诊断：检查API响应中的限制信息
+            const responseData = response?.data?.user?.result?.timeline_v2 || response?.data?.user?.result?.timeline;
+            if (responseData) {
+                // 检查是否有速率限制信息
+                const rateLimit = responseData.rate_limit || response?.rate_limit;
+                const errors = response?.errors || responseData?.errors;
+                
+                if (tweets.length === 0 && nextCursor) {
+                    // 空响应但有游标 - 详细分析
+                    this.eventBus.emitLog(`[DIAGNOSIS] Empty tweets but cursor exists. Checking for API limits...`, 'debug');
+                    
+                    // 检查响应中的metadata
+                    const metadata = responseData?.timeline?.metadata || responseData?.metadata;
+                    if (metadata) {
+                        this.eventBus.emitLog(`[DIAGNOSIS] Response metadata: ${JSON.stringify(metadata).substring(0, 200)}`, 'debug');
+                    }
+                    
+                    // 检查是否有instructions但无推文
+                    const entryCount = instructions.reduce((count: number, inst: any) => {
+                        return count + (inst.entries?.length || 0);
+                    }, 0);
+                    this.eventBus.emitLog(`[DIAGNOSIS] Instructions: ${instructions.length}, Entries: ${entryCount}, Tweets parsed: ${tweets.length}`, 'debug');
+                    
+                    if (errors && errors.length > 0) {
+                        this.eventBus.emitLog(`[DIAGNOSIS] API returned errors: ${JSON.stringify(errors)}`, 'warn');
+                    }
+                }
+            }
+            
+            // 调试日志：显示解析详情（仅在debug模式或空响应时）
+            if (tweets.length === 0 || instructions.length === 0) {
                 const instructionTypes = instructions.map((inst: any) => inst.type).join(', ');
                 this.eventBus.emitLog(`[DEBUG] Found ${instructions.length} instructions: ${instructionTypes}`, 'debug');
                 
@@ -716,6 +869,10 @@ export class ScraperEngine {
         const collectedTweets: Tweet[] = [];
         const scrapedIds = new Set<string>();
         let profileInfo: ProfileInfo | null = null;
+        
+        // Session 管理（与 GraphQL 模式一致）
+        const attemptedSessions = new Set<string>();
+        if (this.currentSession) attemptedSessions.add(this.currentSession.id);
 
         try {
             // 构建目标 URL
@@ -728,11 +885,62 @@ export class ScraperEngine {
                 targetUrl = 'https://x.com/home';
             }
 
-            // 导航到页面
-            this.performanceMonitor.startPhase('navigation');
-            await this.navigationService.navigateToUrl(this.page!, targetUrl);
-            await this.navigationService.waitForTweets(this.page!);
-            this.performanceMonitor.endPhase();
+            // 导航到页面（带 session 切换重试逻辑）
+            let navigationSuccess = false;
+            let navigationAttempts = 0;
+            const maxNavigationAttempts = 4; // 最多尝试4个session
+            
+            while (!navigationSuccess && navigationAttempts < maxNavigationAttempts) {
+                try {
+                    this.performanceMonitor.startPhase('navigation');
+                    await this.navigationService.navigateToUrl(this.page!, targetUrl);
+                    await this.navigationService.waitForTweets(this.page!);
+                    this.performanceMonitor.endPhase();
+                    navigationSuccess = true;
+                } catch (navError: any) {
+                    this.performanceMonitor.endPhase();
+                    navigationAttempts++;
+                    
+                    // 检查是否是找不到推文的错误（可能是session问题）
+                    const isNoTweetsError = navError.message.includes('No tweets found') || 
+                                           navError.message.includes('Waiting for selector') ||
+                                           navError.message.includes('tweet');
+                    
+                    if (isNoTweetsError && attemptedSessions.size < 4) {
+                        this.eventBus.emitLog(`Navigation/waitForTweets failed. Attempting session rotation...`, 'warn');
+                        
+                        const allActiveSessions = this.sessionManager.getAllActiveSessions();
+                        const untriedSessions = allActiveSessions.filter(s => !attemptedSessions.has(s.id));
+                        
+                        if (untriedSessions.length > 0) {
+                            const nextSession = untriedSessions[0];
+                            try {
+                                await this.applySession(nextSession, { refreshFingerprint: false, clearExistingCookies: true });
+                                attemptedSessions.add(nextSession.id);
+                                this.performanceMonitor.recordSessionSwitch();
+                                this.eventBus.emitLog(`Switched to session: ${nextSession.id} (${attemptedSessions.size} session(s) tried). Retrying navigation...`, 'info');
+                                
+                                // 等待一下再重试
+                                await throttle(2000);
+                                continue; // 重试导航
+                            } catch (e: any) {
+                                this.eventBus.emitLog(`Session rotation failed: ${e.message}`, 'error');
+                                attemptedSessions.add(nextSession.id);
+                            }
+                        } else {
+                            // 所有session都尝试过了
+                            throw navError; // 抛出原始错误
+                        }
+                    } else {
+                        // 不是session问题，或者所有session都试过了，抛出错误
+                        throw navError;
+                    }
+                }
+            }
+            
+            if (!navigationSuccess) {
+                throw new Error('Failed to navigate and load tweets after trying all available sessions');
+            }
 
             // 提取资料信息（如果是用户页面）
             if (username && config.collectProfileInfo) {
@@ -741,7 +949,9 @@ export class ScraperEngine {
 
             // 滚动并提取推文
             let consecutiveNoNew = 0;
-            const maxNoNew = constants.MAX_CONSECUTIVE_NO_NEW_TWEETS;
+            // 对于大目标（>500条），增加连续无新推文的容忍度
+            const maxNoNew = limit > 500 ? Math.max(constants.MAX_CONSECUTIVE_NO_NEW_TWEETS * 2, 6) : constants.MAX_CONSECUTIVE_NO_NEW_TWEETS;
+            let consecutiveErrors = 0;
 
             while (collectedTweets.length < limit && consecutiveNoNew < maxNoNew) {
                 if (this.stopSignal || (this.shouldStopFunction && this.shouldStopFunction())) {
@@ -749,62 +959,174 @@ export class ScraperEngine {
                     break;
                 }
 
-                this.performanceMonitor.startPhase('extraction');
-                const tweetsOnPage = await dataExtractor.extractTweetsFromPage(this.page!);
-                this.performanceMonitor.endPhase();
+                try {
+                    this.performanceMonitor.startPhase('extraction');
+                    const tweetsOnPage = await dataExtractor.extractTweetsFromPage(this.page!);
+                    this.performanceMonitor.endPhase();
 
-                let addedCount = 0;
-                for (const rawTweet of tweetsOnPage) {
-                    if (collectedTweets.length >= limit) break;
+                    // 检查页面是否显示错误或限制（如 "Something went wrong", "Rate limit" 等）
+                    const pageText = await this.page!.evaluate(() => document.body.innerText);
+                    const hasError = /rate limit|something went wrong|try again later|suspended|restricted|blocked/i.test(pageText);
                     
-                    const tweetId = rawTweet.id;
-                    if (!scrapedIds.has(tweetId)) {
-                        // 使用统一的转换函数
-                        const tweet = normalizeRawTweet(rawTweet);
+                    if (hasError && tweetsOnPage.length === 0) {
+                        throw new Error('Page shows error or rate limit message');
+                    }
 
-                        // Check stop conditions
-                        if (config.stopAtTweetId && tweet.id === config.stopAtTweetId) {
-                            this.eventBus.emitLog(`Reached stop tweet ID: ${tweet.id}`);
-                            consecutiveNoNew = maxNoNew; // Stop loop
-                            break;
-                        }
-                        if (config.sinceTimestamp && tweet.time) {
-                            const tweetTime = new Date(tweet.time).getTime();
-                            if (tweetTime < config.sinceTimestamp) {
-                                this.eventBus.emitLog(`Reached time limit: ${tweet.time}`);
+                    let addedCount = 0;
+                    for (const rawTweet of tweetsOnPage) {
+                        if (collectedTweets.length >= limit) break;
+                        
+                        const tweetId = rawTweet.id;
+                        if (!scrapedIds.has(tweetId)) {
+                            // 使用统一的转换函数
+                            const tweet = normalizeRawTweet(rawTweet);
+
+                            // Check stop conditions
+                            if (config.stopAtTweetId && tweet.id === config.stopAtTweetId) {
+                                this.eventBus.emitLog(`Reached stop tweet ID: ${tweet.id}`);
                                 consecutiveNoNew = maxNoNew; // Stop loop
                                 break;
                             }
+                            if (config.sinceTimestamp && tweet.time) {
+                                const tweetTime = new Date(tweet.time).getTime();
+                                if (tweetTime < config.sinceTimestamp) {
+                                    this.eventBus.emitLog(`Reached time limit: ${tweet.time}`);
+                                    consecutiveNoNew = maxNoNew; // Stop loop
+                                    break;
+                                }
+                            }
+
+                            collectedTweets.push(tweet);
+                            scrapedIds.add(tweetId);
+                            addedCount++;
                         }
-
-                        collectedTweets.push(tweet);
-                        scrapedIds.add(tweetId);
-                        addedCount++;
                     }
-                }
 
-                this.eventBus.emitLog(`Extracted ${tweetsOnPage.length} tweets, added ${addedCount} new. Total: ${collectedTweets.length}`);
-                
-                // Update progress
-                this.eventBus.emitProgress({
-                    current: collectedTweets.length,
-                    target: limit,
-                    action: 'scraping (DOM)'
-                });
+                    this.eventBus.emitLog(`Extracted ${tweetsOnPage.length} tweets, added ${addedCount} new. Total: ${collectedTweets.length}`);
+                    
+                    // Update performance monitor
+                    this.performanceMonitor.recordTweets(collectedTweets.length);
+                    this.emitPerformanceUpdate();
+                    
+                    // Update progress
+                    this.eventBus.emitProgress({
+                        current: collectedTweets.length,
+                        target: limit,
+                        action: 'scraping (DOM)'
+                    });
 
-                if (addedCount === 0) {
-                    consecutiveNoNew++;
-                } else {
-                    consecutiveNoNew = 0;
-                }
+                    // 重置错误计数（成功提取）
+                    consecutiveErrors = 0;
 
-                // 滚动加载更多
-                if (collectedTweets.length < limit && consecutiveNoNew < maxNoNew) {
-                    this.performanceMonitor.startPhase('scroll');
-                    this.performanceMonitor.recordScroll();
-                    await dataExtractor.scrollToBottomSmart(this.page!, constants.WAIT_FOR_NEW_TWEETS_TIMEOUT);
-                    await new Promise(r => setTimeout(r, constants.getScrollDelay()));
+                    if (addedCount === 0) {
+                        consecutiveNoNew++;
+                        this.eventBus.emitLog(`No new tweets found (consecutive: ${consecutiveNoNew}/${maxNoNew}). Continuing to scroll...`, 'debug');
+                        
+                        // 如果连续多次没有新推文，可能是页面限制，尝试切换 session
+                        // 注意：切换 session 后不重新导航，而是继续滚动，因为新 session 可能能看到更多内容
+                        if (consecutiveNoNew >= 3 && attemptedSessions.size < 4) {
+                            const allActiveSessions = this.sessionManager.getAllActiveSessions();
+                            const untriedSessions = allActiveSessions.filter(s => !attemptedSessions.has(s.id));
+                            
+                            if (untriedSessions.length > 0) {
+                                const nextSession = untriedSessions[0];
+                                this.eventBus.emitLog(`Multiple consecutive no-new-tweet cycles. Trying session rotation to ${nextSession.id}...`, 'warn');
+                                
+                                try {
+                                    await this.applySession(nextSession, { refreshFingerprint: false, clearExistingCookies: true });
+                                    attemptedSessions.add(nextSession.id);
+                                    consecutiveNoNew = 0; // 重置计数器，给新session机会
+                                    this.performanceMonitor.recordSessionSwitch();
+                                    
+                                    // 切换 session 后，刷新页面以应用新 cookies
+                                    // 但保持当前滚动位置，继续向下滚动获取更多内容
+                                    this.eventBus.emitLog(`Switched to session: ${nextSession.id} (${attemptedSessions.size} session(s) tried). Refreshing page and continuing scroll...`, 'info');
+                                    
+                                    // 记录当前滚动位置（如果可能）
+                                    const currentScrollY = await this.page!.evaluate(() => window.scrollY);
+                                    
+                                    // 刷新页面以应用新 session 的 cookies
+                                    await this.page!.reload({ waitUntil: 'networkidle2', timeout: 30000 });
+                                    await this.navigationService.waitForTweets(this.page!);
+                                    
+                                    // 尝试滚动到之前的位置附近（但可能页面结构已变，所以继续向下滚动）
+                                    // 滚动到底部，让新 session 加载更多内容
+                                    await this.page!.evaluate(() => {
+                                        window.scrollTo(0, document.body.scrollHeight);
+                                    });
+                                    await throttle(2000); // 等待内容加载
+                                    
+                                    // 继续循环，尝试提取新内容
+                                    continue;
+                                } catch (e: any) {
+                                    this.eventBus.emitLog(`Session rotation failed: ${e.message}`, 'error');
+                                    attemptedSessions.add(nextSession.id); // 标记为已尝试
+                                }
+                            }
+                        }
+                        
+                        // 如果连续没有新推文，可能是需要更长的滚动等待时间
+                        // 增加滚动延迟，给页面更多时间加载新内容
+                        if (consecutiveNoNew >= 2) {
+                            const extraDelay = 2000 + Math.random() * 1000; // 2-3秒额外延迟
+                            this.eventBus.emitLog(`Adding extra delay (${Math.round(extraDelay)}ms) to allow more content to load...`, 'debug');
+                            await throttle(extraDelay);
+                        }
+                    } else {
+                        consecutiveNoNew = 0;
+                    }
+
+                    // 滚动加载更多（即使连续没有新推文也继续尝试，直到达到最大次数）
+                    if (collectedTweets.length < limit && consecutiveNoNew < maxNoNew) {
+                        this.performanceMonitor.startPhase('scroll');
+                        this.performanceMonitor.recordScroll();
+                        await dataExtractor.scrollToBottomSmart(this.page!, constants.WAIT_FOR_NEW_TWEETS_TIMEOUT);
+                        await new Promise(r => setTimeout(r, constants.getScrollDelay()));
+                        this.performanceMonitor.endPhase();
+                    }
+                } catch (error: any) {
                     this.performanceMonitor.endPhase();
+                    consecutiveErrors++;
+                    this.eventBus.emitLog(`Error during extraction: ${error instanceof Error ? error.message : String(error)}`, 'error');
+                    
+                    // 处理错误：如果是页面错误或连续错误，尝试切换 session
+                    if (error.message.includes('rate limit') || error.message.includes('error') || consecutiveErrors >= 3) {
+                        this.performanceMonitor.recordRateLimit();
+                        this.eventBus.emitLog(`Page error detected. Attempting session rotation...`, 'warn');
+                        
+                        const allActiveSessions = this.sessionManager.getAllActiveSessions();
+                        const untriedSessions = allActiveSessions.filter(s => !attemptedSessions.has(s.id));
+                        
+                        if (untriedSessions.length > 0) {
+                            const nextSession = untriedSessions[0];
+                            try {
+                                await this.applySession(nextSession, { refreshFingerprint: false, clearExistingCookies: true });
+                                attemptedSessions.add(nextSession.id);
+                                consecutiveErrors = 0;
+                                consecutiveNoNew = 0;
+                                this.performanceMonitor.recordSessionSwitch();
+                                
+                                // 重新导航到目标URL
+                                this.performanceMonitor.startPhase('navigation');
+                                await this.navigationService.navigateToUrl(this.page!, targetUrl);
+                                await this.navigationService.waitForTweets(this.page!);
+                                this.performanceMonitor.endPhase();
+                                
+                                this.eventBus.emitLog(`Switched to session: ${nextSession.id} (${attemptedSessions.size} session(s) tried). Retrying...`, 'info');
+                                continue; // 重新开始循环
+                            } catch (e: any) {
+                                this.eventBus.emitLog(`Session rotation failed: ${e.message}`, 'error');
+                                attemptedSessions.add(nextSession.id);
+                            }
+                        } else {
+                            this.eventBus.emitLog(`All sessions attempted. Stopping.`, 'error');
+                            break;
+                        }
+                    } else {
+                        // 临时错误，等待后重试
+                        const waitTime = 2000 + Math.random() * 1000;
+                        await throttle(waitTime);
+                    }
                 }
             }
 
@@ -974,7 +1296,8 @@ export class ScraperEngine {
                     break;
                 }
 
-                const waitTime = 1500 + Math.random() * 1000;
+                // 激进策略：最小延迟
+                const waitTime = 200 + Math.random() * 300;  // 200-500ms（之前是1500-2500ms）
                 await throttle(waitTime);
 
                 const moreApiStartTime = Date.now();

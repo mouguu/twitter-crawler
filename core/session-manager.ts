@@ -65,6 +65,13 @@ export class SessionManager {
     }
 
     /**
+     * 获取所有可用的session（未退休的）
+     */
+    getAllActiveSessions(): Session[] {
+        return this.sessions.filter(s => !s.isRetired);
+    }
+
+    /**
      * 获取下一个可用 Session (按健康度排序，优先选择错误少的)
      */
     getNextSession(preferredId?: string, excludeId?: string): Session | null {

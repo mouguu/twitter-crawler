@@ -9,7 +9,7 @@ import * as timeUtils from './time';
 
 const DEFAULT_OUTPUT_ROOT = path.resolve(process.cwd(), 'output');
 
-const DEFAULT_PLATFORM = 'x'; // 与 config/constants.ts 中的 PLATFORM_NAME 保持一致
+const DEFAULT_PLATFORM = 'twitter';
 const DEFAULT_IDENTIFIER = 'timeline';
 
 /**
