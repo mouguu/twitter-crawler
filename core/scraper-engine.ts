@@ -434,6 +434,7 @@ export class ScraperEngine {
         }
 
         let consecutiveErrors = 0;
+        let consecutiveEmptyResponses = 0;  // 跟踪连续空响应次数（有游标但无tweets）
         const attemptedSessions = new Set<string>();
         if (this.currentSession) attemptedSessions.add(this.currentSession.id);
 
@@ -473,9 +474,51 @@ export class ScraperEngine {
                 this.performanceMonitor.endPhase();
                 this.performanceMonitor.recordApiParse(parseTime);
 
-                if (tweets.length === 0) {
-                    this.eventBus.emitLog('No more tweets found.');
-                    break;
+                // 调试日志：显示游标信息
+                if (!nextCursor || nextCursor === cursor) {
+                    if (tweets.length === 0) {
+                        this.eventBus.emitLog(`[DEBUG] API returned ${tweets.length} tweets, no cursor (prev cursor: ${cursor ? 'exists' : 'none'})`);
+                    } else {
+                        this.eventBus.emitLog(`[DEBUG] API returned ${tweets.length} tweets, no new cursor (prev cursor: ${cursor ? 'exists' : 'none'}) - likely last page`);
+                    }
+                } else {
+                    this.eventBus.emitLog(`[DEBUG] API returned ${tweets.length} tweets, new cursor exists`);
+                }
+
+                // 检查是否有游标（即使tweets为空，也可能有游标，说明还有更多数据）
+                if (!nextCursor || nextCursor === cursor) {
+                    // 没有游标，说明到达了时间线末尾
+                    if (tweets.length === 0) {
+                        this.eventBus.emitLog(`No more tweets found. Reached end of timeline. (Collected: ${collectedTweets.length}/${limit})`);
+                        break;
+                    }
+                    // 有tweets但没有游标，说明这是最后一页
+                    this.eventBus.emitLog(`Reached end of timeline (last page). (Collected: ${collectedTweets.length}/${limit})`);
+                    // 继续处理这一页的tweets，然后退出
+                } else if (tweets.length === 0) {
+                    // 有游标但tweets为空，可能是API临时问题或到达了时间线的某个边界
+                    // 但为了避免无限循环，检查连续空响应次数
+                    consecutiveEmptyResponses++;
+                    
+                    // 如果连续3次空响应，说明这个游标位置确实没有推文了
+                    // 可能的原因：
+                    // 1. 到达了API返回的边界（虽然游标还在，但API不再返回该位置的推文）
+                    // 2. 时间线在那个位置确实没有推文
+                    if (consecutiveEmptyResponses >= 3) {
+                        this.eventBus.emitLog(`Received ${consecutiveEmptyResponses} consecutive empty responses with cursor. This may indicate reaching API boundary or timeline gap. Stopping. (Collected: ${collectedTweets.length}/${limit})`, 'warn');
+                        this.eventBus.emitLog(`Note: Twitter/X API may have limits on how far back in timeline can be accessed. Try using 'puppeteer' mode for deeper timeline access.`, 'info');
+                        break;
+                    }
+                    
+                    // 增加延迟并重试（可能是Rate Limit的前兆）
+                    const retryDelay = 8000 + Math.random() * 4000;  // 8-12秒延迟
+                    this.eventBus.emitLog(`Received empty tweets but cursor exists (attempt ${consecutiveEmptyResponses}/3). Waiting ${Math.round(retryDelay)}ms before retry...`, 'warn');
+                    cursor = nextCursor;
+                    await throttle(retryDelay);
+                    continue;
+                } else {
+                    // 有tweets且游标有效，重置连续空响应计数
+                    consecutiveEmptyResponses = 0;
                 }
 
                 let addedCount = 0;
@@ -514,15 +557,18 @@ export class ScraperEngine {
                 this.performanceMonitor.recordTweets(collectedTweets.length);
                 this.emitPerformanceUpdate();
 
+                // 如果没有游标或游标没有变化，退出循环
                 if (!nextCursor || nextCursor === cursor) {
-                    this.eventBus.emitLog('Reached end of timeline.');
                     break;
                 }
                 cursor = nextCursor;
                 consecutiveErrors = 0;
 
                 // Rate limit handling / Sleep
-                await throttle(2000 + Math.random() * 1000);
+                // 增加延迟以避免触发Rate Limit：基础5秒 + 随机2秒抖动
+                const delay = 5000 + Math.random() * 2000;
+                this.eventBus.emitLog(`Waiting ${Math.round(delay)}ms before next request to avoid rate limits...`, 'debug');
+                await throttle(delay);
 
             } catch (error: any) {
                 this.performanceMonitor.endPhase();
@@ -599,6 +645,33 @@ export class ScraperEngine {
             const instructions = extractInstructionsFromResponse(response);
             const tweets = parseTweetsFromInstructions(instructions);
             const nextCursor = extractNextCursor(instructions);
+            
+            // 调试日志：显示解析详情
+            if (instructions.length === 0) {
+                this.eventBus.emitLog(`[DEBUG] No instructions found in API response`, 'warn');
+            } else {
+                const instructionTypes = instructions.map((inst: any) => inst.type).join(', ');
+                this.eventBus.emitLog(`[DEBUG] Found ${instructions.length} instructions: ${instructionTypes}`, 'debug');
+                
+                // 查找所有可能的游标
+                const allCursors: string[] = [];
+                for (const instruction of instructions) {
+                    if (instruction.type === 'TimelineAddEntries' && instruction.entries) {
+                        for (const entry of instruction.entries) {
+                            const entryId = entry.entryId || '';
+                            if (entryId.includes('cursor')) {
+                                allCursors.push(entryId);
+                            }
+                        }
+                    }
+                }
+                if (allCursors.length > 0) {
+                    this.eventBus.emitLog(`[DEBUG] Found cursor entry IDs: ${allCursors.join(', ')}`, 'debug');
+                } else if (!nextCursor) {
+                    this.eventBus.emitLog(`[DEBUG] No cursor found in response (this may indicate end of timeline)`, 'debug');
+                }
+            }
+            
             return { tweets, nextCursor };
         } catch (e) {
             this.eventBus.emitLog(`Error parsing API response: ${e instanceof Error ? e.message : String(e)}`, 'error');

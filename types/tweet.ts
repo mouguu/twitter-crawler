@@ -271,11 +271,51 @@ export function extractNextCursor(instructions: any[]): string | undefined {
         if (instruction.type !== 'TimelineAddEntries') continue;
         
         for (const entry of instruction.entries) {
-            if (entry.entryId?.startsWith('cursor-bottom')) {
-                return entry.content?.value;
+            const entryId = entry.entryId || '';
+            // 优先使用 cursor-bottom（用于分页获取更早的推文）
+            // cursor-top 通常用于顶部刷新，不适用于分页
+            if (entryId.startsWith('cursor-bottom')) {
+                const cursorValue = entry.content?.value || 
+                                   entry.content?.cursorType ||
+                                   entry.content?.itemContent?.value;
+                if (cursorValue) {
+                    return cursorValue;
+                }
+            }
+        }
+        
+        // 如果没有找到 cursor-bottom，再尝试其他游标类型（作为备选）
+        for (const entry of instruction.entries) {
+            const entryId = entry.entryId || '';
+            if (entryId.startsWith('cursor-top') || entryId.includes('cursor')) {
+                const cursorValue = entry.content?.value || 
+                                   entry.content?.cursorType ||
+                                   entry.content?.itemContent?.value;
+                if (cursorValue) {
+                    return cursorValue;
+                }
             }
         }
     }
+    
+    // 如果没有找到标准的游标，检查其他可能的响应结构
+    // 有时游标可能在响应的其他地方
+    for (const instruction of instructions) {
+        if (instruction.type === 'TimelineAddToModule') {
+            // TimelineAddToModule 可能包含游标信息
+            const moduleItems = instruction.moduleItems || [];
+            for (const item of moduleItems) {
+                if (item.entryId?.includes('cursor')) {
+                    const cursorValue = item.item?.itemContent?.value || 
+                                       item.item?.itemContent?.cursorType;
+                    if (cursorValue) {
+                        return cursorValue;
+                    }
+                }
+            }
+        }
+    }
+    
     return undefined;
 }
 
