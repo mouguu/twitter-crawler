@@ -8,6 +8,7 @@ export class RateLimitManager {
     private eventBus: ScraperEventBus | undefined;
     private sessionManager: SessionManager;
     private maxRotationAttempts: number;
+    private enableRotation: boolean = true;
 
     constructor(sessionManager: SessionManager, eventBus?: ScraperEventBus) {
         this.eventBus = eventBus;
@@ -15,9 +16,18 @@ export class RateLimitManager {
         this.maxRotationAttempts = 3;
     }
 
+    setEnableRotation(enable: boolean) {
+        this.enableRotation = enable;
+    }
+
     async handleRateLimit(_page: Page, currentAttempt: number, error: Error, currentSessionId?: string): Promise<Session | null> {
         if (currentAttempt >= this.maxRotationAttempts) {
             this._log(`Rate limit handling failed after ${currentAttempt} attempts: ${error.message}`, 'error');
+            return null;
+        }
+
+        if (!this.enableRotation) {
+            this._log(`⚠️ Rate limit detected, but auto-rotation is DISABLED. Stopping execution.`, 'warn');
             return null;
         }
 

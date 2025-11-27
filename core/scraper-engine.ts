@@ -70,6 +70,7 @@ export interface ScrapeTimelineConfig {
         start: string; // YYYY-MM-DD
         end: string;   // YYYY-MM-DD
     };
+    enableRotation?: boolean;
 }
 
 export interface ScrapeTimelineResult {
@@ -258,7 +259,11 @@ export class ScraperEngine {
         this.eventBus.emitLog('Browser launched and configured');
     }
 
-    async loadCookies(): Promise<boolean> {
+    async loadCookies(enableRotation: boolean = true): Promise<boolean> {
+        // Configure RateLimitManager
+        if (this.rateLimitManager) {
+            this.rateLimitManager.setEnableRotation(enableRotation);
+        }
         // 纯 API 模式：只加载 cookies 初始化 API 客户端
         if (this.apiOnlyMode) {
             return this.loadCookiesApiOnly();
@@ -309,9 +314,6 @@ export class ScraperEngine {
                 username: cookieInfo.username
             };
             
-            // Initialize API Client with fallback cookies
-            this.xApiClient = new XApiClient(cookieInfo.cookies);
-            
             this.eventBus.emitLog(`Loaded legacy cookies from ${cookieInfo.source}`);
             return true;
         } catch (error: any) {
@@ -319,6 +321,7 @@ export class ScraperEngine {
             return false;
         }
     }
+
 
     /**
      * 纯 API 模式下加载 cookies
@@ -1212,6 +1215,13 @@ export class ScraperEngine {
                                         const currentCount = collectedTweets.length;
                                         
                                         if (foundNew) {
+                                            // Emit progress update during deep scroll so UI reflects new totals
+                                            this.eventBus.emitProgress({
+                                                current: currentCount,
+                                                target: limit,
+                                                action: 'deep-scroll'
+                                            });
+
                                             // 发现新推文，继续滚动
                                             this.eventBus.emitLog(`Found new tweets during deep scroll! Extracted ${tweetsOnPage.length} tweets, added ${currentCount - lastExtractionCount} new. Total: ${currentCount} (scrolled ${scrollCount} times)`, 'info');
                                             lastExtractionCount = currentCount;

@@ -1,6 +1,76 @@
 import { useState, useEffect, useRef } from 'react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { ErrorNotification } from './components/ErrorNotification';
+import { SessionManager } from './components/SessionManager';
+import { PerformanceDashboard } from './components/PerformanceDashboard';
+import dayjs from 'dayjs';
+
+// Error types
+export enum ErrorType {
+    NETWORK = 'network',
+    AUTH = 'auth',
+    RATE_LIMIT = 'rate_limit',
+    CONFIG = 'config',
+    VALIDATION = 'validation',
+    UNKNOWN = 'unknown'
+}
+
+export interface AppError {
+    type: ErrorType;
+    message: string;
+    details?: string;
+    timestamp: Date;
+    suggestion?: string;
+    canRetry: boolean;
+}
+
+function classifyError(error: any): AppError {
+    const errorMessage = error?.message || String(error);
+    const errorString = errorMessage.toLowerCase();
+    
+    if (errorString.includes('fetch') || errorString.includes('network') || errorString.includes('connection')) {
+        return {
+            type: ErrorType.NETWORK,
+            message: '网络连接失败',
+            details: errorMessage,
+            suggestion: '请检查网络连接后重试',
+            canRetry: true,
+            timestamp: new Date()
+        };
+    }
+    
+    if (errorString.includes('cookie') || errorString.includes('auth') || errorString.includes('401') || errorString.includes('403')) {
+        return {
+            type: ErrorType.AUTH,
+            message: 'Session 已过期或无效',
+            details: errorMessage,
+            suggestion: '请更新 cookies 文件到 /cookies 目录',
+            canRetry: false,
+            timestamp: new Date()
+        };
+    }
+    
+    if (errorString.includes('rate limit') || errorString.includes('429')) {
+        return {
+            type: ErrorType.RATE_LIMIT,
+            message: '达到 Twitter API 速率限制',
+            details: errorMessage,
+            suggestion: '请等待 15-30 分钟后重试',
+            canRetry: true,
+            timestamp: new Date()
+        };
+    }
+    
+    return {
+        type: ErrorType.UNKNOWN,
+        message: '发生未知错误',
+        details: errorMessage,
+        suggestion: '请刷新页面重试',
+        canRetry: true,
+        timestamp: new Date()
+    };
+}
 
 function cn(...inputs: any[]) {
     return twMerge(clsx(inputs));
@@ -60,8 +130,12 @@ function App() {
 
     // Advanced Options
     const [resume, setResume] = useState(false);
+    const [autoRotateSessions, setAutoRotateSessions] = useState(true);
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
+
+    // Error Handling
+    const [currentError, setCurrentError] = useState<AppError | null>(null);
 
     const trimmedInput = input.trim();
     const canSubmit = !isScraping && trimmedInput.length > 0;
@@ -166,6 +240,7 @@ function App() {
         setDownloadUrl(null);
         setPerformanceStats(null);
         setProgress({ current: 0, target: limit });
+        setCurrentError(null);
 
         try {
             const resolvedMode = activeTab === 'search' ? 'puppeteer' : scrapeMode;
@@ -175,9 +250,10 @@ function App() {
                 input,
                 limit,
                 likes: scrapeLikes,
-                mode: resolvedMode,  // 传递爬取模式
+                mode: resolvedMode,
                 resume,
-                dateRange: startDate && endDate ? { start: startDate, end: endDate } : undefined
+                dateRange: startDate && endDate ? { start: startDate, end: endDate } : undefined,
+                enableRotation: autoRotateSessions
             };
 
             if (activeTab === 'monitor') {
@@ -185,7 +261,8 @@ function App() {
                 body = {
                     users: input.split(',').map(u => u.trim()).filter(Boolean),
                     lookbackHours,
-                    keywords
+                    keywords,
+                    enableRotation: autoRotateSessions
                 };
             }
 
@@ -203,11 +280,14 @@ function App() {
                 }
                 setLogs(prev => [...prev, `✅ Operation completed! ${result.downloadUrl ? 'Download available.' : ''}`]);
             } else {
+                const error = classifyError(new Error(result.error || 'Server error'));
+                setCurrentError(error);
                 setLogs(prev => [...prev, `❌ Error: ${result.error}`]);
             }
         } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            setLogs(prev => [...prev, `❌ Network Error: ${errorMessage}`]);
+            const appError = classifyError(error);
+            setCurrentError(appError);
+            setLogs(prev => [...prev, `❌ ${appError.message}`]);
         } finally {
             setIsScraping(false);
         }
@@ -248,6 +328,19 @@ function App() {
     };
 
     return (
+        <div className="antialiased selection:bg-stone selection:text-washi min-h-screen">
+            {/* Error Notification */}
+            {currentError && (
+                <div className="fixed top-4 right-4 left-4 md:left-auto md:w-96 z-50">
+                    <ErrorNotification
+                        error={currentError}
+                        onDismiss={() => setCurrentError(null)}
+                        onRetry={currentError.canRetry ? handleScrape : undefined}
+                    />
+                </div>
+            )}
+
+            <div>
         <div className="antialiased selection:bg-stone selection:text-washi min-h-screen">
             {/* Noise Texture Overlay */}
             <div className="noise-overlay"></div>
@@ -407,11 +500,19 @@ function App() {
                                             </label>
                                         )}
 
-                                        {(activeTab === 'profile' || activeTab === 'search') && (
-                                            <span className="text-xs uppercase tracking-wider text-stone/60 font-sans">
-                                                Output merging is handled via CLI only. Web UI saves each run separately.
-                                            </span>
-                                        )}
+                                        {/* Auto-Rotate Sessions Toggle */}
+                                        <div className="pt-4 border-t border-stone/10">
+                                            <label className="flex items-center space-x-4 cursor-pointer group select-none">
+                                                <div className="w-6 h-6 border border-stone rounded-full flex items-center justify-center group-hover:border-rust transition-colors">
+                                                    <div className={cn("w-3 h-3 bg-rust rounded-full transition-opacity checkbox-indicator", autoRotateSessions ? "opacity-100" : "opacity-0")}></div>
+                                                </div>
+                                                <input type="checkbox" checked={autoRotateSessions} onChange={(e) => setAutoRotateSessions(e.target.checked)} className="hidden" />
+                                                <div className="flex flex-col">
+                                                    <span className="font-serif text-xl text-stone group-hover:text-charcoal transition-colors">Auto-Rotate Sessions</span>
+                                                    <span className="text-xs text-stone/60 font-sans">Switch account on rate limit</span>
+                                                </div>
+                                            </label>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -763,6 +864,20 @@ function App() {
                 </div>
             </section >
         </div >
+                {/* Performance Dashboard */}
+                <div className="mt-16 border-t border-stone/20 pt-16">
+                    <PerformanceDashboard 
+                        speedHistory={speedHistory}
+                        sessionStats={sessionStats}
+                    />
+                </div>
+
+                {/* Session Management */}
+                <div className="mt-16 border-t border-stone/20 pt-16">
+                    <SessionManager />
+                </div>
+            </div>
+        </div>
     );
 }
 

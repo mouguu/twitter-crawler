@@ -13,6 +13,38 @@ import { RequestQueue, RequestTask } from './core/request-queue';
 import { ScraperEngine } from './core/scraper-engine';
 import { MonitorService } from './core/monitor-service';
 import { ScraperErrors } from './core/errors';
+import { ScrapeRequest, MonitorRequest, ScrapeResponse, MonitorResponse, isScrapeRequest, isMonitorRequest } from './types/api';
+import multer from 'multer';
+import { createCookieManager } from './core/cookie-manager';
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const cookiesDir = path.join(process.cwd(), 'cookies');
+        if (!fs.existsSync(cookiesDir)) {
+            fs.mkdirSync(cookiesDir, { recursive: true });
+        }
+        cb(null, cookiesDir);
+    },
+    filename: (req, file, cb) => {
+        // Ensure .json extension
+        const name = file.originalname.endsWith('.json') ? file.originalname : `${file.originalname}.json`;
+        cb(null, name);
+    }
+});
+const upload = multer({ 
+    storage,
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype === 'application/json' || file.originalname.endsWith('.json')) {
+            cb(null, true);
+        } else {
+            cb(new Error('Only JSON files are allowed'));
+        }
+    },
+    limits: {
+        fileSize: 5 * 1024 * 1024 // 5MB limit
+    }
+});
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5001;
@@ -150,7 +182,7 @@ function getSafePathInfo(resolvedPath: string): { identifier?: string; runTimest
 }
 
 // API: Scrape
-app.post('/api/scrape', async (req: Request, res: Response) => {
+app.post('/api/scrape', async (req: Request<{}, {}, ScrapeRequest>, res: Response<ScrapeResponse>) => {
     if (rejectIfShuttingDown(res)) return;
 
     const queueType: RequestTask['type'] = req.body?.type === 'thread'
@@ -167,7 +199,7 @@ app.post('/api/scrape', async (req: Request, res: Response) => {
             { url: queueKey, type: queueType, priority: 1 },
             () => trackTask(async () => {
             try {
-                const { type, input, limit = 50, likes = false, mode, resume = false, dateRange } = req.body;
+                const { type, input, limit = 50, likes = false, mode, resume = false, dateRange, enableRotation = true } = req.body;
 
                 console.log(`Received scrape request: Type=${type}, Input=${input}, Limit=${limit}`);
 
@@ -191,7 +223,7 @@ app.post('/api/scrape', async (req: Request, res: Response) => {
                     
                     try {
                         await engine.init();
-                        const cookiesLoaded = await engine.loadCookies();
+                        const cookiesLoaded = await engine.loadCookies(enableRotation);
                         
                         if (!cookiesLoaded) {
                             throw ScraperErrors.cookieLoadFailed('Failed to load cookies');
@@ -199,9 +231,11 @@ app.post('/api/scrape', async (req: Request, res: Response) => {
                         
                         result = await engine.scrapeTimeline({
                             username,
-                            limit: parseInt(limit),
+                            limit,
                             saveMarkdown: true,
-                            scrapeMode
+                            scrapeMode,
+                            resume,
+                            dateRange
                         });
                         
                         // 如果需要抓取 likes，使用 DOM 模式单独处理
@@ -209,7 +243,7 @@ app.post('/api/scrape', async (req: Request, res: Response) => {
                             const likesResult = await engine.scrapeTimeline({
                                 username,
                                 tab: 'likes',
-                                limit: parseInt(limit),
+                                limit,
                                 saveMarkdown: false,
                                 scrapeMode: 'puppeteer'
                             });
@@ -242,7 +276,7 @@ app.post('/api/scrape', async (req: Request, res: Response) => {
                         
                         result = await engine.scrapeThread({
                         tweetUrl: input,
-                        maxReplies: parseInt(limit),
+                        maxReplies: limit,
                             saveMarkdown: true,
                             scrapeMode
                     });
@@ -277,7 +311,7 @@ app.post('/api/scrape', async (req: Request, res: Response) => {
                         result = await engine.scrapeTimeline({
                             mode: 'search',
                             searchQuery: input,
-                            limit: parseInt(limit),
+                            limit,
                             saveMarkdown: true,
                             scrapeMode: searchScrapeMode,
                             resume,
@@ -287,7 +321,7 @@ app.post('/api/scrape', async (req: Request, res: Response) => {
                         await engine.close();
                     }
                 } else {
-                    res.status(400).json({ error: 'Invalid scrape type' });
+                    res.status(400).json({ success: false, error: 'Invalid scrape type' });
                     return;
                 }
 
@@ -315,7 +349,7 @@ app.post('/api/scrape', async (req: Request, res: Response) => {
                             stats: {
                                 count: result.tweets ? result.tweets.length : 0
                             },
-                            performance: result.performance || null
+                            performance: result.performance || undefined
                         });
                     } else {
                         // No file path found
@@ -356,7 +390,7 @@ app.post('/api/scrape', async (req: Request, res: Response) => {
 });
 
 // API: Monitor
-app.post('/api/monitor', async (req: Request, res: Response) => {
+app.post('/api/monitor', async (req: Request<{}, {}, MonitorRequest>, res: Response<MonitorResponse>) => {
     if (rejectIfShuttingDown(res)) return;
 
     const queueKey = Array.isArray(req.body?.users) ? req.body.users.join(',') : 'monitor';
@@ -367,8 +401,8 @@ app.post('/api/monitor', async (req: Request, res: Response) => {
             () => trackTask(async () => {
         try {
             const { users, lookbackHours, keywords } = req.body;
-            if (!users || !Array.isArray(users) || users.length === 0) {
-                res.status(400).json({ error: 'Invalid users list' });
+            if (!users || users.length === 0) {
+                res.status(400).json({ success: false, error: 'Invalid users list' });
                 return;
             }
 
@@ -379,17 +413,15 @@ app.post('/api/monitor', async (req: Request, res: Response) => {
 
             const engine = new ScraperEngine(() => getShouldStopScraping());
             await engine.init();
-            const success = await engine.loadCookies();
-
-            if (!success) {
-                await engine.close();
-                res.status(500).json({ error: 'Failed to load cookies' });
+            const cookiesLoaded = await engine.loadCookies();
+            if (!cookiesLoaded) {
+                res.status(500).json({ success: false, error: 'Failed to load cookies' });
                 return;
             }
 
-            const monitor = new MonitorService(engine, eventBusInstance);
-            await monitor.runMonitor(users, {
-                lookbackHours: lookbackHours ? parseFloat(lookbackHours) : undefined,
+            const monitorService = new MonitorService(engine, eventBusInstance);
+            await monitorService.runMonitor(users, {
+                lookbackHours: lookbackHours || undefined,
                 keywords: keywords ? keywords.split(',').map((k: string) => k.trim()).filter(Boolean) : undefined
             });
 
@@ -398,7 +430,7 @@ app.post('/api/monitor', async (req: Request, res: Response) => {
             // Check for report file
             const dateStr = new Date().toISOString().split('T')[0];
         const reportPath = path.join(OUTPUT_ROOT, 'reports', `daily_report_${dateStr}.md`);
-            let downloadUrl = null;
+            let downloadUrl: string | undefined = undefined;
 
             if (fs.existsSync(reportPath)) {
                 downloadUrl = `/api/download?path=${encodeURIComponent(reportPath)}`;
@@ -406,8 +438,8 @@ app.post('/api/monitor', async (req: Request, res: Response) => {
 
             res.json({
                 success: true,
-                message: 'Monitor run completed',
-                downloadUrl
+                message: 'Monitoring completed',
+                downloadUrl: downloadUrl || undefined
             });
 
         } catch (error: any) {
@@ -556,6 +588,48 @@ app.get(/^(?!\/api).*/, (req: Request, res: Response) => {
         return res.sendFile(indexPath);
     }
     res.status(404).send('Not found');
+});
+
+// Session Management API
+app.get('/api/sessions', async (req, res) => {
+    try {
+        const cookieManager = await createCookieManager();
+        const sessions = await cookieManager.listSessions();
+        res.json({ success: true, sessions });
+    } catch (error: any) {
+        console.error('Failed to list sessions:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.post('/api/cookies', upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ success: false, error: 'No file uploaded' });
+        }
+
+        // Validate the uploaded file
+        const cookieManager = await createCookieManager();
+        try {
+            // Attempt to load/validate the file we just saved
+            await cookieManager.loadFromFile(req.file.path);
+            res.json({
+                success: true,
+                message: 'Cookies uploaded and validated successfully',
+                filename: req.file.filename
+            });
+        } catch (validationError: any) {
+            // If invalid, delete the file
+            fs.unlinkSync(req.file.path);
+            res.status(400).json({
+                success: false,
+                error: `Invalid cookie file: ${validationError.message}`
+            });
+        }
+    } catch (error: any) {
+        console.error('Failed to upload cookies:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
 });
 
 // Start Server

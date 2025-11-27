@@ -20,6 +20,14 @@ export interface CookieLoadResult {
   source: string | null;
 }
 
+export interface SessionInfo {
+  filename: string;
+  username: string | null;
+  isValid: boolean;
+  error?: string;
+  cookieCount: number;
+}
+
 /**
  * Cookie 管理器类
  */
@@ -208,7 +216,43 @@ export class CookieManager {
   }
 
   /**
-   * 清除已加载的 Cookie
+   * List all available sessions and their status
+   */
+  async listSessions(): Promise<SessionInfo[]> {
+    await this.scanCookieFiles();
+    
+    const sessions: SessionInfo[] = [];
+    
+    for (const file of this.cookieFiles) {
+      const filename = path.basename(file);
+      try {
+        const content = await fs.readFile(file, 'utf-8');
+        const envData = JSON.parse(content);
+        const validationResult = validation.validateEnvCookieData(envData);
+        
+        sessions.push({
+          filename,
+          username: validationResult.username || null,
+          isValid: validationResult.valid,
+          error: validationResult.error,
+          cookieCount: validationResult.cookies?.length || 0
+        });
+      } catch (error: any) {
+        sessions.push({
+          filename,
+          username: null,
+          isValid: false,
+          error: error.message,
+          cookieCount: 0
+        });
+      }
+    }
+    
+    return sessions;
+  }
+
+  /**
+   * Clear loaded cookies
    */
   clear(): void {
     this.cookies = null;
