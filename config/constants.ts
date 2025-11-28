@@ -56,7 +56,7 @@ export const WAIT_FOR_TWEETS_AFTER_REFRESH_TIMEOUT = 75000;
 /**
  * 等待新推文加载的超时时间（毫秒）
  */
-export const WAIT_FOR_NEW_TWEETS_TIMEOUT = 3000;
+export const WAIT_FOR_NEW_TWEETS_TIMEOUT = 6000;
 
 // ==================== 重试配置 ====================
 

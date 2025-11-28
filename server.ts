@@ -225,8 +225,8 @@ app.post(
       req.body?.type === "thread"
         ? "thread"
         : req.body?.type === "search"
-        ? "search"
-        : "timeline";
+          ? "search"
+          : "timeline";
     const queueKey =
       typeof req.body?.input === "string" && req.body.input
         ? req.body.input
@@ -375,20 +375,12 @@ app.post(
                     );
                   }
 
-                  // 搜索模式强制使用 Puppeteer（GraphQL 模式搜索 API 存在 cursor 404 问题）
-                  const searchScrapeMode = "puppeteer" as const;
-                  if (scrapeMode === "graphql") {
-                    console.log(
-                      "[INFO] Search mode: Forcing Puppeteer mode (GraphQL search has cursor pagination issues)"
-                    );
-                  }
-
                   result = await engine.scrapeTimeline({
                     mode: "search",
                     searchQuery: input,
                     limit,
                     saveMarkdown: true,
-                    scrapeMode: searchScrapeMode,
+                    scrapeMode,  // 使用用户选择的模式，而不是强制 puppeteer
                     resume,
                     dateRange,
                   });
@@ -402,7 +394,10 @@ app.post(
                 return;
               }
 
-              if (result && result.success) {
+              // Allow partial success if we have tweets
+              const hasTweets = result && result.tweets && result.tweets.length > 0;
+
+              if (result && (result.success || hasTweets)) {
                 console.log(
                   "[DEBUG] Scrape result:",
                   JSON.stringify(
@@ -433,9 +428,15 @@ app.post(
                     "[DEBUG] Sending success response with downloadUrl:",
                     runContext.markdownIndexPath
                   );
+
+                  // If success is false but we have tweets, treat it as a warning/partial success
+                  const message = result.success
+                    ? "Scraping completed successfully!"
+                    : `Scraping stopped with error but saved ${result.tweets?.length} tweets. Error: ${result.error}`;
+
                   res.json({
-                    success: true,
-                    message: "Scraping completed successfully!",
+                    success: true, // Return true to frontend so it shows the download button
+                    message: message,
                     downloadUrl,
                     stats: {
                       count: result.tweets ? result.tweets.length : 0,
@@ -453,7 +454,7 @@ app.post(
                   });
                 }
               } else {
-                // Error
+                // Error and no tweets
                 console.error(
                   "Scraping failed:",
                   result?.error || "Unknown error"
@@ -547,9 +548,9 @@ app.post(
                 lookbackHours: lookbackHours || undefined,
                 keywords: keywords
                   ? keywords
-                      .split(",")
-                      .map((k: string) => k.trim())
-                      .filter(Boolean)
+                    .split(",")
+                    .map((k: string) => k.trim())
+                    .filter(Boolean)
                   : undefined,
               });
 

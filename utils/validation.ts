@@ -121,6 +121,12 @@ export function validateCookies(cookies: any): CookieValidationResult {
   const validCookies: Cookie[] = [];
 
   initialValidCookies.forEach(cookie => {
+    // Cloudflare bot mitigation cookie (__cf_bm) is required even when expired; keep it.
+    if (cookie.name === '__cf_bm') {
+      validCookies.push(cookie);
+      return;
+    }
+
     // 跳过值为 -1 或 0 的 expires（这些是 session cookies，永远不会过期）
     if (cookie.expires && cookie.expires !== -1 && cookie.expires !== 0) {
       if (cookie.expires < now) {

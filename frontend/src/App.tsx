@@ -133,7 +133,7 @@ function App() {
 
   // Scrape Mode: 'graphql' (API) or 'puppeteer' (DOM)
   const [scrapeMode, setScrapeMode] = useState<"graphql" | "puppeteer">(
-    "graphql"
+    "puppeteer"
   );
 
   // Monitor Options
@@ -193,8 +193,7 @@ function App() {
       const data = JSON.parse(event.data);
       setLogs((prev) => [
         ...prev,
-        `[${new Date().toLocaleTimeString()}] ${
-          data.level?.toUpperCase?.() || "INFO"
+        `[${new Date().toLocaleTimeString()}] ${data.level?.toUpperCase?.() || "INFO"
         }: ${data.message}`,
       ]);
     };
@@ -268,6 +267,7 @@ function App() {
     setCurrentError(null);
 
     try {
+      // Search 只能使用 Puppeteer（GraphQL 搜索分页 404）
       const resolvedMode = activeTab === "search" ? "puppeteer" : scrapeMode;
       let endpoint = "/api/scrape";
       let body: any = {
@@ -309,8 +309,7 @@ function App() {
         }
         setLogs((prev) => [
           ...prev,
-          `✅ Operation completed! ${
-            result.downloadUrl ? "Download available." : ""
+          `✅ Operation completed! ${result.downloadUrl ? "Download available." : ""
           }`,
         ]);
       } else {
@@ -478,10 +477,10 @@ function App() {
                     {activeTab === "profile"
                       ? "Username or Profile URL"
                       : activeTab === "thread"
-                      ? "Tweet URL"
-                      : activeTab === "monitor"
-                      ? "Usernames (comma separated)"
-                      : "Search Query / Hashtag"}
+                        ? "Tweet URL"
+                        : activeTab === "monitor"
+                          ? "Usernames (comma separated)"
+                          : "Search Query / Hashtag"}
                   </label>
                   <input
                     type="text"
@@ -492,10 +491,10 @@ function App() {
                       activeTab === "profile"
                         ? "e.g. elonmusk"
                         : activeTab === "thread"
-                        ? "https://x.com/..."
-                        : activeTab === "monitor"
-                        ? "elonmusk, realdonaldtrump, nasa"
-                        : "e.g. #AI"
+                          ? "https://x.com/..."
+                          : activeTab === "monitor"
+                            ? "elonmusk, realdonaldtrump, nasa"
+                            : "e.g. #AI"
                     }
                   />
                 </div>
@@ -521,16 +520,14 @@ function App() {
                       </div>
 
                       <div className="flex flex-col space-y-4">
-                        {/* Scrape Mode Toggle - 在 profile, search, thread 模式显示 */}
+                        {/* Scrape Mode Toggle - 在 profile / thread 模式显示；search 强制 Puppeteer */}
                         {(activeTab === "profile" ||
-                          activeTab === "search" ||
                           activeTab === "thread") && (
-                          <div className="flex flex-col space-y-2">
-                            <span className="text-xs uppercase tracking-wider text-stone/60 font-sans">
-                              Extraction Mode
-                            </span>
-                            <div className="flex items-center space-x-2">
-                              {activeTab !== "search" && (
+                            <div className="flex flex-col space-y-2">
+                              <span className="text-xs uppercase tracking-wider text-stone/60 font-sans">
+                                Extraction Mode
+                              </span>
+                              <div className="flex items-center space-x-2">
                                 <button
                                   onClick={() => setScrapeMode("graphql")}
                                   className={cn(
@@ -542,30 +539,38 @@ function App() {
                                 >
                                   ⚡ GraphQL API
                                 </button>
-                              )}
-                              <button
-                                onClick={() => setScrapeMode("puppeteer")}
-                                className={cn(
-                                  "px-4 py-2 border rounded-full text-sm font-serif transition-all duration-300",
-                                  scrapeMode === "puppeteer"
-                                    ? "border-rust bg-rust/10 text-rust"
-                                    : "border-stone/30 text-stone hover:border-rust hover:text-rust"
-                                )}
-                              >
+                                <button
+                                  onClick={() => setScrapeMode("puppeteer")}
+                                  className={cn(
+                                    "px-4 py-2 border rounded-full text-sm font-serif transition-all duration-300",
+                                    scrapeMode === "puppeteer"
+                                      ? "border-rust bg-rust/10 text-rust"
+                                      : "border-stone/30 text-stone hover:border-rust hover:text-rust"
+                                  )}
+                                >
+                                  🌐 Puppeteer DOM
+                                </button>
+                              </div>
+                              <span className="text-[10px] text-stone/40 font-sans italic">
+                                {scrapeMode === "graphql"
+                                  ? "Faster, uses Twitter's internal API"
+                                  : "Slower but more reliable, simulates browser"}
+                              </span>
+                            </div>
+                          )}
+
+                        {activeTab === "search" && (
+                          <div className="flex flex-col space-y-2">
+                            <span className="text-xs uppercase tracking-wider text-stone/60 font-sans">
+                              Extraction Mode
+                            </span>
+                            <div className="flex items-center space-x-2">
+                              <span className="px-4 py-2 border border-rust bg-rust/10 text-rust rounded-full text-sm font-serif">
                                 🌐 Puppeteer DOM
-                                {activeTab === "search" && (
-                                  <span className="ml-2 text-[10px] bg-rust/20 text-rust px-2 py-0.5 rounded-full">
-                                    Required
-                                  </span>
-                                )}
-                              </button>
+                              </span>
                             </div>
                             <span className="text-[10px] text-stone/40 font-sans italic">
-                              {activeTab === "search"
-                                ? "Search mode requires Puppeteer (GraphQL search has cursor pagination issues)"
-                                : scrapeMode === "graphql"
-                                ? "Faster, uses Twitter's internal API"
-                                : "Slower but more reliable, simulates browser"}
+                              GraphQL search 已停用（Twitter SearchTimeline 游标 404），搜索强制使用 Puppeteer 模式。
                             </span>
                           </div>
                         )}
@@ -756,8 +761,8 @@ function App() {
                       {isScraping
                         ? "Extracting digital fragments..."
                         : downloadUrl
-                        ? "Collection complete."
-                        : "Ready to begin."}
+                          ? "Collection complete."
+                          : "Ready to begin."}
                     </p>
                   </div>
                   <div className="text-right">
@@ -857,14 +862,14 @@ function App() {
                       <p className="text-xl font-display text-rust">
                         {performanceStats.totalDuration < 60000
                           ? `${(performanceStats.totalDuration / 1000).toFixed(
-                              1
-                            )}s`
+                            1
+                          )}s`
                           : `${Math.floor(
-                              performanceStats.totalDuration / 60000
-                            )}m ${(
-                              (performanceStats.totalDuration % 60000) /
-                              1000
-                            ).toFixed(0)}s`}
+                            performanceStats.totalDuration / 60000
+                          )}m ${(
+                            (performanceStats.totalDuration % 60000) /
+                            1000
+                          ).toFixed(0)}s`}
                       </p>
                     </div>
 
@@ -882,7 +887,7 @@ function App() {
                     {/* Mode-specific metric */}
                     {(performanceStats.mode === "graphql" ||
                       performanceStats.mode === "mixed") &&
-                    performanceStats.apiRequestCount !== undefined ? (
+                      performanceStats.apiRequestCount !== undefined ? (
                       <>
                         {/* API Requests */}
                         <div className="p-4 border border-white/10 rounded-sm bg-white/5">
@@ -902,8 +907,8 @@ function App() {
                           <p className="text-xl font-display text-washi/80">
                             {performanceStats.apiAverageLatency
                               ? `${(
-                                  performanceStats.apiAverageLatency / 1000
-                                ).toFixed(2)}s`
+                                performanceStats.apiAverageLatency / 1000
+                              ).toFixed(2)}s`
                               : "N/A"}
                           </p>
                         </div>
@@ -941,14 +946,14 @@ function App() {
                       <p className="text-[10px] uppercase tracking-wider text-stone/50 mb-3">
                         {(performanceStats.mode === "graphql" ||
                           performanceStats.mode === "mixed") &&
-                        performanceStats.apiRequestTime !== undefined
+                          performanceStats.apiRequestTime !== undefined
                           ? "API Time Breakdown"
                           : "Time Breakdown"}
                       </p>
                       <div className="space-y-2 text-xs">
                         {(performanceStats.mode === "graphql" ||
                           performanceStats.mode === "mixed") &&
-                        performanceStats.apiRequestTime !== undefined ? (
+                          performanceStats.apiRequestTime !== undefined ? (
                           <>
                             <div className="flex justify-between">
                               <span className="text-stone/60">
@@ -957,8 +962,8 @@ function App() {
                               <span className="text-washi/80">
                                 {performanceStats.apiRequestTime
                                   ? `${(
-                                      performanceStats.apiRequestTime / 1000
-                                    ).toFixed(2)}s`
+                                    performanceStats.apiRequestTime / 1000
+                                  ).toFixed(2)}s`
                                   : "0s"}
                               </span>
                             </div>
@@ -969,8 +974,8 @@ function App() {
                               <span className="text-washi/80">
                                 {performanceStats.apiParseTime
                                   ? `${(
-                                      performanceStats.apiParseTime / 1000
-                                    ).toFixed(2)}s`
+                                    performanceStats.apiParseTime / 1000
+                                  ).toFixed(2)}s`
                                   : "0s"}
                               </span>
                             </div>
@@ -1086,7 +1091,7 @@ function App() {
                       <div className="space-y-2 text-xs">
                         {(performanceStats.mode === "graphql" ||
                           performanceStats.mode === "mixed") &&
-                        performanceStats.apiRequestCount !== undefined ? (
+                          performanceStats.apiRequestCount !== undefined ? (
                           <div className="flex justify-between">
                             <span className="text-stone/60">
                               Tweets/Request
@@ -1094,9 +1099,9 @@ function App() {
                             <span className="text-washi/80">
                               {performanceStats.apiRequestCount > 0
                                 ? (
-                                    performanceStats.tweetsCollected /
-                                    performanceStats.apiRequestCount
-                                  ).toFixed(1)
+                                  performanceStats.tweetsCollected /
+                                  performanceStats.apiRequestCount
+                                ).toFixed(1)
                                 : "N/A"}
                             </span>
                           </div>
@@ -1106,9 +1111,9 @@ function App() {
                             <span className="text-washi/80">
                               {performanceStats.scrollCount > 0
                                 ? (
-                                    performanceStats.tweetsCollected /
-                                    performanceStats.scrollCount
-                                  ).toFixed(1)
+                                  performanceStats.tweetsCollected /
+                                  performanceStats.scrollCount
+                                ).toFixed(1)
                                 : "N/A"}
                             </span>
                           </div>

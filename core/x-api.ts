@@ -13,7 +13,6 @@ import { RetryOnNetworkError, HandleRateLimit } from '../utils/decorators';
 export class XApiClient {
     private cookies: Protocol.Network.CookieParam[];
     private headers: Record<string, string>;
-    private xClientTransactionId?: string;
     private xclidGen?: XClIdGen;
     private searchQueryId: string = X_API_OPS.SearchTimeline.queryId;
 
@@ -37,16 +36,20 @@ export class XApiClient {
         };
     }
 
-    private async ensureXClientTransactionId(path: string): Promise<void> {
-        if (this.xClientTransactionId) return;
-
-        // Generate x-client-transaction-id via XClIdGen
+    /**
+     * Generate a fresh x-client-transaction-id for SearchTimeline requests.
+     * The server expects this to change per request; using a static captured
+     * value causes paginated calls to start failing with 404s.
+     */
+    private async getXClientTransactionId(path: string): Promise<string | undefined> {
         const cookieStr = this.cookies.map(c => `${c.name}=${c.value}`).join('; ');
         try {
+            // Build generator once; calc() returns a new value every call
             this.xclidGen = this.xclidGen || (await XClIdGen.create(cookieStr, this.headers['user-agent']));
-            this.xClientTransactionId = this.xclidGen.calc('GET', path);
+            return this.xclidGen.calc('GET', path);
         } catch {
-            this.xClientTransactionId = X_API_SEARCH_HEADERS.clid;
+            // Fallback to captured static header if generation fails
+            return X_API_SEARCH_HEADERS.clid;
         }
     }
 
@@ -77,8 +80,11 @@ export class XApiClient {
         // Add anti-bot headers for SearchTimeline
         const path = `/i/api/graphql/${queryId}/${op.operationName}`;
         if (op.operationName === 'SearchTimeline') {
-            // Prefer captured static headers
-            headers['x-client-transaction-id'] = X_API_SEARCH_HEADERS.clid;
+            const isCursorRequest = !!variables.cursor;
+            const xclid = isCursorRequest
+                ? await this.getXClientTransactionId(path)
+                : X_API_SEARCH_HEADERS.clid;
+            headers['x-client-transaction-id'] = xclid || X_API_SEARCH_HEADERS.clid;
             headers['x-xp-forwarded-for'] = X_API_SEARCH_HEADERS.xpf;
             headers['sec-ch-ua'] = X_API_SEARCH_HEADERS.secChUa;
             headers['sec-ch-ua-mobile'] = X_API_SEARCH_HEADERS.secChUaMobile;
@@ -87,14 +93,6 @@ export class XApiClient {
             headers['x-twitter-client-language'] = X_API_SEARCH_HEADERS.clientLanguage;
             headers['referer'] = `${X_API_SEARCH_HEADERS.refererBase}${encodeURIComponent(variables.rawQuery || '')}&src=typed_query`;
             headers['accept'] = '*/*';
-
-            // If clid missing, try to generate
-            if (!headers['x-client-transaction-id']) {
-                await this.ensureXClientTransactionId(path);
-                if (this.xClientTransactionId) {
-                    headers['x-client-transaction-id'] = this.xClientTransactionId;
-                }
-            }
         }
 
         const response = await fetch(fullUrl, {

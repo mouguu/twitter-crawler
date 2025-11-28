@@ -271,10 +271,22 @@ export async function scrollToBottomSmart(page: Page, timeout: number = 5000): P
 
     page.on('request', onRequest);
 
-    // 2. 执行滚动
-    await page.evaluate(() => {
-        window.scrollTo(0, document.body.scrollHeight);
-    });
+    // 2. 执行滚动策略 (Keyboard Strategy - More reliable for infinite scroll)
+    try {
+        // Press PageDown multiple times to trigger scroll events
+        // This is better than window.scrollTo because it fires all the native events
+        for (let i = 0; i < 5; i++) {
+            await page.keyboard.press('PageDown');
+            await new Promise(r => setTimeout(r, 200));
+        }
+
+        // Final ensure bottom
+        await page.evaluate(() => {
+            window.scrollTo(0, document.body.scrollHeight);
+        });
+    } catch (e) {
+        console.warn('Scroll execution failed:', e);
+    }
 
     // 3. 智能等待 (等待网络空闲)
     const checkInterval = 200;
