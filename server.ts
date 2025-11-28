@@ -244,7 +244,6 @@ app.post(
                 limit = 50,
                 likes = false,
                 mode,
-                resume = false,
                 dateRange,
                 enableRotation = true,
               } = req.body;
@@ -269,7 +268,10 @@ app.post(
                   .replace("@", "")
                   .replace("https://x.com/", "")
                   .replace("/", "");
-                const scrapeMode = mode === "graphql" ? "graphql" : "puppeteer";
+                const scrapeMode =
+                  mode === "graphql" || mode === "mixed"
+                    ? mode
+                    : "puppeteer";
                 const apiOnly = scrapeMode === "graphql"; // graphql 模式不需要浏览器
 
                 const engine = new ScraperEngine(
@@ -294,7 +296,6 @@ app.post(
                     limit,
                     saveMarkdown: true,
                     scrapeMode,
-                    resume,
                     dateRange,
                   });
 
@@ -381,7 +382,6 @@ app.post(
                     limit,
                     saveMarkdown: true,
                     scrapeMode,  // 使用用户选择的模式，而不是强制 puppeteer
-                    resume,
                     dateRange,
                   });
                 } finally {

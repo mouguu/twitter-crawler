@@ -131,16 +131,15 @@ function App() {
   const [scrapeLikes, setScrapeLikes] = useState(false);
 
   // Scrape Mode: 'graphql' (API) or 'puppeteer' (DOM)
-  const [scrapeMode, setScrapeMode] = useState<"graphql" | "puppeteer">(
-    "puppeteer"
-  );
+  const [scrapeMode, setScrapeMode] = useState<
+    "graphql" | "puppeteer" | "mixed"
+  >("puppeteer");
 
   // Monitor Options
   const [lookbackHours, setLookbackHours] = useState(24);
   const [keywords, setKeywords] = useState("");
 
   // Advanced Options
-  const [resume, setResume] = useState(false);
   const [autoRotateSessions, setAutoRotateSessions] = useState(true);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -242,6 +241,22 @@ function App() {
     return headers;
   };
 
+  // On mount, if server 还有在跑的任务，让 UI 显示停止按钮
+  useEffect(() => {
+    const checkStatus = async () => {
+      try {
+        const res = await fetch("/api/status", { headers: buildHeaders() });
+        const data = await res.json();
+        if (data.isActive) {
+          setIsScraping(true);
+        }
+      } catch (e) {
+        console.warn("Failed to fetch status on mount", e);
+      }
+    };
+    checkStatus();
+  }, [apiKey]);
+
   const applyApiKey = () => {
     setApiKey(apiKeyInput.trim());
   };
@@ -265,7 +280,6 @@ function App() {
         limit,
         likes: scrapeLikes,
         mode: resolvedMode,
-        resume,
         dateRange:
           startDate && endDate ? { start: startDate, end: endDate } : undefined,
         enableRotation: autoRotateSessions,
@@ -512,41 +526,54 @@ function App() {
                         {/* Scrape Mode Toggle - 在 profile / thread 模式显示；search 强制 Puppeteer */}
                         {(activeTab === "profile" ||
                           activeTab === "thread") && (
-                            <div className="flex flex-col space-y-2">
-                              <span className="text-xs uppercase tracking-wider text-stone/60 font-sans">
-                                Extraction Mode
-                              </span>
-                              <div className="flex items-center space-x-2">
-                                <button
-                                  onClick={() => setScrapeMode("graphql")}
-                                  className={cn(
-                                    "px-4 py-2 border rounded-full text-sm font-serif transition-all duration-300",
-                                    scrapeMode === "graphql"
-                                      ? "border-rust bg-rust/10 text-rust"
-                                      : "border-stone/30 text-stone hover:border-rust hover:text-rust"
-                                  )}
-                                >
-                                  ⚡ GraphQL API
-                                </button>
-                                <button
-                                  onClick={() => setScrapeMode("puppeteer")}
-                                  className={cn(
-                                    "px-4 py-2 border rounded-full text-sm font-serif transition-all duration-300",
-                                    scrapeMode === "puppeteer"
-                                      ? "border-rust bg-rust/10 text-rust"
-                                      : "border-stone/30 text-stone hover:border-rust hover:text-rust"
-                                  )}
-                                >
-                                  🌐 Puppeteer DOM
-                                </button>
-                              </div>
-                              <span className="text-[10px] text-stone/40 font-sans italic">
-                                {scrapeMode === "graphql"
-                                  ? "Faster, uses Twitter's internal API"
-                                  : "Slower but more reliable, simulates browser"}
-                              </span>
+                          <div className="flex flex-col space-y-2">
+                            <span className="text-xs uppercase tracking-wider text-stone/60 font-sans">
+                              Extraction Mode
+                            </span>
+                            <div className="flex items-center space-x-2">
+                              <button
+                                onClick={() => setScrapeMode("graphql")}
+                                className={cn(
+                                  "px-4 py-2 border rounded-full text-sm font-serif transition-all duration-300",
+                                  scrapeMode === "graphql"
+                                    ? "border-rust bg-rust/10 text-rust"
+                                    : "border-stone/30 text-stone hover:border-rust hover:text-rust"
+                                )}
+                              >
+                                ⚡ GraphQL API
+                              </button>
+                              <button
+                                onClick={() => setScrapeMode("puppeteer")}
+                                className={cn(
+                                  "px-4 py-2 border rounded-full text-sm font-serif transition-all duration-300",
+                                  scrapeMode === "puppeteer"
+                                    ? "border-rust bg-rust/10 text-rust"
+                                    : "border-stone/30 text-stone hover:border-rust hover:text-rust"
+                                )}
+                              >
+                                🌐 Puppeteer DOM
+                              </button>
+                              <button
+                                onClick={() => setScrapeMode("mixed")}
+                                className={cn(
+                                  "px-4 py-2 border rounded-full text-sm font-serif transition-all duration-300",
+                                  scrapeMode === "mixed"
+                                    ? "border-rust bg-rust/10 text-rust"
+                                    : "border-stone/30 text-stone hover:border-rust hover:text-rust"
+                                )}
+                              >
+                                🔄 Mixed (API + DOM)
+                              </button>
                             </div>
-                          )}
+                            <span className="text-[10px] text-stone/40 font-sans italic">
+                              {scrapeMode === "graphql"
+                                ? "Faster, uses Twitter's internal API"
+                                : scrapeMode === "puppeteer"
+                                  ? "Slower but more reliable, simulates browser"
+                                  : "Start with API, auto-fallback to DOM if API depth hits boundary"}
+                            </span>
+                          </div>
+                        )}
 
                         {activeTab === "search" && (
                           <div className="flex flex-col space-y-2">
@@ -623,28 +650,6 @@ function App() {
                     {/* Advanced Options for Search Mode */}
                     {activeTab === "search" && (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-end pt-4 border-t border-stone/10 mt-8">
-                        <div className="flex flex-col space-y-4">
-                          <label className="flex items-center space-x-4 cursor-pointer group select-none">
-                            <div className="w-6 h-6 border border-stone rounded-full flex items-center justify-center group-hover:border-rust transition-colors">
-                              <div
-                                className={cn(
-                                  "w-3 h-3 bg-rust rounded-full transition-opacity checkbox-indicator",
-                                  resume ? "opacity-100" : "opacity-0"
-                                )}
-                              ></div>
-                            </div>
-                            <input
-                              type="checkbox"
-                              checked={resume}
-                              onChange={(e) => setResume(e.target.checked)}
-                              className="hidden"
-                            />
-                            <span className="font-serif text-xl text-stone group-hover:text-charcoal transition-colors">
-                              Resume Previous Scrape
-                            </span>
-                          </label>
-                        </div>
-
                         <div className="grid grid-cols-2 gap-4">
                           <div className="relative">
                             <input

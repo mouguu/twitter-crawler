@@ -9,7 +9,7 @@
 // ============================================================================
 
 export type ScrapeType = "profile" | "thread" | "search";
-export type ScrapeMode = "graphql" | "puppeteer";
+export type ScrapeMode = "graphql" | "puppeteer" | "mixed";
 
 export interface DateRange {
   start: string; // ISO date string
@@ -22,7 +22,6 @@ export interface ScrapeRequest {
   limit?: number;
   likes?: boolean;
   mode?: ScrapeMode;
-  resume?: boolean;
   dateRange?: DateRange;
   enableRotation?: boolean;
 }

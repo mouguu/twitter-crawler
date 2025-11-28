@@ -11,6 +11,7 @@ A powerful, full-featured tool to scrape, archive, and analyze Twitter/X content
 - **Dual Scraping Modes**:
   - **GraphQL API Mode** (Default): Fast, lightweight scraping using Twitter's internal GraphQL API. No browser needed, perfect for quick data collection.
   - **Puppeteer DOM Mode**: Full browser automation for deeper timeline access and complex scenarios. Bypasses API limitations.
+- **Mixed Mode (API + DOM fallback)**: Start with fast GraphQL; when the API hits the ~800–900 tweet boundary, automatically fall back to DOM to continue deeper.
 - **Multi-Mode Scraping**:
   - **User Profiles**: Scrape tweets, replies, and pinned tweets from any public profile.
   - **Threads**: Archive complete conversation threads, including nested replies.
@@ -313,12 +314,24 @@ node cli.js twitter -u elonmusk -c 500 --mode graphql
 node cli.js twitter -u elonmusk -c 2000 --mode puppeteer
 ```
 
+### Mixed Mode (API + DOM fallback)
+
+- **Speed**: ⚡➜🐢 先用 API 拉取，触顶后自动切 DOM 补深度
+- **适用**: Profile / Thread 模式（Search 仍强制 DOM）
+- **用法**:
+
+```bash
+# Mixed 模式：先 API，再自动切 DOM 深挖
+node cli.js twitter -u elonmusk -c 2000 --mode mixed
+```
+
 ### Mode Selection in Web UI
 
 The web interface allows you to switch between modes via the API selection tabs:
 
 - **GraphQL API**: Fast, API-only mode
 - **Puppeteer DOM**: Full browser automation mode
+- **Mixed**: Profile/Thread 可选；Search 强制 DOM（官方 SearchTimeline 游标 404）
 
 ---
 
@@ -333,6 +346,7 @@ The web interface allows you to switch between modes via the API selection tabs:
 **Solutions:**
 
 1. Use Puppeteer mode: `--mode puppeteer` for deeper timeline access
+2. Use Mixed mode: `--mode mixed` to自动切 DOM 续跑
 2. Split into batches: Use `stopAtTweetId` to scrape in multiple sessions
 3. Wait and retry: The limit may reset after some time
 
@@ -381,7 +395,7 @@ Trigger a scraping task.
   "limit": 50, // Max tweets
   "likes": false, // Scrape likes tab?
   "mergeResults": false,
-  "scrapeMode": "graphql" // "graphql" or "puppeteer"
+  "scrapeMode": "graphql" // "graphql", "puppeteer", or "mixed" (profile/thread only)
 }
 ```
 

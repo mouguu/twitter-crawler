@@ -317,7 +317,7 @@ export function validateScrapeConfig(config: {
     username?: string;
     searchQuery?: string;
     mode?: 'timeline' | 'search';
-    scrapeMode?: 'graphql' | 'puppeteer';
+    scrapeMode?: 'graphql' | 'puppeteer' | 'mixed';
 }): void {
     if (config.limit !== undefined) {
         if (typeof config.limit !== 'number' || config.limit < 1) {
@@ -336,8 +336,8 @@ export function validateScrapeConfig(config: {
         throw new Error('Search query is required for search mode');
     }
 
-    if (config.scrapeMode && !['graphql', 'puppeteer'].includes(config.scrapeMode)) {
-        throw new Error(`Invalid scrapeMode: must be 'graphql' or 'puppeteer', got ${config.scrapeMode}`);
+    if (config.scrapeMode && !['graphql', 'puppeteer', 'mixed'].includes(config.scrapeMode)) {
+        throw new Error(`Invalid scrapeMode: must be 'graphql', 'puppeteer', or 'mixed', got ${config.scrapeMode}`);
     }
 }
 

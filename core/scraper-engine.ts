@@ -63,14 +63,17 @@ export interface ScrapeTimelineConfig {
     stopAtTweetId?: string; // Stop scraping when this tweet ID is encountered
     sinceTimestamp?: number; // Stop scraping if tweet is older than this timestamp (ms)
     collectProfileInfo?: boolean;
-    /** 爬取模式: 'graphql' 使用 API (默认), 'puppeteer' 使用 DOM */
-    scrapeMode?: 'graphql' | 'puppeteer';
+    /** 爬取模式: 'graphql' 使用 API (默认), 'puppeteer' 使用 DOM, 'mixed' 先 API 后 DOM 补深度 */
+    scrapeMode?: 'graphql' | 'puppeteer' | 'mixed';
     resume?: boolean;
     dateRange?: {
         start: string; // YYYY-MM-DD
         end: string;   // YYYY-MM-DD
     };
     enableRotation?: boolean;
+    /** Internal use: offset progress current/target when doing mixed模式 DOM 续跑 */
+    progressBase?: number;
+    progressTarget?: number;
 }
 
 export interface ScrapeTimelineResult {
@@ -390,9 +393,9 @@ export class ScraperEngine {
         const scrapeMode = config.scrapeMode || 'graphql';
 
         // 验证模式组合：如果 apiOnly 为 true，不能使用 puppeteer 模式
-        if (scrapeMode === 'puppeteer' && this.isApiOnlyMode()) {
+        if ((scrapeMode === 'puppeteer' || scrapeMode === 'mixed') && this.isApiOnlyMode()) {
             throw ScraperErrors.invalidConfiguration(
-                'Cannot use puppeteer mode when apiOnly is true. Set apiOnly to false or use graphql mode.',
+                'Cannot use puppeteer/mixed mode when apiOnly is true. Set apiOnly to false or use graphql mode.',
                 { scrapeMode, apiOnly: true }
             );
         }
@@ -429,6 +432,7 @@ export class ScraperEngine {
             runContext, saveMarkdown = true, saveScreenshots = false,
             exportCsv = false, exportJson = false
         } = config;
+        const totalTarget = limit;
 
         // Initialize runContext if missing
         if (!runContext) {
@@ -812,6 +816,49 @@ export class ScraperEngine {
             }
         }
 
+        // Mixed 模式：API 打到边界后，用 DOM 继续深挖
+        if (scrapeMode === 'mixed' && collectedTweets.length < totalTarget) {
+            try {
+                const remainingLimit = totalTarget - collectedTweets.length;
+                this.eventBus.emitLog(`GraphQL chain stopped at ${collectedTweets.length}/${totalTarget}. Falling back to DOM to continue...`, 'info');
+
+                const domResult = await this.scrapeTimelineDom({
+                    ...config,
+                    runContext,
+                    scrapeMode: 'puppeteer',
+                    limit: remainingLimit,
+                    progressBase: collectedTweets.length,
+                    progressTarget: totalTarget,
+                    saveMarkdown: false,
+                    saveScreenshots: false,
+                    exportCsv: false,
+                    exportJson: false
+                });
+
+                if (domResult.success && domResult.tweets?.length) {
+                    let added = 0;
+                    for (const tweet of domResult.tweets) {
+                        if (!scrapedIds.has(tweet.id) && collectedTweets.length < totalTarget) {
+                            scrapedIds.add(tweet.id);
+                            collectedTweets.push(tweet);
+                            added++;
+                        }
+                    }
+                    this.eventBus.emitLog(`DOM fallback added ${added} new tweets. Total: ${collectedTweets.length}`);
+                    // 同步一次进度到总目标
+                    this.eventBus.emitProgress({
+                        current: collectedTweets.length,
+                        target: totalTarget,
+                        action: 'scraping (mixed-summary)'
+                    });
+                } else {
+                    this.eventBus.emitLog(`DOM fallback did not add tweets (success=${domResult.success}).`, 'warn');
+                }
+            } catch (fallbackError: any) {
+                this.eventBus.emitLog(`DOM fallback failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`, 'error');
+            }
+        }
+
         // Save Results
         this.performanceMonitor.startPhase('save-results');
         if (collectedTweets.length > 0) {
@@ -976,9 +1023,12 @@ export class ScraperEngine {
         const {
             username, limit = 50, mode = 'timeline', searchQuery,
             saveMarkdown = true, saveScreenshots = false,
-            exportCsv = false, exportJson = false
+            exportCsv = false, exportJson = false,
+            progressBase = 0,
+            progressTarget
         } = config;
         let { runContext } = config;
+        const totalTarget = progressTarget ?? (progressBase + limit);
 
         // Initialize runContext if missing
         if (!runContext) {
@@ -1074,9 +1124,13 @@ export class ScraperEngine {
 
             // 滚动并提取推文
             let consecutiveNoNew = 0;
+            // 针对 mixed 续跑场景，使用总目标而非本地 remainingLimit 来决定耐心阈值
+            const effectiveTarget = totalTarget;
             // 对于大目标（>500条），适度增加连续无新推文的容忍度
             // 降低最大尝试次数，避免过长时间的无效重复尝试
-            const maxNoNew = limit > 500 ? Math.max(constants.MAX_CONSECUTIVE_NO_NEW_TWEETS * 2, 5) : constants.MAX_CONSECUTIVE_NO_NEW_TWEETS;
+            const maxNoNew = effectiveTarget > 500
+                ? Math.max(constants.MAX_CONSECUTIVE_NO_NEW_TWEETS * 2, 5)
+                : constants.MAX_CONSECUTIVE_NO_NEW_TWEETS;
             let consecutiveErrors = 0;
 
             // 记录所有 session 都无法加载新推文的次数
@@ -1140,8 +1194,8 @@ export class ScraperEngine {
 
                     // Update progress
                     this.eventBus.emitProgress({
-                        current: collectedTweets.length,
-                        target: limit,
+                        current: progressBase + collectedTweets.length,
+                        target: totalTarget,
                         action: 'scraping (DOM)'
                     });
 
@@ -1155,9 +1209,13 @@ export class ScraperEngine {
                         // 智能判断是否需要切换 session：
                         // 1. 如果收集数量较少（< 500）且连续无新推文次数 >= 5，可能是 session 问题，应该更早切换
                         // 2. 如果收集数量较多（>= 500），可能是到达了深度限制，可以容忍更多次无新推文
-                        const isLowCount = collectedTweets.length < 500;
-                        // 与 maxNoNew 保持一致：高量场景不超过 8 次，避免永不轮换 session
-                        const sessionSwitchThreshold = isLowCount ? 5 : Math.min(maxNoNew, 8);
+                        const isLowCount = (collectedTweets.length + progressBase) < 500;
+                        // mixed 场景（progressBase > 0）尽早轮换 session，避免浪费滚动
+                        const sessionSwitchThreshold = isLowCount
+                            ? 5
+                            : progressBase > 0
+                                ? Math.min(maxNoNew, 4)
+                                : Math.min(maxNoNew, 8);
 
                         if (consecutiveNoNew >= sessionSwitchThreshold && attemptedSessions.size < 4) {
                             if (isLowCount) {
@@ -1173,25 +1231,45 @@ export class ScraperEngine {
                                 this.eventBus.emitLog(`Switching to session: ${nextSession.id}...`, 'info');
 
                                 try {
+                                    // 记录当前滚动深度与页面推文数量，便于切 session 后快速恢复
+                                    const { scrollY: prevScrollY, tweetCount: prevTweetCount } = await this.page!.evaluate((selector) => {
+                                        return {
+                                            scrollY: window.scrollY,
+                                            tweetCount: document.querySelectorAll(selector).length
+                                        };
+                                    }, 'article[data-testid="tweet"]');
+
                                     await this.applySession(nextSession, { refreshFingerprint: false, clearExistingCookies: true });
                                     attemptedSessions.add(nextSession.id);
                                     consecutiveNoNew = 0; // 重置计数器，给新session机会
                                     this.performanceMonitor.recordSessionSwitch();
 
                                     // 切换 session 后，刷新页面以应用新 cookies
-                                    // 然后进行快速深度滚动，尽快恢复到之前的深度
-                                    // 策略：快速连续滚动，每滚动几次就提取一次，看是否有新内容
                                     this.eventBus.emitLog(`Switched to session: ${nextSession.id} (${attemptedSessions.size} session(s) tried). Refreshing and performing rapid deep scroll...`, 'info');
 
-                                    // 刷新页面以应用新 session 的 cookies
                                     await this.page!.reload({ waitUntil: 'networkidle2', timeout: 30000 });
-                                    await this.navigationService.waitForTweets(this.page!);
+
+                                    // waitForTweets 失败时再重试一次，避免直接放弃
+                                    try {
+                                        await this.navigationService.waitForTweets(this.page!);
+                                    } catch (navErr) {
+                                        this.eventBus.emitLog(`waitForTweets after session switch failed once, retrying... (${(navErr as Error).message})`, 'warn');
+                                        await throttle(1000);
+                                        await this.navigationService.waitForTweets(this.page!);
+                                    }
+
+                                    // 尝试快速恢复到切换前的深度（按比例滚动）
+                                    const maxResumeScrolls = 30;
+                                    for (let i = 0; i < maxResumeScrolls; i++) {
+                                        await this.page!.evaluate((y) => window.scrollTo(0, y), prevScrollY * Math.min(1.5, 1 + i / maxResumeScrolls));
+                                        await throttle(200);
+                                    }
 
                                     // 快速连续滚动策略：每滚动5次就提取一次，检查是否有新推文
-                                    // 这样可以更快地发现是否有新内容，而不需要滚动到很深的深度
-                                    const targetDepth = Math.max(collectedTweets.length, 800);
-                                    const maxScrollAttempts = 60; // 最多尝试60次滚动
-                                    const scrollsPerExtraction = 5; // 每5次滚动提取一次
+                                    const targetDepth = Math.max(prevTweetCount, collectedTweets.length, 800);
+                                    // 更快探测：减少深滚次数和提取间隔
+                                    const maxScrollAttempts = 20; // 最多尝试20次滚动
+                                    const scrollsPerExtraction = 3; // 每3次滚动提取一次
 
                                     this.eventBus.emitLog(`Performing rapid deep scroll: ${maxScrollAttempts} scrolls, extracting every ${scrollsPerExtraction} scrolls to check for new tweets...`, 'debug');
 
@@ -1252,10 +1330,10 @@ export class ScraperEngine {
                                         const currentCount = collectedTweets.length;
 
                                         if (foundNew) {
-                                            // Emit progress update during deep scroll so UI reflects new totals
+                                            // Emit progress update during deep scroll so UI reflects new totals (carry base/target)
                                             this.eventBus.emitProgress({
-                                                current: currentCount,
-                                                target: limit,
+                                                current: progressBase + currentCount,
+                                                target: totalTarget,
                                                 action: 'deep-scroll'
                                             });
 
@@ -1335,13 +1413,11 @@ export class ScraperEngine {
                         // 如果连续没有新推文，增加等待时间，给 Twitter 更多时间加载内容
                         // 连续无新推文越多，等待时间越长
                         if (consecutiveNoNew >= 2) {
-                            // 连续2-4次：额外等待 2-3秒
-                            // 连续5-7次：额外等待 4-5秒
-                            // 连续8+次：额外等待 6-8秒
-                            const baseDelay = consecutiveNoNew >= 8 ? 6000
-                                : consecutiveNoNew >= 5 ? 4000
-                                    : 2000;
-                            const extraDelay = baseDelay + Math.random() * 1000;
+                            // 降低等待时长，减少空耗
+                            const baseDelay = consecutiveNoNew >= 8 ? 2500
+                                : consecutiveNoNew >= 5 ? 2000
+                                    : 1200;
+                            const extraDelay = baseDelay + Math.random() * 500;
                             this.eventBus.emitLog(`Adding extra delay (${Math.round(extraDelay)}ms) to allow more content to load (consecutive no-new: ${consecutiveNoNew})...`, 'debug');
 
                             // 在长时间等待前检查 stop 信号
@@ -1379,14 +1455,15 @@ export class ScraperEngine {
                         let scrollDelay = constants.getScrollDelay();
 
                         if (consecutiveNoNew >= 5) {
-                            // 连续5次无新推文，开始更激进的滚动
-                            scrollCount = 5; // 每次滚动5次
-                            scrollDelay = constants.getScrollDelay() * 2; // 等待时间翻倍
-                            this.eventBus.emitLog(`Consecutive no-new-tweets: ${consecutiveNoNew}. Performing aggressive scroll (${scrollCount} scrolls, ${Math.round(scrollDelay)}ms delay)...`, 'debug');
-                        } else if (consecutiveNoNew >= 2) {
-                            // 连续2次无新推文，中等激进
-                            scrollCount = 3;
-                            scrollDelay = constants.getScrollDelay() * 1.5;
+                            // 连续无新达到 5 直接判定到顶，跳出循环
+                            this.eventBus.emitLog(`Reached ${consecutiveNoNew} consecutive no-new cycles. Treating as depth boundary.`, 'warn');
+                            consecutiveNoNew = maxNoNew;
+                            break;
+                        } else if (consecutiveNoNew >= 3) {
+                            // 连续3-4次：小幅多滚，但不放大等待
+                            scrollCount = 2;
+                            scrollDelay = constants.getScrollDelay() * 1.2;
+                            this.eventBus.emitLog(`Consecutive no-new-tweets: ${consecutiveNoNew}. Light aggressive scroll (${scrollCount} scrolls, ${Math.round(scrollDelay)}ms delay)...`, 'debug');
                         }
 
                         for (let i = 0; i < scrollCount; i++) {
