@@ -1,6 +1,6 @@
-# Twitter/X Crawler & Analyzer
+# Social Media Crawler (Twitter/X & Reddit)
 
-A powerful, full-featured tool to scrape, archive, and analyze Twitter/X content. Designed for researchers, archivists, and AI developers, it supports scraping Profiles, Threads, Home Timelines, and Search results with flexible output formats.
+A powerful, multi-platform tool to scrape, archive, and analyze content from Twitter/X and Reddit. Designed for researchers, archivists, and AI developers.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-green.svg)
@@ -17,7 +17,12 @@ A powerful, full-featured tool to scrape, archive, and analyze Twitter/X content
   - **User Profiles**: Scrape tweets, replies, and pinned tweets.
   - **Threads**: Archive complete conversation threads, including nested replies.
   - **Search**: Advanced search scraping (keywords, hashtags, date ranges).
+  - **Search**: Advanced search scraping (keywords, hashtags, date ranges).
   - **Likes**: Extract tweets liked by a specific user.
+- **Reddit Integration**:
+  - **Subreddit Scraping**: Scrape posts from any subreddit.
+  - **Multi-Strategy**: Auto, Super Full, Super Recent, and New modes.
+  - **Local Storage**: Saves data to JSON and CSV without external databases.
 - **AI-Powered Analysis**:
   - **Persona Mode**: Automatically generates AI prompts and analysis based on scraped user data.
   - **Smart Exports**: Outputs clean Markdown and JSON optimized for LLM context windows.
@@ -155,6 +160,18 @@ node cli.js twitter -f accounts.txt --merge
 node cli.js --help
 ```
 
+### Reddit Commands
+
+**Scrape a Subreddit**
+
+```bash
+# Scrape 100 posts from r/UofT
+node cli.js reddit -r UofT -c 100
+
+# Deep scrape with specific strategy
+node cli.js reddit -r AskReddit -c 500 -s super_popular
+```
+
 ---
 
 ## 📂 Output Structure
@@ -205,7 +222,37 @@ To avoid detection, the crawler uses `fingerprint-injector` to inject realistic 
   - **Load Failure Handling**: Switches sessions if Twitter returns "Something went wrong" or empty results repeatedly.
 - **Chunk Retry Mechanism**: **Critical Feature.** If a session gets rate-limited while scraping "May 2024", the system rotates to the next session and **retries "May 2024" immediately**. This prevents data gaps (black holes) in your archive.
 
----
+### 🏗️ Hybrid Architecture (Node.js + Python)
+
+This project uses a hybrid architecture to leverage the best tools for each platform:
+
+1.  **Frontend (React + Vite)**:
+
+    - Provides a modern, responsive UI.
+    - Communicates with the backend via REST APIs and Server-Sent Events (SSE) for real-time progress.
+
+2.  **Backend (Node.js + Express)**:
+
+    - Orchestrates the scraping process.
+    - Manages the **Request Queue** and **Session Rotation**.
+    - Handles Twitter scraping directly via TypeScript/Puppeteer.
+
+3.  **Python Bridge (Reddit Integration)**:
+    - For Reddit, the Node.js server spawns a Python subprocess (`reddit_cli.py`).
+    - **Why Python?** Python has superior libraries for Reddit (like PRAW) and data processing.
+    - **Communication**:
+      - Node -> Python: Spawns process with CLI arguments (e.g., `--post_url ...`).
+      - Python -> Node: Prints JSON results to `stdout` (delimited by `__JSON_RESULT__`).
+      - Node parses this JSON and sends it back to the frontend.
+
+**Directory Structure**:
+
+- `frontend/`: React application.
+- `server.ts`: Main Node.js backend.
+- `core/`: Twitter scraping logic (TypeScript).
+- `platforms/reddit/`: Python scripts for Reddit scraping.
+- `cookies/`: Session storage.
+- `output/`: Scraped data artifacts.
 
 ## 🎯 Scraping Modes
 

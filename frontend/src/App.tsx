@@ -3,7 +3,6 @@ import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { ErrorNotification } from "./components/ErrorNotification";
 import { SessionManager } from "./components/SessionManager";
-import dayjs from "dayjs";
 
 // Error types
 export enum ErrorType {
@@ -84,7 +83,7 @@ function cn(...inputs: any[]) {
   return twMerge(clsx(inputs));
 }
 
-type TabType = "profile" | "thread" | "search" | "monitor";
+type TabType = "profile" | "thread" | "search" | "monitor" | "reddit";
 
 interface Progress {
   current: number;
@@ -138,6 +137,9 @@ function App() {
   // Monitor Options
   const [lookbackHours, setLookbackHours] = useState(24);
   const [keywords, setKeywords] = useState("");
+  
+  // Reddit Options
+  const [redditStrategy, setRedditStrategy] = useState("auto");
 
   // Advanced Options
   const [autoRotateSessions, setAutoRotateSessions] = useState(true);
@@ -300,6 +302,20 @@ function App() {
         };
       }
 
+      if (activeTab === "reddit") {
+        // Reddit Scrape Payload
+        // We reuse 'input' for subreddit name
+        // We reuse 'limit' for max_posts
+        // We add 'strategy'
+        body = {
+          type: "reddit",
+          input: input, 
+          limit,
+          strategy: redditStrategy,
+          save_json: true // Default to true for now
+        };
+      }
+
       const response = await fetch(endpoint, {
         method: "POST",
         headers: buildHeaders(true),
@@ -399,7 +415,7 @@ function App() {
                   Mono no Aware
                 </h1>
                 <p className="text-stone text-sm uppercase tracking-widest font-serif">
-                  Twitter Archiver
+                  Social Archiver
                 </p>
               </div>
               <div className="flex items-center gap-4">
@@ -455,7 +471,7 @@ function App() {
 
             {/* Tabs */}
             <div className="flex space-x-12 mb-12">
-              {(["profile", "thread", "search", "monitor"] as const).map(
+              {(["profile", "thread", "search", "monitor", "reddit"] as const).map(
                 (tab) => (
                   <button
                     key={tab}
@@ -485,7 +501,9 @@ function App() {
                         ? "Tweet URL"
                         : activeTab === "monitor"
                           ? "Usernames (comma separated)"
-                          : "Search Query / Hashtag"}
+                          : activeTab === "reddit"
+                            ? "Subreddit Name or Post URL"
+                            : "Search Query / Hashtag"}
                   </label>
                   <input
                     type="text"
@@ -499,7 +517,9 @@ function App() {
                           ? "https://x.com/..."
                           : activeTab === "monitor"
                             ? "elonmusk, realdonaldtrump, nasa"
-                            : "e.g. #AI"
+                            : activeTab === "reddit"
+                              ? "UofT or https://reddit.com/r/Bard/comments/..."
+                              : "e.g. #AI"
                     }
                   />
                 </div>
@@ -518,27 +538,69 @@ function App() {
                   </div>
                 )}
 
+                {/* Reddit Input Hints */}
+                {activeTab === "reddit" && (
+                  <div className="mt-2 text-xs text-stone/60 font-sans space-y-1">
+                    <p className="italic">💡 Supports both:</p>
+                    <p className="font-mono text-[10px] leading-relaxed">
+                      <span className="text-rust">Subreddit:</span> UofT, Bard, AskReddit<br/>
+                      <span className="text-rust">Single Post:</span> https://reddit.com/r/.../comments/...
+                    </p>
+                  </div>
+                )}
+
                 {activeTab !== "monitor" ? (
                   <>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-end">
-                      <div className="relative">
-                        <input
-                          type="number"
-                          value={limit}
-                          onChange={(e) => setLimit(parseInt(e.target.value))}
-                          onWheel={(e) => e.currentTarget.blur()}
-                          min="10"
-                          max="1000"
-                          className="peer w-full bg-transparent border-b border-stone py-2 focus:outline-none focus:border-rust transition-colors text-xl font-serif text-charcoal"
-                        />
-                        <label className="absolute left-0 -top-6 text-sm text-rust font-serif">
-                          {activeTab === "thread"
-                            ? "Max Replies"
-                            : "Limit (Tweets)"}
-                        </label>
-                      </div>
+                      {/* Hide Limit for Reddit Post URLs */}
+                      {!(activeTab === "reddit" && input.includes('reddit.com') && input.includes('/comments/')) && (
+                        <div className="relative">
+                          <input
+                            type="number"
+                            value={limit}
+                            onChange={(e) => setLimit(parseInt(e.target.value))}
+                            onWheel={(e) => e.currentTarget.blur()}
+                            min="10"
+                            max="1000"
+                            className="peer w-full bg-transparent border-b border-stone py-2 focus:outline-none focus:border-rust transition-colors text-xl font-serif text-charcoal"
+                          />
+                          <label className="absolute left-0 -top-6 text-sm text-rust font-serif">
+                            {activeTab === "thread"
+                              ? "Max Replies"
+                              : activeTab === "reddit"
+                                ? "Limit (Posts)"
+                                : "Limit (Tweets)"}
+                          </label>
+                        </div>
+                      )}
 
                       <div className="flex flex-col space-y-4">
+                        {/* Hide Strategy for Reddit Post URLs */}
+                        {activeTab === "reddit" && !(input.includes('reddit.com') && input.includes('/comments/')) && (
+                          <div className="flex flex-col space-y-2">
+                            <span className="text-xs uppercase tracking-wider text-stone/60 font-sans">
+                              Scraping Strategy
+                            </span>
+                            <select
+                              value={redditStrategy}
+                              onChange={(e) => setRedditStrategy(e.target.value)}
+                              className="bg-transparent border-b border-stone py-2 focus:outline-none focus:border-rust transition-colors text-sm font-serif text-charcoal"
+                            >
+                              <option value="auto">Auto (Recommended)</option>
+                              <option value="super_full">Super Full (Deep)</option>
+                              <option value="super_recent">Super Recent (Fast)</option>
+                              <option value="new">New Only</option>
+                            </select>
+                          </div>
+                        )}
+
+                        {/* Show helpful note for Post URL mode */}
+                        {activeTab === "reddit" && input.includes('reddit.com') && input.includes('/comments/') && (
+                          <div className="text-sm text-stone/70 font-sans italic">
+                            💡 Single post mode: will scrape all available comments
+                          </div>
+                        )}
+
                         {/* Scrape Mode Toggle - 在 profile / thread 模式显示；search 强制 Puppeteer */}
                         {(activeTab === "profile" ||
                           activeTab === "thread") && (
@@ -629,37 +691,39 @@ function App() {
                           </label>
                         )}
 
-                        {/* Auto-Rotate Sessions Toggle */}
-                        <div className="pt-4 border-t border-stone/10">
-                          <label className="flex items-center space-x-4 cursor-pointer group select-none">
-                            <div className="w-6 h-6 border border-stone rounded-full flex items-center justify-center group-hover:border-rust transition-colors">
-                              <div
-                                className={cn(
-                                  "w-3 h-3 bg-rust rounded-full transition-opacity checkbox-indicator",
-                                  autoRotateSessions
-                                    ? "opacity-100"
-                                    : "opacity-0"
-                                )}
-                              ></div>
-                            </div>
-                            <input
-                              type="checkbox"
-                              checked={autoRotateSessions}
-                              onChange={(e) =>
-                                setAutoRotateSessions(e.target.checked)
-                              }
-                              className="hidden"
-                            />
-                            <div className="flex flex-col">
-                              <span className="font-serif text-xl text-stone group-hover:text-charcoal transition-colors">
-                                Auto-Rotate Sessions
-                              </span>
-                              <span className="text-xs text-stone/60 font-sans">
-                                Switch account on rate limit
-                              </span>
-                            </div>
-                          </label>
-                        </div>
+                        {/* Auto-Rotate Sessions Toggle - Hide for Reddit */}
+                        {activeTab !== "reddit" && (
+                          <div className="pt-4 border-t border-stone/10">
+                            <label className="flex items-center space-x-4 cursor-pointer group select-none">
+                              <div className="w-6 h-6 border border-stone rounded-full flex items-center justify-center group-hover:border-rust transition-colors">
+                                <div
+                                  className={cn(
+                                    "w-3 h-3 bg-rust rounded-full transition-opacity checkbox-indicator",
+                                    autoRotateSessions
+                                      ? "opacity-100"
+                                      : "opacity-0"
+                                  )}
+                                ></div>
+                              </div>
+                              <input
+                                type="checkbox"
+                                checked={autoRotateSessions}
+                                onChange={(e) =>
+                                  setAutoRotateSessions(e.target.checked)
+                                }
+                                className="hidden"
+                              />
+                              <div className="flex flex-col">
+                                <span className="font-serif text-xl text-stone group-hover:text-charcoal transition-colors">
+                                  Auto-Rotate Sessions
+                                </span>
+                                <span className="text-xs text-stone/60 font-sans">
+                                  Switch account on rate limit
+                                </span>
+                              </div>
+                            </label>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -808,10 +872,20 @@ function App() {
                   </div>
                   <div className="text-right">
                     <p className="text-3xl font-display text-rust">
-                      {progress.current}{" "}
-                      <span className="text-sm text-stone/50">
-                        / {progress.target}
-                      </span>
+                      {/* For Reddit post URLs, show comment count without limit */}
+                      {activeTab === "reddit" && input.includes('reddit.com') && input.includes('/comments/') ? (
+                        <>
+                          {progress.current || 0}{" "}
+                          <span className="text-sm text-stone/50">comments</span>
+                        </>
+                      ) : (
+                        <>
+                          {progress.current}{" "}
+                          <span className="text-sm text-stone/50">
+                            / {progress.target}
+                          </span>
+                        </>
+                      )}
                     </p>
                   </div>
                 </div>
@@ -1178,10 +1252,12 @@ function App() {
           </section>
         </div>
         {/* Performance Dashboard */}
-        {/* Session Management */}
-        <div className="mt-16 border-t border-stone/20 pt-16">
-          <SessionManager />
-        </div>
+        {/* Session Management - Only for Twitter, not Reddit */}
+        {activeTab !== "reddit" && (
+          <div className="mt-16 border-t border-stone/20 pt-16">
+            <SessionManager />
+          </div>
+        )}
       </div>
     </div>
   );

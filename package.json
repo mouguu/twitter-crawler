@@ -1,5 +1,5 @@
 {
-  "name": "twitter-crawler",
+  "name": "social-media-crawler",
   "version": "1.0.0",
   "description": "A tool to scrape Twitter/X content",
   "main": "cli.js",

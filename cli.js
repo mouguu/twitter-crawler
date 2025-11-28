@@ -87,6 +87,70 @@ program
   .option('--format <format>', 'Export format: md/json/csv', 'md');
 
 // Twitter命令
+// Reddit Command
+program
+  .command('reddit')
+  .description('Scrape Reddit content')
+  .option('-r, --subreddit <name>', 'Subreddit name', 'UofT')
+  .option('-c, --count <number>', 'Number of posts to scrape', '100')
+  .option('-s, --strategy <strategy>', 'Scraping strategy (auto, super_full, super_recent, new)', 'auto')
+  .option('--save-json', 'Save individual JSON files')
+  .action(async (options) => {
+    console.log(`🚀 Starting Reddit Scraper...`);
+    console.log(`r/ ${options.subreddit}`);
+    console.log(`📊 Target: ${options.count} posts`);
+    console.log(`🎯 Strategy: ${options.strategy}`);
+
+    const { spawn } = require('child_process');
+    const path = require('path');
+    
+    const pythonScript = path.join(__dirname, 'platforms/reddit/reddit_cli.py');
+    const python = spawn('python3', [
+      pythonScript,
+      '--subreddit', options.subreddit,
+      '--max_posts', options.count,
+      '--strategy', options.strategy,
+      ...(options.saveJson ? ['--save_json'] : [])
+    ]);
+
+    python.stdout.on('data', (data) => {
+      const output = data.toString();
+      // Filter out the JSON result marker for clean logs
+      if (!output.includes('__JSON_RESULT__')) {
+        process.stdout.write(output);
+      } else {
+        // Parse result
+        const parts = output.split('__JSON_RESULT__');
+        if (parts[0].trim()) process.stdout.write(parts[0]);
+        
+        try {
+          const resultJson = parts[1].trim();
+          const result = JSON.parse(resultJson);
+          if (result.status === 'success') {
+            console.log('\n✅ Scraping completed successfully!');
+            console.log(`📈 Scraped Count: ${result.scraped_count}`);
+            console.log(`💾 Total in DB: ${result.total_posts_in_db}`);
+          } else {
+            console.error('\n❌ Scraping failed:', result.message);
+          }
+        } catch (e) {
+          console.error('Error parsing result:', e);
+        }
+      }
+    });
+
+    python.stderr.on('data', (data) => {
+      process.stderr.write(`[PYTHON ERROR] ${data}`);
+    });
+
+    python.on('close', (code) => {
+      if (code !== 0) {
+        console.log(`Python process exited with code ${code}`);
+      }
+    });
+  });
+
+// Twitter Command (existing)
 program
   .command('twitter')
   .description('Scrape Twitter/X account information and tweets')

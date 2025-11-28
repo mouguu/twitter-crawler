@@ -226,7 +226,9 @@ app.post(
         ? "thread"
         : req.body?.type === "search"
           ? "search"
-          : "timeline";
+          : (req.body?.type as any) === "reddit"
+            ? "reddit" as any
+            : "timeline";
     const queueKey =
       typeof req.body?.input === "string" && req.body.input
         ? req.body.input
@@ -387,14 +389,113 @@ app.post(
                 } finally {
                   await engine.close();
                 }
+              } else if (type === "reddit") {
+                // Reddit Scrape
+                const { spawn } = require("child_process");
+                const pythonScript = path.join(__dirname, "platforms/reddit/reddit_cli.py");
+                
+                // Detect if input is a URL or subreddit name
+                const isPostUrl = input && (input.includes('reddit.com/r/') && input.includes('/comments/')) || input.includes('redd.it/');
+                
+                console.log(`[Reddit] ${isPostUrl ? 'Post URL detected' : 'Subreddit mode'}: ${input}`);
+                eventBusInstance.emitLog(`Starting Reddit scraper for ${isPostUrl ? 'post URL' : `r/${input || 'UofT'}`}...`, "info");
+
+                result = await new Promise((resolve) => {
+                  const args = isPostUrl 
+                    ? [
+                        pythonScript,
+                        "--mode", "post",
+                        "--post_url", input,
+                        "--save_json"
+                      ]
+                    : [
+                        pythonScript,
+                        "--mode", "subreddit",
+                        "--subreddit", input || "UofT",
+                        "--max_posts", limit.toString(),
+                        "--strategy", "auto",
+                        "--save_json"
+                      ];
+
+                  const python = spawn("python3", args);
+
+                  let jsonResult = "";
+                  let isJsonSection = false;
+
+                  python.stdout.on("data", (data: Buffer) => {
+                    const output = data.toString();
+                    
+                    if (output.includes("__JSON_RESULT__")) {
+                      const parts = output.split("__JSON_RESULT__");
+                      if (parts[0].trim()) {
+                         console.log(`[Reddit] ${parts[0].trim()}`);
+                         eventBusInstance.emitLog(parts[0].trim(), "info");
+                      }
+                      isJsonSection = true;
+                      jsonResult += parts[1] || "";
+                    } else if (isJsonSection) {
+                      jsonResult += output;
+                    } else {
+                      console.log(`[Reddit] ${output.trim()}`);
+                      eventBusInstance.emitLog(output.trim(), "info");
+                    }
+                  });
+
+                  python.stderr.on("data", (data: Buffer) => {
+                    console.error(`[Reddit Error] ${data}`);
+                    eventBusInstance.emitLog(`Error: ${data}`, "error");
+                  });
+
+                  python.on("close", (code: number) => {
+                    if (code !== 0) {
+                      resolve({ success: false, error: `Process exited with code ${code}` } as any);
+                      return;
+                    }
+
+                    try {
+                      const parsed = JSON.parse(jsonResult.trim());
+                      if (parsed.status === "success") {
+                        // For post mode, we have different structure
+                        const tweetCount = isPostUrl 
+                          ? parsed.comment_count || 0
+                          : parsed.scraped_count || 0;
+                        
+                        // Emit progress update for Reddit
+                        eventBusInstance.emitProgress({
+                          current: tweetCount,
+                          target: isPostUrl ? tweetCount : limit,
+                          action: isPostUrl 
+                            ? `Scraped ${tweetCount} comments`
+                            : `Scraped ${tweetCount} posts`
+                        });
+                        
+                        // Use actual file path from Python if available
+                        const filePath = parsed.file_path || path.join(process.cwd(), "output/reddit/latest/index.md");
+                        
+                        resolve({
+                          success: true,
+                          tweets: Array(tweetCount).fill({}),
+                          runContext: {
+                             markdownIndexPath: filePath,
+                          },
+                          message: parsed.message
+                        } as any);
+                      } else {
+                        resolve({ success: false, error: parsed.message } as any);
+                      }
+                    } catch (e: any) {
+                      resolve({ success: false, error: `Failed to parse result: ${e.message}` } as any);
+                    }
+                  });
+                });
               } else {
+                // Invalid type
                 res
                   .status(400)
                   .json({ success: false, error: "Invalid scrape type" });
                 return;
               }
 
-              // Allow partial success if we have tweets
               const hasTweets = result && result.tweets && result.tweets.length > 0;
 
               if (result && (result.success || hasTweets)) {
