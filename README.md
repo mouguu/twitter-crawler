@@ -15,7 +15,7 @@
 
 **Features deep search, multi-account rotation, and zero data gaps.**
 
-[Features](#-features) • [Installation](#-installation) • [Quick Start](#-web-interface) • [Documentation](#-technical-architecture) • [Contributing](./CONTRIBUTING.md)
+[Features](#-features) • [Installation](#-installation) • [Documentation](#-technical-architecture) • [Contributing](./CONTRIBUTING.md)
 
 </div>
 
