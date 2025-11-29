@@ -26,16 +26,27 @@ fi
 # 激活虚拟环境
 source "$VENV_DIR/bin/activate"
 
+# 使用虚拟环境中的 Python 和 pip
+PYTHON="$VENV_DIR/bin/python"
+PIP="$VENV_DIR/bin/pip"
+
 # 检查依赖并安装
-if ! python3 -c "import flask" 2>/dev/null; then
+if ! "$PYTHON" -c "import flask" 2>/dev/null; then
     echo "📦 Installing Python dependencies..."
-    if ! pip install -q -r requirements.txt; then
+    if ! "$PIP" install -r requirements.txt; then
         echo "❌ Failed to install dependencies"
         exit 1
     fi
+    echo "✅ Dependencies installed successfully"
+fi
+
+# 验证安装
+if ! "$PYTHON" -c "import flask" 2>/dev/null; then
+    echo "❌ Flask is still not available after installation"
+    exit 1
 fi
 
 # 启动服务器
 echo "🚀 Starting Reddit API Server on http://127.0.0.1:5002"
-python3 reddit_api_server.py
+"$PYTHON" reddit_api_server.py
 
