@@ -81,8 +81,8 @@ const program = new Command();
 
 // 版本和描述
 program
-  .name('twitter-crawler')
-  .description('Twitter/X Crawler - CLI tool for scraping Twitter/X content')
+  .name('xrcrawler')
+  .description('XRCrawler - CLI tool for scraping Twitter/X and Reddit content')
   .version('1.0.0');
 
 // 通用选项

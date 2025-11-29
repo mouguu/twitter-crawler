@@ -16,10 +16,10 @@ export function HeaderBar({
       <div className="max-w-5xl mx-auto flex justify-between items-center">
         <div>
           <h1 className="text-3xl md:text-4xl mb-2 font-display text-charcoal">
-            Mono no Aware
+            XRCrawler
           </h1>
           <p className="text-stone text-sm uppercase tracking-widest font-serif">
-            Social Archiver
+            Twitter/X & Reddit Scraper
           </p>
         </div>
         <div className="flex items-center gap-4">

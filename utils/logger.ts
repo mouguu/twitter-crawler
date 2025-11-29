@@ -78,7 +78,7 @@ const rejectionHandlers = hasFs
 export const logger: Logger = createWinstonLogger({
   level: process.env.LOG_LEVEL || 'info',
   format: logFormat,
-  defaultMeta: { service: 'twitter-crawler' },
+  defaultMeta: { service: 'xrcrawler' },
   transports: [...fileTransports],
   exceptionHandlers,
   rejectionHandlers

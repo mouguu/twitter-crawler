@@ -1,7 +1,7 @@
 {
-  "name": "social-media-crawler",
+  "name": "xrcrawler",
   "version": "1.0.0",
-  "description": "A tool to scrape Twitter/X content",
+  "description": "XRCrawler - A powerful tool to scrape Twitter/X and Reddit content",
   "main": "dist/cli.js",
   "scripts": {
     "start": "node dist/cli.js",
@@ -46,7 +46,7 @@
     "winston": "^3.18.3"
   },
   "bin": {
-    "twitter-crawler": "./dist/cli.js"
+    "xrcrawler": "./dist/cli.js"
   },
   "devDependencies": {
     "@types/express": "^5.0.5",

@@ -1,4 +1,4 @@
-# Social Media Crawler (Twitter/X & Reddit)
+# XRCrawler
 
 A powerful, multi-platform tool to scrape, archive, and analyze content from Twitter/X and Reddit. Designed for researchers, archivists, and AI developers.
 
@@ -69,8 +69,8 @@ A powerful, multi-platform tool to scrape, archive, and analyze content from Twi
 1. **Clone the repository**
 
    ```bash
-   git clone https://github.com/yourusername/twitter-crawler.git
-   cd twitter-crawler
+   git clone https://github.com/yourusername/XRCrawler.git
+   cd XRCrawler
    ```
 
 2. **Install dependencies**
@@ -486,14 +486,14 @@ A `Dockerfile` is provided for containerized deployments:
 
 ```bash
 # Build the image
-docker build -t social-media-crawler .
+docker build -t xrcrawler .
 
 # Run the container
 docker run -p 5001:5001 \
   -v $(pwd)/cookies:/app/cookies \
   -v $(pwd)/output:/app/output \
   -e API_KEY=your-secret-key \
-  social-media-crawler
+  xrcrawler
 ```
 
 **Note**: The Docker image includes Chromium for Puppeteer. For Reddit features, you'll need to run the Python API server separately or in a separate container.
@@ -586,17 +586,17 @@ The project includes a `Dockerfile` for containerized deployments:
 
 ```bash
 # Build
-docker build -t social-media-crawler .
+docker build -t xrcrawler .
 
 # Run
 docker run -d \
-  --name crawler \
+  --name xrcrawler \
   -p 5001:5001 \
   -v $(pwd)/cookies:/app/cookies \
   -v $(pwd)/output:/app/output \
   -e API_KEY=your-secret-key \
   -e PORT=5001 \
-  social-media-crawler
+  xrcrawler
 ```
 
 The Docker image includes:
