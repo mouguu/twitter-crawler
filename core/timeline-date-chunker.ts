@@ -1,4 +1,4 @@
-import type { ScraperEngine } from './scraper-engine';
+import { ScraperEngine } from './scraper-engine';
 import type { ScrapeTimelineConfig, ScrapeTimelineResult } from './scraper-engine.types';
 import { ScraperErrors } from './errors';
 import { Tweet } from '../types';
@@ -177,70 +177,308 @@ export async function runTimelineDateChunks(
     // REVERSE ranges to scrape newest first (Deep Search usually implies getting latest history first)
     ranges.reverse();
 
-    engine.eventBus.emitLog(`Generated ${ranges.length} date chunks for historical search (Newest -> Oldest).`);
+    const parallelChunks = config.parallelChunks || 1; // 并行数量，默认1（串行）
+    const isParallel = parallelChunks > 1;
+    
+    if (isParallel) {
+        engine.eventBus.emitLog(`Generated ${ranges.length} date chunks for historical search (Newest -> Oldest). Parallel processing enabled: ${parallelChunks} chunks simultaneously.`);
+    } else {
+        engine.eventBus.emitLog(`Generated ${ranges.length} date chunks for historical search (Newest -> Oldest).`);
+    }
 
     let allTweets: Tweet[] = [];
     let totalCollected = 0;
     const globalLimit = config.limit || 10000; // Default or user limit
     const failedChunks: FailedChunk[] = [];
 
-    // First pass: process all chunks with retry
-    for (let i = 0; i < ranges.length; i++) {
-        // Check if we reached the global limit
-        if (totalCollected >= globalLimit) {
-            engine.eventBus.emitLog(`Global limit of ${globalLimit} reached. Stopping deep search.`);
-            break;
+    // 共享进度状态（用于并行处理时的进度同步）
+    // 使用Map记录每个chunk的上次计数，用于计算增量
+    const chunkLastCounts = new Map<number, number>(); // chunkIndex -> 该chunk上次的内部计数
+    const sharedProgress = {
+        totalCollected: 0,
+        limitReached: false, // 标记是否达到全局限制
+        // 原子更新：基于chunk的增量累加
+        addChunkIncrement(chunkIndex: number, chunkCurrentCount: number) {
+            // chunkCurrentCount: chunk当前的内部计数（从0开始）
+            const lastCount = chunkLastCounts.get(chunkIndex) || 0;
+            
+            if (chunkCurrentCount > lastCount && !this.limitReached) {
+                // 计算增量
+                const delta = chunkCurrentCount - lastCount;
+                // 更新记录
+                chunkLastCounts.set(chunkIndex, chunkCurrentCount);
+                // 累加到全局
+                this.totalCollected += delta;
+                
+                // 检查是否达到全局限制
+                if (this.totalCollected >= globalLimit) {
+                    this.limitReached = true;
+                }
+            }
+            return this.totalCollected;
+        },
+        get() {
+            return this.totalCollected;
+        },
+        isLimitReached() {
+            return this.limitReached || this.totalCollected >= globalLimit;
         }
+    };
 
-        if (engine.shouldStop()) {
-            engine.eventBus.emitLog('Manual stop signal received. Stopping chunk processing.');
-            break;
-        }
 
-        const range = ranges[i];
-        const chunkQuery = `${config.searchQuery} since:${range.start} until:${range.end}`;
+    // 并行处理模式
+    if (isParallel && engine.browserPool) {
+        // 使用并发控制队列并行处理chunks
+        const processChunksInParallel = async () => {
+            const chunkTasks: Array<{ index: number; promise: Promise<{ success: boolean; tweets: Tweet[]; error?: string }> }> = [];
+            let currentIndex = 0;
 
-        engine.eventBus.emitLog(`Processing chunk ${i + 1}/${ranges.length}: ${range.start} to ${range.end}`);
+            // 分批处理：每次启动parallelChunks个chunks
+            while (currentIndex < ranges.length) {
+                let currentGlobalTotal = sharedProgress.get();
+                if (currentGlobalTotal >= globalLimit) {
+                    engine.eventBus.emitLog(`Global limit of ${globalLimit} reached. Stopping deep search.`);
+                    totalCollected = currentGlobalTotal; // 同步
+                    break;
+                }
 
-        // Calculate remaining limit
-        const remaining = globalLimit - totalCollected;
-        // Set chunk limit to remaining needed count
-        const chunkLimit = remaining;
+                if (engine.shouldStop()) {
+                    engine.eventBus.emitLog('Manual stop signal received. Stopping chunk processing.');
+                    break;
+                }
 
-        // Create a sub-config for this chunk
-        const chunkConfig: ScrapeTimelineConfig = {
-            ...config,
-            searchQuery: chunkQuery,
-            dateRange: undefined, // Prevent recursion
-            resume: false,
-            limit: chunkLimit,
-            runContext,
-            saveMarkdown: false,
-            exportCsv: false,
-            exportJson: false
+                // 启动一批chunks（最多parallelChunks个）
+                const batch: number[] = [];
+                while (batch.length < parallelChunks && currentIndex < ranges.length) {
+                    batch.push(currentIndex++);
+                }
+
+                engine.eventBus.emitLog(`[Parallel] Starting batch: ${batch.length} chunks (${batch.map(i => i + 1).join(', ')})`);
+
+                // 并行处理这一批chunks
+                const batchPromises = batch.map(async (i) => {
+                    const range = ranges[i];
+                    const chunkQuery = `${config.searchQuery} since:${range.start} until:${range.end}`;
+
+                    engine.eventBus.emitLog(`[Parallel] Processing chunk ${i + 1}/${ranges.length}: ${range.start} to ${range.end}`);
+
+                    // 记录chunk开始时的全局累计量（用于进度计算）
+                    const chunkStartCount = sharedProgress.get();
+                        const currentGlobalCount = sharedProgress.get();
+                        // 如果已经达到全局限制，这个chunk不需要运行
+                        if (currentGlobalCount >= globalLimit) {
+                            engine.eventBus.emitLog(`[Parallel] Global limit ${globalLimit} already reached, skipping chunk ${i + 1}`, 'info');
+                            return { index: i, result: { success: true, tweets: [] } };
+                        }
+                        const remaining = globalLimit - currentGlobalCount;
+                        const chunkLimit = remaining;
+
+                    const chunkConfig: ScrapeTimelineConfig = {
+                        ...config,
+                        searchQuery: chunkQuery,
+                        dateRange: undefined,
+                        resume: false,
+                        limit: chunkLimit,
+                        runContext,
+                        saveMarkdown: false,
+                        exportCsv: false,
+                        exportJson: false,
+                        progressBase: chunkStartCount, // 使用chunk开始时的累计量
+                        progressTarget: globalLimit
+                    };
+
+                    // 创建包装的eventBus，拦截进度更新和日志，基于共享状态重新计算
+                    const originalEmitProgress = engine.eventBus.emitProgress.bind(engine.eventBus);
+                    const originalEmitLog = engine.eventBus.emitLog.bind(engine.eventBus);
+                    
+                    const wrappedEventBus = Object.create(engine.eventBus);
+                    
+                    // 拦截进度更新 - 使用增量更新机制，避免覆盖其他chunk的进度
+                    wrappedEventBus.emitProgress = (data: any) => {
+                        // data.current 是chunk内部的计数（基于progressBase），需要转换为chunk内部的绝对计数
+                        const chunkCurrent = data.current - (chunkConfig.progressBase || 0);
+                        
+                        // 使用增量更新机制，累加这个chunk的增量到全局
+                        const globalTotal = sharedProgress.addChunkIncrement(i, chunkCurrent);
+                        
+                        // 检查全局限制
+                        if (globalTotal >= globalLimit) {
+                            // 达到限制，标记为应该停止
+                            sharedProgress.limitReached = true;
+                            engine.eventBus.emitLog(`✅ Global limit of ${globalLimit} reached. This chunk should stop.`, 'info');
+                        }
+                        
+                        // 发出全局进度更新（不超过限制）
+                        originalEmitProgress({
+                            current: Math.min(globalTotal, globalLimit),
+                            target: globalLimit,
+                            action: `scraping chunk ${i + 1}/${ranges.length} (parallel)`
+                        });
+                    };
+                    
+                    // 拦截日志输出，替换"Total: X"为全局计数
+                    wrappedEventBus.emitLog = (message: string, level?: string) => {
+                        // 如果日志包含"Total: X"，替换为全局计数
+                        if (typeof message === 'string' && /Total:\s*\d+/.test(message)) {
+                            // 提取chunk内部的Total值（这是chunk内部的累计计数，从0开始）
+                            const totalMatch = message.match(/Total:\s*(\d+)/);
+                            if (totalMatch) {
+                                const chunkTotal = parseInt(totalMatch[1], 10);
+                                
+                                // 使用增量更新机制，累加这个chunk的增量到全局
+                                const globalTotal = sharedProgress.addChunkIncrement(i, chunkTotal);
+                                
+                                // 替换为全局计数
+                                message = message.replace(/Total:\s*\d+(\s*\(global\))?/, `Total: ${globalTotal} (global)`);
+                            }
+                        }
+                        // 转发到原始eventBus
+                        originalEmitLog(message, level);
+                    };
+
+                    // 为每个chunk创建独立的engine实例（共享依赖和浏览器池）
+                    // 创建一个shouldStop函数，检查全局限制和原始停止信号
+                    const chunkShouldStop = () => {
+                        return engine.shouldStop() || sharedProgress.isLimitReached();
+                    };
+                    
+                    const chunkEngine = new ScraperEngine(
+                        chunkShouldStop,
+                        {
+                            apiOnly: false,
+                            browserPool: engine.browserPool, // 共享浏览器池
+                            dependencies: engine.dependencies, // 共享依赖（session manager等）
+                            eventBus: wrappedEventBus as typeof engine.eventBus, // 使用包装的eventBus
+                            headless: true
+                        }
+                    );
+
+                    try {
+                        // 初始化chunk engine
+                        await chunkEngine.init();
+                        chunkEngine.proxyManager.setEnabled(engine.proxyManager.isEnabled());
+                        await chunkEngine.loadCookies(config.enableRotation !== false);
+
+                        const result = await scrapeChunkWithRetry(chunkEngine, chunkConfig, i, ranges.length, range);
+                        await chunkEngine.close();
+                        return { index: i, result };
+                    } catch (error: any) {
+                        await chunkEngine.close();
+                        return { 
+                            index: i, 
+                            result: { success: false, tweets: [], error: error.message || String(error) } 
+                        };
+                    }
+                });
+
+                // 等待这一批chunks全部完成
+                const batchResults = await Promise.all(batchPromises);
+
+                // 处理结果
+                for (const { index, result } of batchResults) {
+                    const range = ranges[index];
+
+                    if (result.success && result.tweets && result.tweets.length > 0) {
+                        const newTweets = result.tweets;
+                        allTweets = allTweets.concat(newTweets);
+                        // 注意：进度已经在emitLog中通过增量更新了，这里只需要同步totalCollected
+                        totalCollected = sharedProgress.get(); // 同步到局部变量
+                        const cappedTotal = Math.min(totalCollected, globalLimit); // 不超过限制
+                        engine.eventBus.emitLog(`✅ [Parallel] Chunk ${index + 1}/${ranges.length} complete: ${newTweets.length} tweets collected | Global total: ${cappedTotal}/${globalLimit}`);
+                        
+                        // 如果达到全局限制，记录日志
+                        if (totalCollected >= globalLimit) {
+                            engine.eventBus.emitLog(`✅ Global limit of ${globalLimit} reached after chunk ${index + 1}. Stopping batch.`, 'info');
+                        }
+                    } else {
+                        failedChunks.push({
+                            index,
+                            range,
+                            query: `${config.searchQuery} since:${range.start} until:${range.end}`,
+                            retryCount: 0,
+                            error: result.error
+                        });
+                        engine.eventBus.emitLog(
+                            `❌ [Parallel] Chunk ${index + 1}/${ranges.length} failed: ${result.error || 'Unknown error'}. ` +
+                            `Will retry in global retry phase.`,
+                            'warn'
+                        );
+                    }
+                }
+
+                // 如果达到全局限制，停止处理
+                currentGlobalTotal = sharedProgress.get();
+                totalCollected = currentGlobalTotal; // 同步
+                if (currentGlobalTotal >= globalLimit) {
+                    break;
+                }
+            }
         };
 
-        const result = await scrapeChunkWithRetry(engine, chunkConfig, i, ranges.length, range);
+        await processChunksInParallel();
+    } else {
+        // 串行处理模式（原有逻辑）
+        // First pass: process all chunks with retry
+        for (let i = 0; i < ranges.length; i++) {
+            // Check if we reached the global limit
+            if (totalCollected >= globalLimit) {
+                engine.eventBus.emitLog(`Global limit of ${globalLimit} reached. Stopping deep search.`);
+                break;
+            }
 
-        if (result.success && result.tweets && result.tweets.length > 0) {
-            const newTweets = result.tweets;
-            allTweets = allTweets.concat(newTweets);
-            totalCollected += newTweets.length;
-            engine.eventBus.emitLog(`✅ Chunk ${i + 1}/${ranges.length} complete: ${newTweets.length} tweets collected | Global total: ${totalCollected}/${globalLimit}`);
-        } else {
-            // Record failed chunk for global retry
-            failedChunks.push({
-                index: i,
-                range,
-                query: chunkQuery,
-                retryCount: 0,
-                error: result.error
-            });
-            engine.eventBus.emitLog(
-                `❌ Chunk ${i + 1}/${ranges.length} failed: ${result.error || 'Unknown error'}. ` +
-                `Will retry in global retry phase.`,
-                'warn'
-            );
+            if (engine.shouldStop()) {
+                engine.eventBus.emitLog('Manual stop signal received. Stopping chunk processing.');
+                break;
+            }
+
+            const range = ranges[i];
+            const chunkQuery = `${config.searchQuery} since:${range.start} until:${range.end}`;
+
+            engine.eventBus.emitLog(`Processing chunk ${i + 1}/${ranges.length}: ${range.start} to ${range.end}`);
+
+            // Calculate remaining limit
+            const remaining = globalLimit - totalCollected;
+            // Set chunk limit to remaining needed count
+            const chunkLimit = remaining;
+
+            // Create a sub-config for this chunk
+            // 传递 progressBase 和 progressTarget 以确保进度显示全局累计量
+            const chunkConfig: ScrapeTimelineConfig = {
+                ...config,
+                searchQuery: chunkQuery,
+                dateRange: undefined, // Prevent recursion
+                resume: false,
+                limit: chunkLimit,
+                runContext,
+                saveMarkdown: false,
+                exportCsv: false,
+                exportJson: false,
+                progressBase: totalCollected, // 全局累计量作为基础
+                progressTarget: globalLimit   // 全局目标量
+            };
+
+            const result = await scrapeChunkWithRetry(engine, chunkConfig, i, ranges.length, range);
+
+            if (result.success && result.tweets && result.tweets.length > 0) {
+                const newTweets = result.tweets;
+                allTweets = allTweets.concat(newTweets);
+                totalCollected += newTweets.length;
+                engine.eventBus.emitLog(`✅ Chunk ${i + 1}/${ranges.length} complete: ${newTweets.length} tweets collected | Global total: ${totalCollected}/${globalLimit}`);
+            } else {
+                // Record failed chunk for global retry
+                failedChunks.push({
+                    index: i,
+                    range,
+                    query: chunkQuery,
+                    retryCount: 0,
+                    error: result.error
+                });
+                engine.eventBus.emitLog(
+                    `❌ Chunk ${i + 1}/${ranges.length} failed: ${result.error || 'Unknown error'}. ` +
+                    `Will retry in global retry phase.`,
+                    'warn'
+                );
+            }
         }
     }
 
@@ -330,7 +568,9 @@ export async function runTimelineDateChunks(
                     runContext,
                     saveMarkdown: false,
                     exportCsv: false,
-                    exportJson: false
+                    exportJson: false,
+                    progressBase: totalCollected, // 全局累计量作为基础
+                    progressTarget: globalLimit   // 全局目标量
                 };
 
                 engine.eventBus.emitLog(

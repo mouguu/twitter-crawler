@@ -369,7 +369,14 @@ app.post(
                       subreddit: input || "UofT",
                       maxPosts: limit,
                       strategy: redditStrategy,
-                      saveJson: true
+                      saveJson: true,
+                      onProgress: (current, total, message) => {
+                        eventBusInstance.emitProgress({
+                          current,
+                          target: total,
+                          action: message
+                        });
+                      }
                     });
                   }
 
@@ -389,20 +396,44 @@ app.post(
                     });
                     
                     // Use actual file path from API response
-                    // Ensure the path is within the output directory for security
-                    let filePath = data.file_path || path.join(OUTPUT_ROOT, "reddit/latest/index.md");
+                    let filePath: string;
                     
-                    // If the path is absolute but outside output dir, try to make it relative
-                    const resolvedFilePath = path.resolve(filePath);
-                    if (!outputPathManager.isPathSafe(resolvedFilePath)) {
-                      // If path is outside output dir, use a fallback path within output
-                      serverLogger.warn("Reddit 文件路径不在输出目录内，使用备用路径", { 
-                        originalPath: filePath,
-                        outputDir: OUTPUT_ROOT
-                      });
-                      filePath = path.join(OUTPUT_ROOT, "reddit/latest/index.md");
+                    if (data.file_path) {
+                      // API returned a file path - use it
+                      filePath = path.resolve(data.file_path);
+                      
+                      // Validate it's within output directory
+                      if (!outputPathManager.isPathSafe(filePath)) {
+                        serverLogger.warn("Reddit API returned file outside output directory", {
+                          apiPath: data.file_path,
+                          resolved: filePath,
+                          outputDir: OUTPUT_ROOT
+                        });
+                        // Security: don't use paths outside output dir
+                        throw ScraperErrors.apiRequestFailed(
+                          "Reddit API returned invalid file path",
+                          undefined,
+                          { type: 'reddit', path: data.file_path } as any
+                        );
+                      }
+                      
+                      // Verify file actually exists
+                      if (!fs.existsSync(filePath)) {
+                        serverLogger.error("Reddit API returned non-existent file", undefined, { filePath });
+                        throw ScraperErrors.apiRequestFailed(
+                          `Reddit output file not found: ${filePath}`,
+                          undefined,
+                          { type: 'reddit', path: filePath } as any
+                        );
+                      }
                     } else {
-                      filePath = resolvedFilePath;
+                      // No file_path in response - this shouldn't happen for successful scrapes
+                      serverLogger.error("Reddit API succeeded but returned no file_path", undefined, { data });
+                      throw ScraperErrors.apiRequestFailed(
+                        "Reddit scraping completed but no output file was generated",
+                        undefined,
+                        { type: 'reddit', data } as any
+                      );
                     }
                     
                     result = {
@@ -417,7 +448,7 @@ app.post(
                     throw ScraperErrors.apiRequestFailed(
                       redditResult.error || "Reddit scraping failed",
                       undefined,
-                      { type: 'reddit', result: redditResult }
+                      { type: 'reddit', result: redditResult } as any
                     );
                   }
                 } catch (error: any) {

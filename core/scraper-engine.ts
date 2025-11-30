@@ -70,7 +70,7 @@ export class ScraperEngine {
     /** 是否允许自动轮换 session（由前端传入） */
     private enableRotation: boolean = true;
     /** 浏览器池（可选，如果提供则复用浏览器实例） */
-    private browserPool?: BrowserPool;
+    public browserPool?: BrowserPool;
     /** 当前使用的浏览器实例（用于池管理） */
     private pooledBrowser: any = null;
 
@@ -85,6 +85,8 @@ export class ScraperEngine {
     public get fingerprintManager() { return this.deps.fingerprintManager; }
     public get performanceMonitor() { return this.deps.performanceMonitor; }
     public get progressManager() { return this.deps.progressManager; }
+    /** 获取依赖（用于并行处理时共享依赖） */
+    public get dependencies() { return this.deps; }
 
     /**
      * 检查是否为 API 模式（不启动浏览器）
@@ -141,11 +143,15 @@ export class ScraperEngine {
         this.preferredSessionId = options.sessionId;
         this.apiOnlyMode = options.apiOnly ?? false;
         
-        // 初始化浏览器池（如果提供选项）
+        // 初始化浏览器池（可选功能，默认关闭）
+        // 仅在明确提供 browserPoolOptions 或 browserPool 时启用
+        // 对于大多数单任务场景，不需要浏览器池，每次创建新浏览器即可
         if (options.browserPool) {
             this.browserPool = options.browserPool;
+            this.eventBus.emitLog('[BrowserPool] Using provided browser pool instance', 'info');
         } else if (options.browserPoolOptions && !this.apiOnlyMode) {
             this.browserPool = getBrowserPool(options.browserPoolOptions);
+            this.eventBus.emitLog('[BrowserPool] Browser pool enabled with options', 'info');
         }
     }
 
@@ -223,7 +229,8 @@ export class ScraperEngine {
     }
 
     async init(): Promise<void> {
-        // Initialize ProxyManager (optional, won't fail if no proxies found)
+        // Initialize ProxyManager (可选功能，默认不使用代理)
+        // 如果没有代理文件，会自动跳过，不影响正常使用
         await this.proxyManager.init();
 
         // Initialize SessionManager - 解耦：传递 CookieManager 或让 SessionManager 自己创建
@@ -458,7 +465,21 @@ export class ScraperEngine {
             );
         }
 
-        if (config.dateRange && config.mode === 'search' && config.searchQuery) {
+        // 使用日期分块的条件：
+        // 1. 有dateRange且是search模式
+        // 2. 或者enableDeepSearch为true且是search模式（会自动生成dateRange）
+        if (config.mode === 'search' && config.searchQuery && config.dateRange) {
+            // 日期分块模式：如果配置了并行chunks，自动启用浏览器池（如果还没有启用）
+            if (config.parallelChunks && config.parallelChunks > 1 && !this.browserPool) {
+                // 自动启用浏览器池以支持并行处理
+                const maxPoolSize = Math.min(config.parallelChunks, 3); // 最多3个并发，避免触发限流
+                this.browserPool = getBrowserPool({
+                    maxSize: maxPoolSize,
+                    minSize: 1,
+                    browserOptions: this.browserOptions
+                });
+                this.eventBus.emitLog(`[BrowserPool] Auto-enabled browser pool (size: ${maxPoolSize}) for parallel chunk processing`, 'info');
+            }
             return runTimelineDateChunks(this, config);
         }
 

@@ -25,6 +25,12 @@ export interface ScrapeRequest {
   mode?: ScrapeMode;
   dateRange?: DateRange;
   enableRotation?: boolean;
+  /** Enable proxy usage (optional, default: false) */
+  enableProxy?: boolean;
+  /** Enable deep search with date chunking (optional, default: false) */
+  enableDeepSearch?: boolean;
+  /** Parallel chunks for date chunking (1=serial, 2-3=parallel, optional, default: 1) */
+  parallelChunks?: number;
   /** Reddit only: subreddit scraping strategy */
   strategy?: RedditStrategy;
 }
@@ -34,6 +40,8 @@ export interface MonitorRequest {
   lookbackHours?: number;
   keywords?: string;
   enableRotation?: boolean;
+  /** Enable proxy usage (optional, default: false) */
+  enableProxy?: boolean;
 }
 
 // ============================================================================

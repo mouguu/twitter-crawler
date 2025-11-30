@@ -52,15 +52,17 @@ export class NavigationService {
 
     async waitForTweets(page: Page, options: NavigationOptions = {}): Promise<boolean> {
         const maxRetries = options.maxRetries || 1;
+        // 减少默认超时时间，加快切换（并行模式下更快）
+        const defaultTimeout = options.timeout || 10000; // 从20秒减少到10秒
 
         try {
             await retryUtils.retryWaitForSelector(
                 page,
                 X_SELECTORS.TWEET,
-                { timeout: options.timeout || 20000 },
+                { timeout: defaultTimeout },
                 {
                     maxRetries,
-                    baseDelay: 800,
+                    baseDelay: 500, // 减少重试延迟，从800ms减少到500ms
                     onRetry: (error: any, attempt: number) => {
                         this._log(`Waiting for tweets failed (attempt ${attempt}/${maxRetries}): ${error.message}`, 'warn');
                     }

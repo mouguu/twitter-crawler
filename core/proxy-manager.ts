@@ -14,18 +14,58 @@ export interface Proxy {
     isRetired: boolean;
 }
 
+/**
+ * 代理管理器（可选功能，默认不使用代理）
+ * 
+ * 作用：为每个 session 分配代理，提高匿名性和绕过 IP 限制
+ * 
+ * 适用场景：
+ * - 需要隐藏真实 IP 地址
+ * - 需要绕过地理位置限制
+ * - 需要提高爬取稳定性
+ * 
+ * 使用方式：
+ * - 默认不使用代理，如果没有代理文件会自动跳过
+ * - 在 ./proxy 目录放置代理文件（格式：IP:PORT:USERNAME:PASSWORD）
+ * - 如果检测到代理文件，会自动加载并使用
+ */
 export class ProxyManager {
     private proxies: Proxy[] = [];
     private sessionProxyMap: Map<string, string> = new Map(); // sessionId -> proxyId
     private maxErrorCount: number = 3;
     private maxConsecutiveFailures: number = 2;
+    private enabled: boolean = true; // 是否启用代理（可通过setEnabled控制）
 
     constructor(private proxyDir: string = './proxy', private eventBus?: ScraperEventBus) {}
+    
+    /**
+     * 设置是否启用代理
+     * @param enabled true=启用（默认），false=禁用
+     */
+    setEnabled(enabled: boolean): void {
+        this.enabled = enabled;
+        if (!enabled) {
+            this._log('Proxy disabled by user', 'info');
+        }
+    }
+    
+    /**
+     * 检查是否启用代理
+     */
+    isEnabled(): boolean {
+        return this.enabled;
+    }
 
     /**
      * Load proxies from file(s) in the proxy directory
      */
     async init(): Promise<void> {
+        // 如果代理被禁用，直接返回
+        if (!this.enabled) {
+            this._log('Proxy is disabled, skipping initialization', 'info');
+            return;
+        }
+        
         if (!fs.existsSync(this.proxyDir)) {
             this._log(`Proxy directory not found: ${this.proxyDir}. Proxies will not be used.`, 'warn');
             return;
@@ -95,6 +135,11 @@ export class ProxyManager {
      * Get proxy for a specific session (deterministic 1:1 mapping)
      */
     getProxyForSession(sessionId: string): Proxy | null {
+        // 如果代理被禁用，返回null
+        if (!this.enabled) {
+            return null;
+        }
+        
         if (this.proxies.length === 0) {
             return null;
         }
@@ -189,6 +234,10 @@ export class ProxyManager {
      * Check if proxies are available
      */
     hasProxies(): boolean {
+        // 如果代理被禁用，返回false
+        if (!this.enabled) {
+            return false;
+        }
         return this.getAllActiveProxies().length > 0;
     }
 

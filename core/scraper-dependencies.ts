@@ -42,6 +42,8 @@ export function createDefaultDependencies(
         performanceMonitor: new PerformanceMonitor(),
         progressManager: new ProgressManager(progressDir, eventBus),
         sessionManager,
+        // ProxyManager: 可选功能，如果没有代理文件会自动跳过
+        // 大多数用户不需要代理，默认不使用
         proxyManager: new ProxyManager()
     };
 }

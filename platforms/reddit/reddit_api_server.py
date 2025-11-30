@@ -4,7 +4,7 @@ Reddit API Server
 提供 HTTP API 接口，替代 spawn 子进程通信方式
 """
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, stream_with_context, Response
 from flask_cors import CORS
 import sys
 import os
@@ -30,48 +30,68 @@ def health():
     })
 
 @app.route('/api/scrape/subreddit', methods=['POST'])
+@app.route('/api/scrape/subreddit', methods=['POST'])
 def scrape_subreddit():
-    """爬取 subreddit"""
-    try:
-        data = request.get_json() or {}
-        
-        subreddit = data.get('subreddit', 'UofT')
-        max_posts = data.get('max_posts', 100)
-        strategy = data.get('strategy', 'auto')
-        save_json = data.get('save_json', False)
-        
-        # 自动选择策略
-        if strategy == 'auto':
-            if max_posts > 5000:
-                strategy = 'super_full'
-            elif max_posts > 2000:
-                strategy = 'super_recent'
-            else:
-                strategy = 'new'
-        
-        config = {
-            'subreddit': subreddit,
-            'max_posts': max_posts,
-            'strategy': strategy,
-            'save_json': save_json,
-            'mode': 'incremental'
-        }
-        
-        result = run_scraping_session(config)
-        
-        return jsonify({
-            'success': result.get('status') == 'success',
-            'data': result,
-            'message': result.get('message', 'Scraping completed')
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'error_type': type(e).__name__,
-            'traceback': traceback.format_exc()
-        }), 500
+    """爬取 subreddit (流式响应)"""
+    data = request.get_json() or {}
+    
+    subreddit = data.get('subreddit', 'UofT')
+    max_posts = data.get('max_posts', 100)
+    strategy = data.get('strategy', 'auto')
+    save_json = data.get('save_json', False)
+    
+    # 自动选择策略
+    if strategy == 'auto':
+        if max_posts > 5000:
+            strategy = 'super_full'
+        elif max_posts > 2000:
+            strategy = 'super_recent'
+        else:
+            strategy = 'new'
+    
+    def generate():
+        try:
+            # 进度回调
+            def progress_callback(current, total, message):
+                progress_data = {
+                    'type': 'progress',
+                    'current': current,
+                    'total': total,
+                    'message': message
+                }
+                yield json.dumps(progress_data) + '\n'
+
+            config = {
+                'subreddit': subreddit,
+                'max_posts': max_posts,
+                'strategy': strategy,
+                'save_json': save_json,
+                'mode': 'incremental',
+                'progress_callback': progress_callback
+            }
+            
+            result = run_scraping_session(config)
+            
+            # 发送最终结果
+            final_data = {
+                'type': 'result',
+                'success': result.get('status') == 'success',
+                'data': result,
+                'message': result.get('message', 'Scraping completed')
+            }
+            yield json.dumps(final_data) + '\n'
+            
+        except Exception as e:
+            error_data = {
+                'type': 'error',
+                'success': False,
+                'error': str(e),
+                'error_type': type(e).__name__,
+                'traceback': traceback.format_exc()
+            }
+            yield json.dumps(error_data) + '\n'
+
+    return Response(stream_with_context(generate()), mimetype='application/x-ndjson')
 
 @app.route('/api/scrape/post', methods=['POST'])
 def scrape_post():

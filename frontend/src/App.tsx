@@ -121,6 +121,8 @@ function App() {
   // Advanced Options
   const [autoRotateSessions, setAutoRotateSessions] = useState(true);
   const [enableDeepSearch, setEnableDeepSearch] = useState(false);
+  const [parallelChunks, setParallelChunks] = useState(1); // 并行处理chunks数量（1=串行，2-3=并行）
+  const [enableProxy, setEnableProxy] = useState(false);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
@@ -290,6 +292,11 @@ function App() {
     setApiKey(apiKeyInput.trim());
   };
 
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    setInput(""); // Clear input on tab switch
+  };
+
   const handleScrapeModeChange = (mode: "graphql" | "puppeteer" | "mixed") => {
     setScrapeMode(mode);
   };
@@ -317,6 +324,8 @@ function App() {
           startDate && endDate ? { start: startDate, end: endDate } : undefined,
         enableRotation: autoRotateSessions,
         enableDeepSearch: activeTab === "search" ? enableDeepSearch : undefined,
+        parallelChunks: activeTab === "search" && enableDeepSearch ? parallelChunks : undefined,
+        enableProxy: enableProxy,
       };
 
       if (activeTab === "monitor") {
@@ -329,6 +338,7 @@ function App() {
           lookbackHours,
           keywords,
           enableRotation: autoRotateSessions,
+          enableProxy: enableProxy,
         };
       }
 
@@ -452,6 +462,8 @@ function App() {
             scrapeMode={scrapeMode}
             autoRotateSessions={autoRotateSessions}
             enableDeepSearch={enableDeepSearch}
+            parallelChunks={parallelChunks}
+            enableProxy={enableProxy}
             startDate={startDate}
             endDate={endDate}
             lookbackHours={lookbackHours}
@@ -459,13 +471,15 @@ function App() {
             redditStrategy={redditStrategy}
             isScraping={isScraping}
             canSubmit={canSubmit}
-            onTabChange={setActiveTab}
+            onTabChange={handleTabChange}
             onInputChange={setInput}
             onLimitChange={setLimit}
             onScrapeModeChange={handleScrapeModeChange}
             onToggleLikes={setScrapeLikes}
             onToggleAutoRotate={setAutoRotateSessions}
             onToggleDeepSearch={setEnableDeepSearch}
+            onParallelChunksChange={setParallelChunks}
+            onToggleProxy={setEnableProxy}
             onStartDateChange={setStartDate}
             onEndDateChange={setEndDate}
             onLookbackHoursChange={setLookbackHours}

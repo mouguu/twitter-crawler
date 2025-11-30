@@ -338,9 +338,13 @@ class EnhancedUofTScraper:
 
     def create_output_directory(self):
         """创建输出目录"""
-        # 使用指定的Data目录
-        data_dir = "/Users/wanshiwu/Downloads/reddit_uoft_ reptiles/Data"
-
+        # 获取项目根目录
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(os.path.dirname(script_dir))
+        
+        # 使用项目根目录下的 output/reddit
+        data_dir = os.path.join(project_root, 'output', 'reddit')
+        
         # 确保Data目录存在
         os.makedirs(data_dir, exist_ok=True)
 
@@ -354,9 +358,10 @@ class EnhancedUofTScraper:
 
         output_dir = f"{base_dir}_{counter:03d}"
         os.makedirs(output_dir, exist_ok=True)
+        print(f"📁 输出目录: {output_dir}")
         return output_dir
 
-    def get_all_posts_paginated(self, max_posts=1000, sort_type='hot', time_filter='all'):
+    def get_all_posts_paginated(self, max_posts=1000, sort_type='hot', time_filter='all', progress_callback=None):
         """分页获取大量帖子"""
         post_urls = []
         after = None
@@ -411,6 +416,12 @@ class EnhancedUofTScraper:
                     post_url = f"https://www.reddit.com{post_data['permalink']}"
                     post_urls.append((post_url, post_id))
                     new_posts += 1
+                
+                if progress_callback:
+                    try:
+                        progress_callback(0, self.target_posts, f"Gathering candidates ({sort_type}): {len(post_urls)} found...")
+                    except:
+                        pass
 
                 print(f"新增 {new_posts} 个，跳过 {len(posts) - new_posts} 个重复")
 
@@ -487,7 +498,7 @@ class EnhancedUofTScraper:
 
         return new_posts
 
-    def get_recent_posts_multi_strategy(self, max_posts=5000, strategy_type="super_full"):
+    def get_recent_posts_multi_strategy(self, max_posts=5000, strategy_type="super_full", progress_callback=None):
         """多策略获取大量最新帖子 - 突破API限制"""
         print(f"🚀 启动超级多策略获取 (目标: {max_posts} 个)")
         print(f"📋 策略类型: {strategy_type}")
@@ -565,6 +576,12 @@ class EnhancedUofTScraper:
             strategy_results.append(strategy_gain)
 
             print(f"📊 当前策略新增: {strategy_gain} 个帖子，总计: {len(all_post_urls)} 个")
+            
+            if progress_callback:
+                try:
+                    progress_callback(0, self.target_posts, f"Gathering candidates ({strategy_name}): {len(all_post_urls)} found...")
+                except:
+                    pass
 
             # 修复的智能饱和度检测 - 只有在真正低收益时才触发
             if strategy_gain < 5:  # 单个策略收益很低
@@ -1343,7 +1360,7 @@ class EnhancedUofTScraper:
                     print(f"❌ 数据库保存失败 (已重试 {max_retries} 次): {e}")
                     return False
 
-    def run_enhanced_scraping(self, max_posts=500, sort_type='hot', save_json=True):
+    def run_enhanced_scraping(self, max_posts=500, sort_type='hot', save_json=True, progress_callback=None):
         """运行增强版爬取"""
         print("🚀 启动增强版UofT Reddit爬虫")
         print("=" * 60)
@@ -1355,7 +1372,10 @@ class EnhancedUofTScraper:
         print(f"📊 目标: 爬取 {max_posts} 个新帖子，数据库中已有: {existing_count} 个帖子")
 
         # 如果需要的帖子数很少，适度增加搜索范围以提高找到新帖子的概率
-        if needed_posts <= 10:
+        # 优化：如果数据库为空，不需要太大的倍数，因为所有找到的帖子都是新的
+        if existing_count == 0:
+            search_multiplier = 1.2  # 稍微多一点点即可
+        elif needed_posts <= 10:
             # 对于很少的目标，搜索更多候选以提高成功率
             search_multiplier = 7
         elif needed_posts <= 50:
@@ -1376,15 +1396,15 @@ class EnhancedUofTScraper:
         if sort_type.startswith('super'):
             # 超级模式：使用多策略突破API限制
             print(f"🚀 启用超级模式获取海量帖子 (搜索: {actual_search_target} 个候选)")
-            post_urls = self.get_recent_posts_multi_strategy(actual_search_target, sort_type)
+            post_urls = self.get_recent_posts_multi_strategy(actual_search_target, sort_type, progress_callback)
         elif sort_type == 'new' and needed_posts > 1000:
             # 对于大量新帖子需求，使用多策略方法
             print(f"🚀 启用多策略模式获取大量最新帖子 (搜索: {actual_search_target} 个候选)")
-            post_urls = self.get_recent_posts_multi_strategy(actual_search_target, "super_recent")
+            post_urls = self.get_recent_posts_multi_strategy(actual_search_target, "super_recent", progress_callback)
         else:
             # 常规单一策略，但也使用扩大的搜索范围
             print(f"🔄 开始获取 {sort_type} 模式下的帖子 (搜索: {actual_search_target} 个候选)...")
-            post_urls = self.get_all_posts_paginated(actual_search_target, sort_type)
+            post_urls = self.get_all_posts_paginated(actual_search_target, sort_type, progress_callback=progress_callback)
 
         # 如果单一排序方式获取不够，尝试其他排序方式
         if len(post_urls) < needed_posts:
@@ -1408,7 +1428,7 @@ class EnhancedUofTScraper:
 
                 sort_desc = f"{backup_sort}({time_filter})" if time_filter else backup_sort
                 print(f"🔄 尝试 {sort_desc} 模式获取更多帖子...")
-                backup_urls = self.get_all_posts_paginated(remaining_needed, backup_sort, time_filter)
+                backup_urls = self.get_all_posts_paginated(remaining_needed, backup_sort, time_filter, progress_callback=progress_callback)
 
                 if backup_urls:
                     post_urls.extend(backup_urls)
@@ -1479,6 +1499,13 @@ class EnhancedUofTScraper:
                 print(f"    👤 作者: {post_data['author']} | 📈 分数: {post_data['score']} | 💬 评论: {len(post_data['comments'])}")
                 if json_status:
                     print(f"    {json_status}")
+                
+                # 发送进度回调
+                if progress_callback:
+                    try:
+                        progress_callback(self.scraped_count, max_posts, f"Scraped: {post_data['title'][:30]}...")
+                    except Exception as e:
+                        print(f"⚠️ Progress callback failed: {e}")
 
                 # 当目标很小时，立即保存每个帖子以便及时停止
                 if needed_posts <= 20:
@@ -1566,6 +1593,11 @@ class EnhancedUofTScraper:
 
         # 最终统计
         self.print_final_stats(scraped_posts, output_dir, start_time)
+        
+        return {
+            'scraped_posts': scraped_posts,
+            'output_dir': output_dir
+        }
 
     def print_final_stats(self, scraped_posts, output_dir, start_time):
         """打印最终统计信息"""
@@ -1645,11 +1677,53 @@ class EnhancedUofTScraper:
             
             # Actually, the module-level function creates the instance.
             # We should update the module-level function to pass the subreddit.
-            self.run_enhanced_scraping(max_posts=max_posts, sort_type=strategy, save_json=save_json)
+            scraping_result = self.run_enhanced_scraping(
+                max_posts=max_posts, 
+                sort_type=strategy, 
+                save_json=save_json,
+                progress_callback=config.get('progress_callback')
+            )
 
             # Calculate results from database count
             final_count = self.get_database_post_count()
             scraped_count = final_count - initial_count
+            
+            # Extract scraped posts and output dir
+            scraped_posts = []
+            output_dir = None
+            if isinstance(scraping_result, dict):
+                scraped_posts = scraping_result.get('scraped_posts', [])
+                output_dir = scraping_result.get('output_dir')
+            
+            # Generate summary Markdown file
+            file_path = None
+            if scraped_posts:
+                # If no output_dir (save_json=False), create a default one
+                if not output_dir:
+                    script_dir = os.path.dirname(os.path.abspath(__file__))
+                    project_root = os.path.dirname(os.path.dirname(script_dir))
+                    output_dir = os.path.join(project_root, 'output', 'reddit', 'latest')
+                    os.makedirs(output_dir, exist_ok=True)
+                
+                file_path = os.path.join(output_dir, "index.md")
+                try:
+                    with open(file_path, 'w', encoding='utf-8') as f:
+                        f.write(f"# Reddit Scrape Results: r/{subreddit}\n\n")
+                        f.write(f"**Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                        f.write(f"**Strategy:** {strategy}\n")
+                        f.write(f"**Posts Scraped:** {len(scraped_posts)}\n\n")
+                        
+                        for i, post in enumerate(scraped_posts, 1):
+                            f.write(f"## {i}. {post.get('title', 'Untitled')}\n\n")
+                            f.write(f"**Author:** u/{post.get('author', 'unknown')} | **Score:** {post.get('score', 0)}\n")
+                            f.write(f"**URL:** {post.get('url', '')}\n\n")
+                            if post.get('selftext'):
+                                summary = post['selftext'][:200].replace('\n', ' ') + "..." if len(post['selftext']) > 200 else post['selftext']
+                                f.write(f"{summary}\n\n")
+                            f.write("---\n\n")
+                    print(f"📄 Generated summary markdown: {file_path}")
+                except Exception as e:
+                    print(f"⚠️ Failed to generate markdown summary: {e}")
 
             return {
                 'status': 'success',
@@ -1657,6 +1731,7 @@ class EnhancedUofTScraper:
                 'total_posts_in_db': final_count,
                 'strategy_used': strategy,
                 'super_mode': super_mode,
+                'file_path': file_path,
                 'message': f'Successfully scraped {scraped_count} new posts using {strategy} strategy'
             }
 

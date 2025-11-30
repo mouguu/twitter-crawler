@@ -94,7 +94,11 @@ Create `crawler-config.json` in the project root for scheduled tasks:
 - `keywords`: Optional keyword filter
 - `lookbackHours`: Hours to look back for new tweets
 
-## Proxy Configuration
+## Optional Features
+
+### Proxy Configuration (Optional)
+
+> **注意**：代理是可选功能，默认不使用。大多数用户不需要代理。
 
 Proxy support is available through the `ProxyManager` class. Configure via:
 
@@ -176,7 +180,9 @@ cookies/
 
 ## Advanced Configuration
 
-### Browser Pool Settings
+### Browser Pool Settings (Optional)
+
+> **注意**：浏览器池是可选功能，默认关闭。但在**深度搜索（日期分块）模式**下，浏览器池会自动启用以加速处理。
 
 ```json
 {
@@ -187,6 +193,16 @@ cookies/
   }
 }
 ```
+
+**使用场景**：
+- ✅ **深度搜索模式**：自动启用浏览器池，并行处理多个日期块，显著加速搜索（2-3倍速度）
+- ✅ 批量爬取多个账号时，可以手动启用浏览器池节省启动时间
+- ❌ 单任务场景不需要，默认关闭即可
+
+**自动启用**：
+- 当使用深度搜索（Date Chunking）时，浏览器池会自动启用
+- 默认并行处理 2 个日期块，平衡速度和稳定性
+- 避免触发 Twitter 的限流机制
 
 ### Fingerprint Settings
 

@@ -73,7 +73,10 @@ export async function runTimelineDom(engine: ScraperEngine, config: ScrapeTimeli
             try {
                 engine.performanceMonitor.startPhase('navigation');
                 await engine.navigationService.navigateToUrl(engine.getPageInstance()!, targetUrl);
-                await engine.navigationService.waitForTweets(engine.getPageInstance()!);
+                await engine.navigationService.waitForTweets(engine.getPageInstance()!, { 
+                    timeout: 10000, // 减少超时时间
+                    maxRetries: 1 // 只重试1次
+                });
                 engine.performanceMonitor.endPhase();
                 navigationSuccess = true;
             } catch (navError: any) {
@@ -100,8 +103,8 @@ export async function runTimelineDom(engine: ScraperEngine, config: ScrapeTimeli
                             engine.performanceMonitor.recordSessionSwitch();
                             engine.eventBus.emitLog(`Switched to session: ${nextSession.id} (${attemptedSessions.size} session(s) tried). Retrying navigation...`, 'info');
 
-                            // 等待一下再重试
-                            await throttle(2000);
+                            // 减少等待时间，加快切换（从2000ms减少到500ms）
+                            await throttle(500);
                             continue; // 重试导航
                         } catch (e: any) {
                             engine.eventBus.emitLog(`Session rotation failed: ${e.message}`, 'error');
@@ -227,11 +230,24 @@ export async function runTimelineDom(engine: ScraperEngine, config: ScrapeTimeli
                 engine.emitPerformanceUpdate();
 
                 // Update progress
+                const currentProgress = progressBase + collectedTweets.length;
                 engine.eventBus.emitProgress({
-                    current: progressBase + collectedTweets.length,
+                    current: Math.min(currentProgress, totalTarget), // 不超过目标
                     target: totalTarget,
                     action: 'scraping (DOM)'
                 });
+                
+                // 如果达到目标，应该停止
+                if (currentProgress >= totalTarget) {
+                    engine.eventBus.emitLog(`✅ Target of ${totalTarget} reached. Stopping extraction.`, 'info');
+                    break;
+                }
+                
+                // 检查停止信号（可能包含全局限制检查）
+                if (engine.shouldStop()) {
+                    engine.eventBus.emitLog('Stop signal received (may be global limit reached). Stopping extraction.', 'info');
+                    break;
+                }
 
                 // 重置错误计数（成功提取）
                 consecutiveErrors = 0;
@@ -240,18 +256,42 @@ export async function runTimelineDom(engine: ScraperEngine, config: ScrapeTimeli
                     consecutiveNoNew++;
                     engine.eventBus.emitLog(`No new tweets found (consecutive: ${consecutiveNoNew}/${maxNoNew}). Continuing to scroll...`, 'debug');
 
-                    // 智能判断是否需要切换 session：
-                    // 1. 如果收集数量较少（< 500）且连续无新推文次数 >= 5，可能是 session 问题，应该更早切换
-                    // 2. 如果收集数量较多（>= 500），可能是到达了深度限制，可以容忍更多次无新推文
-                    const isLowCount = (collectedTweets.length + progressBase) < 500;
-                    // mixed 场景（progressBase > 0）尽早轮换 session，避免浪费滚动
-                    const sessionSwitchThreshold = isLowCount
-                        ? 5
-                        : progressBase > 0
-                            ? Math.min(maxNoNew, 4)
-                            : Math.min(maxNoNew, 8);
+                    // 智能判断：识别边界问题 vs session问题
+                    // 在日期分块模式下，每个日期范围的边界通常是100-300条推文
+                    // 1. 日期分块模式 + 收集了100+条 + 连续3次无新推文 = 边界问题，不是session问题
+                    // 2. 收集数量很少（< 100 且不是chunk模式）= session问题
+                    // 3. 收集数量很多（>= 500）= 深度限制
+                    const totalCount = collectedTweets.length + progressBase;
+                    const isChunkMode = progressBase > 0;
+                    const chunkTweetCount = collectedTweets.length; // 这个chunk收集的推文数
+                    
+                    // 日期分块模式下的边界判断：收集了100+条通常就是边界了
+                    // 在日期分块模式下，如果收集了100+条推文且连续3次无新推文，很可能是边界
+                    // 优先检查边界，避免误判为session问题
+                    const isLikelyBoundary = isChunkMode && chunkTweetCount >= 100 && consecutiveNoNew >= 3;
+                    
+                    // 如果识别为边界，立即停止
+                    if (isLikelyBoundary) {
+                        engine.eventBus.emitLog(`Boundary likely reached (${chunkTweetCount} tweets collected in this date range). This is expected for date chunking. Stopping this chunk.`, 'info');
+                        break; // 跳出循环，停止这个chunk
+                    }
+                    
+                    // 如果不是边界，继续判断其他情况
+                    const isLowCount = !isChunkMode && totalCount < 200; // 非chunk模式才判断为session问题
+                    const isHighCount = totalCount >= 500;
+                    
+                    // 调整切换session的阈值
+                    let sessionSwitchThreshold: number;
+                    if (isLowCount && !isChunkMode) {
+                        sessionSwitchThreshold = 5; // session问题，尽快切换（仅非chunk模式）
+                    } else if (isHighCount) {
+                        sessionSwitchThreshold = Math.min(maxNoNew, 8); // 深度限制，可以多尝试
+                    } else {
+                        // 日期分块模式下，如果不确定，倾向于认为是边界而不是session问题
+                        sessionSwitchThreshold = isChunkMode ? Math.min(maxNoNew, 5) : Math.min(maxNoNew, 6);
+                    }
 
-                    if (consecutiveNoNew >= sessionSwitchThreshold && attemptedSessions.size < 4) {
+                    if (consecutiveNoNew >= sessionSwitchThreshold && attemptedSessions.size < 4 && !isLikelyBoundary) {
                         if (isLowCount) {
                             engine.eventBus.emitLog(`Low tweet count (${collectedTweets.length}) with ${consecutiveNoNew} consecutive no-new cycles. Likely session issue. Rotating session...`, 'warn');
                         } else {
@@ -274,13 +314,15 @@ export async function runTimelineDom(engine: ScraperEngine, config: ScrapeTimeli
                                 // 切换 session 后，刷新页面以应用新 cookies
                                 engine.eventBus.emitLog(`Switched to session: ${nextSession.id} (${attemptedSessions.size} session(s) tried). Refreshing and performing rapid deep scroll...`, 'info');
 
-                                // waitForTweets 失败时再重试一次，避免直接放弃
+                                // waitForTweets 失败时快速重试一次，减少超时时间
                                 try {
-                                    await engine.navigationService.waitForTweets(engine.getPageInstance()!);
+                                    await engine.navigationService.waitForTweets(engine.getPageInstance()!, { 
+                                        timeout: 5000, // 减少超时到5秒
+                                        maxRetries: 0 // 不重试，直接快速切换
+                                    });
                                 } catch (navErr) {
-                                    engine.eventBus.emitLog(`waitForTweets after session switch failed once, retrying... (${(navErr as Error).message})`, 'warn');
-                                    await throttle(1000);
-                                    await engine.navigationService.waitForTweets(engine.getPageInstance()!);
+                                    engine.eventBus.emitLog(`waitForTweets after session switch failed, skipping retry for faster switching...`, 'warn');
+                                    // 不再重试，直接继续，加快切换速度
                                 }
 
                                 // Fast scroll to discover new tweets with new session
@@ -529,7 +571,10 @@ export async function runTimelineDom(engine: ScraperEngine, config: ScrapeTimeli
                             // 重新导航到目标URL
                             engine.performanceMonitor.startPhase('navigation');
                             await engine.navigationService.navigateToUrl(engine.getPageInstance()!, targetUrl);
-                            await engine.navigationService.waitForTweets(engine.getPageInstance()!);
+                            await engine.navigationService.waitForTweets(engine.getPageInstance()!, { 
+                                timeout: 8000, // 减少超时时间，加快切换
+                                maxRetries: 0 // 不重试，快速切换
+                            });
                             engine.performanceMonitor.endPhase();
 
                             engine.eventBus.emitLog(`Switched to session: ${nextSession.id} (${attemptedSessions.size} session(s) tried). Retrying...`, 'info');

@@ -11,6 +11,8 @@ interface TaskFormProps {
   scrapeMode: ScrapeMode;
   autoRotateSessions: boolean;
   enableDeepSearch: boolean;
+  parallelChunks: number;
+  enableProxy: boolean;
   startDate: string;
   endDate: string;
   lookbackHours: number;
@@ -25,6 +27,8 @@ interface TaskFormProps {
   onToggleLikes: (value: boolean) => void;
   onToggleAutoRotate: (value: boolean) => void;
   onToggleDeepSearch: (value: boolean) => void;
+  onParallelChunksChange: (value: number) => void;
+  onToggleProxy: (value: boolean) => void;
   onStartDateChange: (value: string) => void;
   onEndDateChange: (value: string) => void;
   onLookbackHoursChange: (value: number) => void;
@@ -43,6 +47,8 @@ export function TaskForm(props: TaskFormProps) {
     scrapeMode,
     autoRotateSessions,
     enableDeepSearch,
+    parallelChunks,
+    enableProxy,
     startDate,
     endDate,
     lookbackHours,
@@ -57,6 +63,8 @@ export function TaskForm(props: TaskFormProps) {
     onToggleLikes,
     onToggleAutoRotate,
     onToggleDeepSearch,
+    onParallelChunksChange,
+    onToggleProxy,
     onStartDateChange,
     onEndDateChange,
     onLookbackHoursChange,
@@ -305,7 +313,7 @@ export function TaskForm(props: TaskFormProps) {
 
                   {/* Auto-Rotate Sessions Toggle - Hide for Reddit */}
                   {activeTab !== "reddit" && (
-                    <div className="pt-4 border-t border-stone/10">
+                    <div className="pt-4 border-t border-stone/10 space-y-4">
                       <label className="flex items-center space-x-4 cursor-pointer group select-none">
                         <div className="w-6 h-6 border border-stone rounded-full flex items-center justify-center group-hover:border-rust transition-colors">
                           <div
@@ -331,6 +339,34 @@ export function TaskForm(props: TaskFormProps) {
                           </span>
                           <span className="text-xs text-stone/60 font-sans">
                             Switch account on rate limit
+                          </span>
+                        </div>
+                      </label>
+                      
+                      {/* Proxy Toggle - Optional Feature */}
+                      <label className="flex items-center space-x-4 cursor-pointer group select-none">
+                        <div className="w-6 h-6 border border-stone rounded-full flex items-center justify-center group-hover:border-rust transition-colors">
+                          <div
+                            className={cn(
+                              "w-3 h-3 bg-rust rounded-full transition-opacity checkbox-indicator",
+                              enableProxy
+                                ? "opacity-100"
+                                : "opacity-0"
+                            )}
+                          ></div>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={enableProxy}
+                          onChange={(e) => onToggleProxy(e.target.checked)}
+                          className="hidden"
+                        />
+                        <div className="flex flex-col">
+                          <span className="font-serif text-xl text-stone group-hover:text-charcoal transition-colors">
+                            Enable Proxy (Optional)
+                          </span>
+                          <span className="text-xs text-stone/60 font-sans">
+                            Use proxy from ./proxy directory if available
                           </span>
                         </div>
                       </label>
@@ -368,34 +404,70 @@ export function TaskForm(props: TaskFormProps) {
                   </div>
 
                   {/* Deep Search Toggle */}
-                  <div className="flex flex-col space-y-2">
-                    <span className="text-xs uppercase tracking-wider text-stone/60 font-sans">
-                      Deep Search
-                    </span>
-                    <label className="flex items-center space-x-4 cursor-pointer group select-none">
-                      <div className="w-6 h-6 border border-stone rounded-full flex items-center justify-center group-hover:border-rust transition-colors">
-                        <div
-                          className={cn(
-                            "w-3 h-3 bg-rust rounded-full transition-opacity checkbox-indicator",
-                            enableDeepSearch ? "opacity-100" : "opacity-0"
-                          )}
-                        ></div>
+                  <div className="flex flex-col space-y-4">
+                    <div className="flex flex-col space-y-2">
+                      <span className="text-xs uppercase tracking-wider text-stone/60 font-sans">
+                        Deep Search
+                      </span>
+                      <label className="flex items-center space-x-4 cursor-pointer group select-none">
+                        <div className="w-6 h-6 border border-stone rounded-full flex items-center justify-center group-hover:border-rust transition-colors">
+                          <div
+                            className={cn(
+                              "w-3 h-3 bg-rust rounded-full transition-opacity checkbox-indicator",
+                              enableDeepSearch ? "opacity-100" : "opacity-0"
+                            )}
+                          ></div>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={enableDeepSearch}
+                          onChange={(e) => onToggleDeepSearch(e.target.checked)}
+                          className="hidden"
+                        />
+                        <div className="flex flex-col">
+                          <span className="font-serif text-lg text-stone group-hover:text-charcoal transition-colors">
+                            Enable Date Chunking
+                          </span>
+                          <span className="text-[10px] text-stone/50 font-sans">
+                            Split search into monthly chunks (Newest → Oldest)
+                          </span>
+                        </div>
+                      </label>
+                    </div>
+
+                    {/* Parallel Chunks Control - Only show when Deep Search is enabled */}
+                    {enableDeepSearch && (
+                      <div className="flex flex-col space-y-2 pl-10">
+                        <label className="text-xs uppercase tracking-wider text-stone/60 font-sans">
+                          Parallel Processing
+                        </label>
+                        <div className="flex items-center space-x-4">
+                          <input
+                            type="number"
+                            min="1"
+                            max="3"
+                            value={parallelChunks}
+                            onChange={(e) => {
+                              const value = parseInt(e.target.value) || 1;
+                              const clamped = Math.max(1, Math.min(3, value));
+                              onParallelChunksChange(clamped);
+                            }}
+                            onWheel={(e) => e.currentTarget.blur()}
+                            className="w-20 bg-transparent border-b border-stone py-1 focus:outline-none focus:border-rust transition-colors text-sm font-serif text-charcoal text-center"
+                          />
+                          <div className="flex flex-col">
+                            <span className="font-serif text-sm text-stone">
+                              Parallel Chunks
+                            </span>
+                            <span className="text-[10px] text-stone/50 font-sans">
+                              {parallelChunks === 1 
+                                ? "Serial (1 chunk at a time)" 
+                                : `Parallel (${parallelChunks} chunks simultaneously, 2-3x faster)`}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <input
-                        type="checkbox"
-                        checked={enableDeepSearch}
-                        onChange={(e) => onToggleDeepSearch(e.target.checked)}
-                        className="hidden"
-                      />
-                      <div className="flex flex-col">
-                        <span className="font-serif text-lg text-stone group-hover:text-charcoal transition-colors">
-                          Enable Date Chunking
-                        </span>
-                        <span className="text-[10px] text-stone/50 font-sans">
-                          Split search into monthly chunks (Newest → Oldest)
-                        </span>
-                      </div>
-                    </label>
+                    )}
                   </div>
                 </div>
               )}

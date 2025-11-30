@@ -11,6 +11,7 @@ export interface RedditScrapeOptions {
   maxPosts?: number;
   strategy?: 'auto' | 'super_full' | 'super_recent' | 'new';
   saveJson?: boolean;
+  onProgress?: (current: number, total: number, message: string) => void;
 }
 
 export interface RedditScrapeResult {
@@ -59,11 +60,12 @@ export class RedditApiClient {
    * 爬取 subreddit
    */
   async scrapeSubreddit(options: RedditScrapeOptions): Promise<RedditScrapeResult> {
-    const { subreddit = 'UofT', maxPosts = 100, strategy = 'auto', saveJson = false } = options;
+    const { subreddit = 'UofT', maxPosts = 100, strategy = 'auto', saveJson = false, onProgress } = options;
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+      // Increase timeout for streaming
+      const timeoutId = setTimeout(() => controller.abort(), this.timeout * 2);
 
       const response = await fetch(`${this.baseUrl}/api/scrape/subreddit`, {
         method: 'POST',
@@ -91,14 +93,55 @@ export class RedditApiClient {
         });
       }
 
-      const result = await response.json();
-      return {
-        success: result.success || false,
-        data: result.data,
-        error: result.error,
-        errorType: result.error_type,
-        traceback: result.traceback
-      };
+      if (!response.body) {
+        throw new Error('Response body is empty');
+      }
+
+      // Handle streaming response (NDJSON)
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let finalResult: RedditScrapeResult | null = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const data = JSON.parse(line);
+            
+            if (data.type === 'progress' && onProgress) {
+              onProgress(data.current, data.total, data.message);
+            } else if (data.type === 'result') {
+              finalResult = {
+                success: data.success,
+                data: data.data,
+                error: data.error,
+                errorType: data.error_type,
+                traceback: data.traceback
+              };
+            } else if (data.type === 'error') {
+               throw new Error(data.error || 'Unknown error from stream');
+            }
+          } catch (e) {
+            console.warn('Failed to parse NDJSON line:', line);
+          }
+        }
+      }
+
+      if (finalResult) {
+        return finalResult;
+      }
+      
+      // Fallback for non-streaming response or empty stream
+      throw new Error('Stream ended without result');
+
     } catch (error: any) {
       if (error instanceof ScraperError) {
         throw error;

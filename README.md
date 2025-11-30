@@ -31,7 +31,8 @@ A powerful, multi-platform tool to scrape, archive, and analyze content from Twi
 
 **Zero Data Gaps**: If a session fails during a time chunk, the next session **retries the same chunk** to ensure no data is lost.
 
-**Dual Scraping Modes**: 
+**Dual Scraping Modes**:
+
 - **GraphQL API Mode**: Fast, lightweight scraping (< 800 tweets)
 - **Puppeteer DOM Mode**: Deep archival scraping (unlimited depth)
 - **Mixed Mode**: Automatically switches from API to Puppeteer when limits are reached
@@ -64,6 +65,23 @@ cd frontend && pnpm install && cd ..
 2. Save the JSON file to `cookies/` directory (e.g., `cookies/my-account.json`)
 3. For multi-account rotation, add multiple cookie files to `cookies/`
 
+### Optional: Configure Proxy (Optional)
+
+Proxy is an **optional feature** and is disabled by default. Most users don't need it.
+
+**To enable proxy:**
+
+1. Create a `proxy/` directory in the project root
+2. Add proxy files (`.txt` format) with format: `IP:PORT:USERNAME:PASSWORD` (one per line)
+3. Enable the "Enable Proxy" option in the web interface when creating a task
+
+**Example proxy file:**
+
+```
+123.45.67.89:8080:user1:pass1
+123.45.67.90:8080:user2:pass2
+```
+
 ### Start the Web Interface
 
 ```bash
@@ -94,12 +112,17 @@ node dist/cli.js twitter -u elonmusk -c 2000 --mode puppeteer
 ## 🚀 Key Features
 
 ### 🔥 Deep Search (Date Chunking)
+
 Bypasses the ~800 tweet hard limit by automatically splitting timeframes into monthly chunks. Scrapes from newest to oldest with **no depth limit**.
 
+**🚀 Accelerated with Browser Pool**: When enabled, automatically uses browser pool to process multiple date chunks in parallel (2-3x faster).
+
 ### 🔄 Multi-Account Rotation
+
 Automatically rotates between multiple cookie files when rate limits are detected, ensuring continuous scraping without interruption.
 
 ### 📊 Multiple Scraping Modes
+
 - **User Profiles**: Tweets, replies, pinned tweets
 - **Threads**: Complete conversation threads with nested replies
 - **Search**: Advanced search with keywords, hashtags, date ranges
@@ -108,18 +131,21 @@ Automatically rotates between multiple cookie files when rate limits are detecte
 - **Reddit**: Subreddits and individual posts with comments
 
 ### 🛡️ Resilient Architecture
+
 - **Progress Management**: Resume interrupted scrapes from checkpoints
 - **Error Recovery**: Automatic retry on failures with error snapshotting
 - **Performance Monitoring**: Real-time metrics and resource usage tracking
 - **Browser Pool**: Reuses browser instances for better performance
 
 ### 🎨 Modern Web Interface
+
 - **Session Manager**: Upload and validate cookie files via UI
 - **Real-time Progress**: Live updates with progress bars and log streaming
 - **Performance Dashboard**: View scraping speed and success rates
 - **API Key Protection**: Optional authentication for secure deployments
 
 ### 🤖 AI-Powered Analysis
+
 - **Persona Mode**: Generates AI prompts based on scraped user data
 - **Smart Exports**: Clean Markdown and JSON optimized for LLM context windows
 

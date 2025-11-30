@@ -18,9 +18,16 @@ export interface ScraperEngineOptions {
   apiOnly?: boolean;
   /** 依赖注入（用于测试和自定义配置） */
   dependencies?: ScraperDependencies;
-  /** 浏览器池选项（如果提供，将使用浏览器池复用浏览器实例） */
+  /** 
+   * 浏览器池选项（可选功能，默认关闭）
+   * 仅在需要批量爬取多个任务时启用，可以复用浏览器实例节省启动时间
+   * 对于单任务场景，每次创建新浏览器即可，不需要启用此功能
+   */
   browserPoolOptions?: BrowserPoolOptions;
-  /** 浏览器池实例（如果提供，直接使用此实例） */
+  /** 
+   * 浏览器池实例（可选功能，默认关闭）
+   * 如果提供，直接使用此实例；否则根据 browserPoolOptions 创建
+   */
   browserPool?: BrowserPool;
 }
 
@@ -51,6 +58,13 @@ export interface ScrapeTimelineConfig {
   /** Internal use: offset progress current/target when doing mixed模式 DOM 续跑 */
   progressBase?: number;
   progressTarget?: number;
+  /** 
+   * 并行处理chunks的数量（仅适用于日期分块模式）
+   * 默认：1（串行处理）
+   * 建议：2-3（避免触发Twitter限流）
+   * 需要浏览器池支持，会自动启用浏览器池
+   */
+  parallelChunks?: number;
 }
 
 export interface ScrapeTimelineResult {
