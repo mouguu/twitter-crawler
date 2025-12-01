@@ -69,28 +69,25 @@ class RedditScraper:
         self.skipped_count = 0
         self.error_count = 0
     
-    def scrape(
-        self,
-        max_posts: int = 100,
-        sort_type: str = 'hot',
-        keywords: Optional[List[str]] = None,
-        progress_callback: Optional[Callable] = None
-    ) -> Dict[str, Any]:
+    def scrape(self, max_posts: int = 100, sort_type: str = 'new', progress_callback: Optional[Callable] = None, keywords: Optional[List[str]] = None, log_callback: Optional[Callable] = None) -> Dict[str, Any]:
         """
         Main scraping method
         
         Args:
             max_posts: Maximum number of posts to scrape
-            sort_type: Sort type (hot/new/top/best/rising)
-            keywords: Optional keywords for search strategy
-            progress_callback: Progress callback function
-            
-        Returns:
-            Dict with scraping results
+            sort_type: Sort type for subreddit scraping
+            progress_callback: Callback(current, total, message)
+            keywords: Keywords to filter by (subreddit mode only)
+            log_callback: Callback(message, level) for streaming logs
         """
-        print(f"🚀 开始 Reddit 爬取")
-        print(f"📊 目标: {max_posts} 个帖子")
-        print("=" * 60)
+        def log(msg, level='info'):
+            if log_callback:
+                log_callback(msg, level)
+            print(msg, flush=True)
+
+        log(f"🚀 开始 Reddit 爬取")
+        log(f"📊 目标: {max_posts} 个帖子")
+        print("=" * 60, flush=True)
         
         start_time = time.time()
         
@@ -111,74 +108,107 @@ class RedditScraper:
             )
         
         if not post_urls:
-            print("❌ 没有获取到帖子URL")
+            log("❌ 没有获取到帖子URL", 'error')
             return {'status': 'error', 'message': 'No posts found'}
         
-        print(f"\n📊 获取到 {len(post_urls)} 个候选帖子URL")
+        log(f"📊 获取到 {len(post_urls)} 个候选帖子URL")
         
         # Step 2: Filter already scraped posts
-        print("🔍 过滤已存在的帖子...")
+        log("🔍 过滤已存在的帖子...")
         post_urls = self._filter_existing_posts(post_urls)
-        print(f"✅ 去重后剩余 {len(post_urls)} 个新帖子")
+        log(f"✅ 去重后剩余 {len(post_urls)} 个新帖子")
         
         if len(post_urls) == 0:
-            print("⚠️ 所有帖子都已存在于数据库中")
+            log("⚠️ 所有帖子都已存在于数据库中", 'warning')
             return {'status': 'success', 'scraped_count': 0, 'message': 'All posts already scraped'}
         
         # Step 3: Scrape post details
-        print(f"\n🎯 开始抓取 {len(post_urls)} 个帖子...")
-        print("=" * 60)
+        log(f"🎯 开始抓取 {len(post_urls)} 个帖子 (并发数: 5)...")
+        print("=" * 60, flush=True)
+        
+        # Update progress target to actual count
+        if progress_callback:
+            progress_callback(0, len(post_urls), f"Starting scrape of {len(post_urls)} posts")
         
         scraped_posts = []
-        for i, (post_url, post_id) in enumerate(post_urls, 1):
+        
+        import concurrent.futures
+        
+        # Helper function for thread pool
+        def process_post(args):
+            idx, p_url, p_id = args
+            
+            # Check if we should stop (best effort)
             if self.scraped_count >= max_posts:
-                print(f"\n🎉 已达到目标！停止处理")
-                break
+                return None
+                
+            log(f"[{idx}/{len(post_urls)}] 处理帖子: {p_id}")
             
-            print(f"\n[{i}/{len(post_urls)}] 处理帖子: {post_id}")
+            # Pass log_callback to scrape_post so its logs are streamed
+            res = self.post_scraper.scrape_post(p_url, log_callback=log_callback)
             
-            result = self.post_scraper.scrape_post(post_url)
-            
-            if result and result.get('status') == 'success':
+            if res and res.get('status') == 'success':
                 # Extract post and comments from the result
-                post_data = result['post']
-                post_data['comments'] = result['comments']  # Add comments to post data
+                post_data = res['post']
+                post_data['comments'] = res['comments']  # Add comments to post data
                 
-                scraped_posts.append(post_data)
-                self.scraped_count += 1
-                
-                # Save to database
-                if local_data_manager.save_post(post_data):
-                    print(f"✅ {post_data['title'][:50]}...")
-                    print(f"    👤 作者: {post_data['author']} | 📈 分数: {post_data['score']} | 💬 评论: {len(post_data['comments'])}")
-                else:
-                    print(f"❌ 保存失败")
-                
-                if progress_callback:
-                    try:
-                        progress_callback(self.scraped_count, max_posts, f"Scraped: {post_data['title'][:30]}...")
-                    except:
-                        pass
+                # Save immediately (thread-safe due to lock in local_storage)
+                saved = local_data_manager.save_post(post_data)
+                if saved:
+                    # log(f"✅ Saved: {post_data['title'][:30]}...")
+                    pass
+                return res
+            else:
+                log(f"❌ 帖子 {p_id} 抓取失败: {res.get('message')}", 'error')
+                return None
+
+        # Prepare arguments
+        tasks = []
+        for i, (post_url, post_id) in enumerate(post_urls, 1):
+            tasks.append((i, post_url, post_id))
             
-            # Rate limiting
-            if i < len(post_urls):
-                delay = self.rate_controller.get_delay()
-                time.sleep(delay)
+        # Run with thread pool
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            future_to_url = {executor.submit(process_post, task): task for task in tasks}
+            
+            completed_count = 0
+            for future in concurrent.futures.as_completed(future_to_url):
+                try:
+                    result = future.result()
+                    completed_count += 1
+                    
+                    if result and result.get('status') == 'success':
+                        self.scraped_count += 1
+                        scraped_posts.append(result)
+                        
+                    # Update progress
+                    if progress_callback:
+                        progress_callback(completed_count, len(post_urls), f"Processed {completed_count}/{len(post_urls)} posts")
+                        
+                    if self.scraped_count >= max_posts:
+                        executor.shutdown(wait=False, cancel_futures=True)
+                        break
+                        
+                except Exception as exc:
+                    log(f"❌ 线程异常: {exc}", 'error')
         
         # Print final stats
         elapsed_time = time.time() - start_time
-        print("\n" + "=" * 60)
-        print("🎉 爬取完成！")
-        print("=" * 60)
-        print(f"📊 统计信息:")
-        print(f"   ✅ 成功抓取: {self.scraped_count} 个帖子")
-        print(f"   ⏱️  总耗时: {elapsed_time/60:.1f} 分钟")
-        print(f"   ⚡ 平均速度: {elapsed_time/max(1, self.scraped_count):.1f} 秒/帖")
-        print(f"   🗄️  数据库总帖子数: {local_data_manager.get_posts_count()}")
-        print("=" * 60)
+        print("\n" + "=" * 60, flush=True)
+        print("🎉 爬取完成！", flush=True)
+        print("=" * 60, flush=True)
+        print(f"📊 统计信息:", flush=True)
+        print(f"   ✅ 成功抓取: {self.scraped_count} 个帖子", flush=True)
+        print(f"   ⏱️  总耗时: {elapsed_time/60:.1f} 分钟", flush=True)
+        try:
+            print(f"   ⚡ 平均速度: {elapsed_time/max(1, self.scraped_count):.1f} 秒/帖", flush=True)
+            print(f"   🗄️  数据库总帖子数: {local_data_manager.get_posts_count()}", flush=True)
+        except:
+            pass
+        print("=" * 60, flush=True)
         
         # Auto-export to Markdown with user comment filter
-        print("\n📝 自动导出Markdown...")
+        print("\n📝 自动导出Markdown...", flush=True)
         try:
             from export_to_markdown import export_to_markdown
             json_dir = local_data_manager.json_dir
@@ -188,14 +218,15 @@ class RedditScraper:
             username = self.target_name
             
             export_to_markdown(json_dir, export_file, filter_username=username)
-            print(f"✅ 已导出过滤版本（只包含 u/{username} 的评论）")
-            print(f"📄 文件位置: {export_file}")
+            print(f"✅ 已导出过滤版本（只包含 u/{username} 的评论）", flush=True)
+            print(f"📄 文件位置: {export_file}", flush=True)
         except Exception as e:
-            print(f"⚠️ 导出失败: {e}")
+            print(f"⚠️ 导出失败: {e}", flush=True)
         
         return {
             'status': 'success',
             'scraped_count': self.scraped_count,
+            'message': 'Scraping completed successfully',
             'total_posts_in_db': local_data_manager.get_posts_count(),
             'elapsed_time': elapsed_time
         }
@@ -226,23 +257,20 @@ def scrape_reddit(
     max_posts: int = 100,
     sort_type: str = 'hot',
     keywords: Optional[List[str]] = None,
-    progress_callback: Optional[Callable] = None
+    progress_callback: Optional[Callable] = None,
+    log_callback: Optional[Callable] = None
 ) -> Dict[str, Any]:
     """
-    Convenience function to scrape Reddit
-    
-    Args:
-        target: Subreddit or user to scrape (r/python or u/spez)
-        max_posts: Maximum posts to scrape
-        sort_type: Sort type
-        keywords: Optional search keywords
-        progress_callback: Progress callback
-        
-    Returns:
-        Dict with scraping results
+    Convenience function to run the scraper
     """
     scraper = RedditScraper(target)
-    return scraper.scrape(max_posts, sort_type, keywords, progress_callback)
+    return scraper.scrape(
+        max_posts=max_posts, 
+        sort_type=sort_type, 
+        keywords=keywords,
+        progress_callback=progress_callback,
+        log_callback=log_callback
+    )    
 
 
 if __name__ == "__main__":

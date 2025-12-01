@@ -153,32 +153,31 @@ class RedditPostScraper:
         
         return comments
     
-    def scrape_post(self, post_url: str) -> Dict[str, Any]:
+    def scrape_post(self, post_url: str, log_callback: Optional[Callable] = None) -> Dict[str, Any]:
         """
         Scrape a single Reddit post with all nested comments
         
         Args:
             post_url: Reddit post URL
+            log_callback: Optional callback for logging
             
         Returns:
-            dict: {
-                'status': 'success' or 'error',
-                'post': {...},  # Post metadata
-                'comments': [...],  # Flattened comment list
-                'comment_count': int,
-                'hidden_comment_count': int,
-                'raw_json': {...}  # Original JSON response
-            }
+            dict: Result dictionary
         """
+        def log(msg):
+            if log_callback:
+                log_callback(msg)
+            print(msg)
+
         try:
             # Step 1: Parse URL
-            print(f"🔍 Parsing URL...")
+            # log(f"🔍 Parsing URL...")
             url_info = self.parse_reddit_url(post_url)
             post_id = url_info['post_id']
             subreddit = url_info['subreddit']
             
             # Step 2: Fetch JSON data
-            print(f"📥 Fetching post data for ID: {post_id}")
+            log(f"📥 Fetching post data for ID: {post_id}")
             
             # Use canonical URL for fetching
             if subreddit:
@@ -223,16 +222,16 @@ class RedditPostScraper:
                 'over_18': post_data.get('over_18', False),
             }
             
-            print(f"✅ Post: '{post['title'][:60]}...' by u/{post['author']}")
-            print(f"📊 Stats: {post['score']} points, {post['num_comments']} comments")
+            log(f"✅ Post: '{post['title'][:60]}...' by u/{post['author']}")
+            # log(f"📊 Stats: {post['score']} points, {post['num_comments']} comments")
             
             # Step 4: Parse comments (second listing)
             comments = []
             if len(json_data) >= 2:
-                print(f"🔄 Parsing comment tree...")
+                # log(f"🔄 Parsing comment tree...")
                 comment_listing = json_data[1]
                 comments = self.parse_comment_tree(comment_listing, depth=0, parent_id=post['id'])
-                print(f"✅ Parsed {len(comments)} comments")
+                # log(f"✅ Parsed {len(comments)} comments")
             
             return {
                 'status': 'success',

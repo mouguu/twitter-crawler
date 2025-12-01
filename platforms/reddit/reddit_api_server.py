@@ -49,44 +49,64 @@ def scrape_subreddit():
             strategy = 'new'
             
     def generate():
-        # Use a queue or similar if we want real streaming, 
-        # but for now we'll just yield the final result as a single event
-        # because the new scraper is synchronous. 
-        # To make it truly streaming, we'd need to pass a callback that yields events.
+        import threading
+        import queue
         
-        result_container = {}
+        # Queue for communicating between threads
+        msg_queue = queue.Queue()
         
         def progress_callback(current, total, message):
-            # This is where we could yield progress events
-            pass
+            msg_queue.put({
+                'type': 'progress',
+                'current': current,
+                'total': total,
+                'message': message
+            })
             
-        try:
-            result = scrape_reddit(
-                target=f"r/{subreddit}",
-                max_posts=max_posts,
-                sort_type=strategy,
-                progress_callback=progress_callback
-            )
-            
-            # 发送最终结果
-            final_data = {
-                'type': 'result',
-                'success': result.get('status') == 'success',
-                'data': result,
-                'message': result.get('message', 'Scraping completed')
-            }
-            yield json.dumps(final_data) + '\n'
-            
-        except Exception as e:
-            error_data = {
-                'type': 'error',
-                'success': False,
-                'error': str(e),
-                'error_type': type(e).__name__,
-                'traceback': traceback.format_exc()
-            }
-            yield json.dumps(error_data) + '\n'
+        def log_callback(message, level='info'):
+            msg_queue.put({
+                'type': 'log',
+                'message': message,
+                'level': level
+            })
 
+        def run_scraper():
+            try:
+                result = scrape_reddit(
+                    target=f"r/{subreddit}",
+                    max_posts=max_posts,
+                    sort_type=strategy,
+                    progress_callback=progress_callback,
+                    log_callback=log_callback
+                )
+                msg_queue.put({
+                    'type': 'result',
+                    'success': result.get('status') == 'success',
+                    'data': result,
+                    'message': result.get('message', 'Scraping completed')
+                })
+            except Exception as e:
+                msg_queue.put({
+                    'type': 'error',
+                    'success': False,
+                    'error': str(e),
+                    'error_type': type(e).__name__,
+                    'traceback': traceback.format_exc()
+                })
+            finally:
+                msg_queue.put(None) # Signal end
+        
+        # Start scraper in a separate thread
+        thread = threading.Thread(target=run_scraper)
+        thread.start()
+        
+        # Yield messages from queue
+        while True:
+            msg = msg_queue.get()
+            if msg is None:
+                break
+            yield json.dumps(msg) + '\n'
+            
     return Response(stream_with_context(generate()), mimetype='application/x-ndjson')
 
 @app.route('/api/scrape/post', methods=['POST'])

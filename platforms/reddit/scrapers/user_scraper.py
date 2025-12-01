@@ -20,7 +20,8 @@ class UserScraper:
         self,
         username: str,
         max_posts: int,
-        progress_callback: Optional[Callable] = None
+        progress_callback: Optional[Callable] = None,
+        log_callback: Optional[Callable] = None
     ) -> List[Tuple[str, str]]:
         """
         Fetch posts from a user's profile (/user/USERNAME/overview.json)
@@ -29,11 +30,17 @@ class UserScraper:
             username: Reddit username
             max_posts: Maximum posts to fetch
             progress_callback: Progress callback
+            log_callback: Log callback
             
         Returns:
             List of (post_url, post_id) tuples
         """
-        print(f"👤 抓取用户资料: u/{username}")
+        def log(msg):
+            if log_callback:
+                log_callback(msg)
+            print(msg, flush=True)
+
+        log(f"👤 抓取用户资料: u/{username}")
         
         # User profiles use 'new' sort by default
         post_urls = self.paginated_strategy.fetch_posts(
@@ -41,11 +48,12 @@ class UserScraper:
             max_posts=max_posts,
             progress_callback=progress_callback,
             sort_type='new',
-            is_user_mode=True
+            is_user_mode=True,
+            log_callback=log_callback
         )
         
         # User profiles are often smaller, note if we got everything
         if len(post_urls) < max_posts:
-            print(f"ℹ️ 用户资料已全部获取完毕 (共 {len(post_urls)} 条)")
+            log(f"ℹ️ 用户资料已全部获取完毕 (共 {len(post_urls)} 条)")
         
         return post_urls

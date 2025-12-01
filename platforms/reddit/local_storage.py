@@ -2,6 +2,7 @@ import os
 import json
 import csv
 import time
+import threading
 from datetime import datetime
 
 class LocalDataManager:
@@ -10,22 +11,34 @@ class LocalDataManager:
     Replaces Supabase with local JSON/CSV files.
     """
     def __init__(self, base_output_dir="./output/reddit"):
+        # Convert to absolute path to avoid issues with working directory
+        if not os.path.isabs(base_output_dir):
+            base_output_dir = os.path.abspath(base_output_dir)
+        
         self.base_output_dir = base_output_dir
         self.current_session_dir = None
         self.posts_file = None
         self.csv_file = None
         self.existing_ids = set()
+        self.lock = threading.Lock()
         self._initialize_session()
 
     def _initialize_session(self):
         """Initialize a new scraping session directory"""
         timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
         self.current_session_dir = os.path.join(self.base_output_dir, f"run-{timestamp}")
+        
+        # Ensure base directory exists
+        os.makedirs(self.base_output_dir, exist_ok=True)
+        
+        # Create session directory
         os.makedirs(self.current_session_dir, exist_ok=True)
         
         # Create data directories
         self.json_dir = os.path.join(self.current_session_dir, "json")
         os.makedirs(self.json_dir, exist_ok=True)
+        
+        print(f"📁 Session directory: {self.current_session_dir}")
         
         # Initialize CSV file
         self.csv_path = os.path.join(self.current_session_dir, "posts.csv")
@@ -60,26 +73,35 @@ class LocalDataManager:
             print(f"⚠️ Save failed: Missing post ID in data")
             return False
             
-        if post_id in self.existing_ids:
-            print(f"⚠️ Save failed: Post {post_id} already exists in current session")
-            return False
+        with self.lock:
+            if post_id in self.existing_ids:
+                print(f"ℹ️ Skipping duplicate post: {post_id}")
+                return False
 
-        try:
-            # Save JSON
-            json_path = os.path.join(self.json_dir, f"{post_id}.json")
-            with open(json_path, 'w', encoding='utf-8') as f:
-                json.dump(post_data, f, ensure_ascii=False, indent=2)
+            try:
+                # Ensure JSON directory exists (failsafe)
+                if not os.path.exists(self.json_dir):
+                    print(f"⚠️ JSON directory missing, recreating: {self.json_dir}")
+                    os.makedirs(self.json_dir, exist_ok=True)
 
-            # Save to CSV
-            self._append_to_csv(post_data)
-            
-            self.existing_ids.add(post_id)
-            return True
-        except Exception as e:
-            print(f"❌ Save failed for {post_id}: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            return False
+                # Save JSON
+                json_path = os.path.join(self.json_dir, f"{post_id}.json")
+                with open(json_path, 'w', encoding='utf-8') as f:
+                    json.dump(post_data, f, ensure_ascii=False, indent=2)
+
+                # Save to CSV
+                self._append_to_csv(post_data)
+                
+                self.existing_ids.add(post_id)
+                return True
+            except Exception as e:
+                print(f"❌ Save failed for {post_id}: {str(e)}")
+                print(f"   CWD: {os.getcwd()}")
+                print(f"   JSON Dir: {self.json_dir}")
+                print(f"   Exists? {os.path.exists(self.json_dir)}")
+                import traceback
+                traceback.print_exc()
+                return False
 
     def save_posts_batch(self, posts):
         """Save a batch of posts"""

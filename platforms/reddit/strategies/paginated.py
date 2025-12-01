@@ -89,80 +89,96 @@ class PaginatedStrategy(ScrapingStrategy):
                 consecutive_errors = 0
                 response.raise_for_status()
                 
+                
                 try:
+                    print("📦 Parsing JSON...", end=" ", flush=True)
                     data = response.json()
+                    print("✓", end=" ", flush=True)
                 except ValueError as e:
-                    print(f"❌ JSON解析失败: {e}")
+                    print(f"\n❌ JSON解析失败: {e}")
                     break
-                    
-                posts = data['data']['children']
+                
+                try:
+                    posts = data['data']['children']
+                    print(f"Found {len(posts)} posts", end=" ", flush=True)
+                except (KeyError, TypeError) as e:
+                    print(f"\n❌ 数据结构错误: {e}")
+                    print(f"Data keys: {data.keys() if isinstance(data, dict) else 'N/A'}")
+                    break
 
                 if not posts:
-                    print("✅ 已获取所有可用帖子")
+                    print("\n✅ 已获取所有可用帖子", flush=True)
                     break
 
                 new_posts = 0
-                for post in posts:
-                    if len(post_urls) >= max_posts:
-                        break
+                print(f"Processing {len(posts)} posts...", end=" ", flush=True)
+                
+                try:
+                    for idx, post in enumerate(posts, 1):
+                        try:
+                            if len(post_urls) >= max_posts:
+                                break
+                            
+                            try:
+                                post_data = post['data']
+                                post_id = post_data['id']
+                                post_url = f"https://www.reddit.com{post_data['permalink']}"
+                                post_urls.append((post_url, post_id))
+                                new_posts += 1
+                                
+                                # Show progress every 25 posts
+                                if idx % 25 == 0:
+                                    print(f"{idx}...", end=" ", flush=True)
+                            except (KeyError, TypeError) as e:
+                                print(f"\n⚠️ 跳过格式异常的帖子 #{idx}: {e}", flush=True)
+                                continue
+                        except Exception as e:
+                            print(f"\n❌ 处理帖子 #{idx} 时发生未知错误: {type(e).__name__}: {e}", flush=True)
+                            continue
+                except Exception as e:
+                    print(f"\n❌ enumerate循环错误: {type(e).__name__}: {e}", flush=True)
+                    break
 
-                    post_data = post['data']
-                    post_id = post_data['id']
-                    post_url = f"https://www.reddit.com{post_data['permalink']}"
-                    post_urls.append((post_url, post_id))
-                    new_posts += 1
-
-                print(f"新增 {new_posts} 个")
+                print(f"新增 {new_posts} 个", flush=True)
 
                 # Optimization: If we got fewer posts than the limit (100), we've reached the end
                 if len(posts) < 100:
-                    print(f"✅ 本页只有 {len(posts)} 个帖子 (<100)，已到达末尾")
+                    print(f" ✅ 本页只有 {len(posts)} 个帖子 (<100)，已到达末尾", flush=True)
                     break
 
                 # Get next page
                 after = data['data']['after']
                 if not after:
-                    print(" ✅ 已到达最后一页")
+                    print(" ✅ 已到达最后一页", flush=True)
                     break
 
                 page += 1
-
+            
             except requests.exceptions.Timeout:
                 consecutive_timeouts += 1
-                print(f"⏱️ 请求超时 (10s) [连续{consecutive_timeouts}次]")
-                
-                if consecutive_timeouts >= MAX_CONSECUTIVE_TIMEOUTS:
-                    if len(post_urls) > 0:
-                        print(f"💡 连续超时{MAX_CONSECUTIVE_TIMEOUTS}次，已收集 {len(post_urls)} 个帖子，停止搜索")
-                        break
-                    else:
-                        print("❌ 连续超时，放弃")
-                        break
-                else:
-                    print(f"💡 跳过此页继续")
-                    if after:
-                        page += 1
-                        continue
-                    else:
-                        break
+                print(f"⏱️ 请求超时 (10s) [连续{consecutive_timeouts}次]", flush=True)
+                if consecutive_timeouts >= 3:
+                    print("❌ 连续超时过多，放弃", flush=True)
+                    break
+                time.sleep(2)
                         
             except Exception as e:
                 consecutive_errors += 1
-                print(f"❌ 第 {page} 页获取失败: {e} [连续{consecutive_errors}次]")
+                print(f"❌ 第 {page} 页获取失败: {e} [连续{consecutive_errors}次]", flush=True)
                 
                 if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
                     if len(post_urls) > 0:
-                        print(f"💡 连续错误{MAX_CONSECUTIVE_ERRORS}次，停止搜索")
+                        print(f"💡 连续错误{MAX_CONSECUTIVE_ERRORS}次，停止搜索", flush=True)
                         break
                     else:
                         break
                 else:
                     if len(post_urls) > 0 and after:
-                        print(f"💡 跳过此页继续")
+                        print(f"💡 跳过此页继续", flush=True)
                         page += 1
                         continue
                     else:
                         break
 
-        print(f" 📊 总共获取到 {len(post_urls)} 个URL")
+        print(f"\n 📊 总共获取到 {len(post_urls)} 个URL", flush=True)
         return post_urls
