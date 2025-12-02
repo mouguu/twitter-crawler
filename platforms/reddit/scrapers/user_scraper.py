@@ -48,8 +48,7 @@ class UserScraper:
             max_posts=max_posts,
             progress_callback=progress_callback,
             sort_type='new',
-            is_user_mode=True,
-            log_callback=log_callback
+            is_user_mode=True
         )
         
         # User profiles are often smaller, note if we got everything

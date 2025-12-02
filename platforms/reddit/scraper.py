@@ -144,22 +144,27 @@ class RedditScraper:
                 
             log(f"[{idx}/{len(post_urls)}] 处理帖子: {p_id}")
             
-            # Pass log_callback to scrape_post so its logs are streamed
-            res = self.post_scraper.scrape_post(p_url, log_callback=log_callback)
-            
-            if res and res.get('status') == 'success':
-                # Extract post and comments from the result
-                post_data = res['post']
-                post_data['comments'] = res['comments']  # Add comments to post data
+            try:
+                # Pass log_callback to scrape_post so its logs are streamed
+                res = self.post_scraper.scrape_post(p_url, log_callback=log_callback)
                 
-                # Save immediately (thread-safe due to lock in local_storage)
-                saved = local_data_manager.save_post(post_data)
-                if saved:
-                    # log(f"✅ Saved: {post_data['title'][:30]}...")
-                    pass
-                return res
-            else:
-                log(f"❌ 帖子 {p_id} 抓取失败: {res.get('message')}", 'error')
+                if res and res.get('status') == 'success':
+                    # Extract post and comments from the result
+                    post_data = res['post']
+                    post_data['comments'] = res['comments']  # Add comments to post data
+                    
+                    # Save immediately (thread-safe due to lock in local_storage)
+                    saved = local_data_manager.save_post(post_data)
+                    if saved:
+                        # log(f"✅ Saved: {post_data['title'][:30]}...")
+                        pass
+                    return res
+                else:
+                    log(f"❌ 帖子 {p_id} 抓取失败: {res.get('message') if res else 'Unknown error'}", 'error')
+                    return None
+            except Exception as e:
+                log(f"❌ 帖子 {p_id} 处理异常: {str(e)}", 'error')
+                self.error_count += 1
                 return None
 
         # Prepare arguments
@@ -172,9 +177,13 @@ class RedditScraper:
             future_to_url = {executor.submit(process_post, task): task for task in tasks}
             
             completed_count = 0
-            for future in concurrent.futures.as_completed(future_to_url):
+            # Use timeout for each future to prevent hanging
+            TIMEOUT_PER_TASK = 60  # 60 seconds per task
+            
+            for future in concurrent.futures.as_completed(future_to_url, timeout=None):
                 try:
-                    result = future.result()
+                    # Add timeout to prevent hanging on individual tasks
+                    result = future.result(timeout=TIMEOUT_PER_TASK)
                     completed_count += 1
                     
                     if result and result.get('status') == 'success':
@@ -186,11 +195,30 @@ class RedditScraper:
                         progress_callback(completed_count, len(post_urls), f"Processed {completed_count}/{len(post_urls)} posts")
                         
                     if self.scraped_count >= max_posts:
-                        executor.shutdown(wait=False, cancel_futures=True)
+                        # Cancel remaining futures
+                        for f in future_to_url:
+                            f.cancel()
                         break
                         
+                except concurrent.futures.TimeoutError:
+                    task = future_to_url[future]
+                    idx, p_url, p_id = task
+                    log(f"⏱️ 帖子 {p_id} 处理超时 (>{TIMEOUT_PER_TASK}s)，跳过", 'warning')
+                    self.error_count += 1
+                    completed_count += 1
+                    if progress_callback:
+                        progress_callback(completed_count, len(post_urls), f"Processed {completed_count}/{len(post_urls)} posts (timeout)")
                 except Exception as exc:
-                    log(f"❌ 线程异常: {exc}", 'error')
+                    task = future_to_url.get(future)
+                    if task:
+                        idx, p_url, p_id = task
+                        log(f"❌ 帖子 {p_id} 线程异常: {exc}", 'error')
+                    else:
+                        log(f"❌ 线程异常: {exc}", 'error')
+                    self.error_count += 1
+                    completed_count += 1
+                    if progress_callback:
+                        progress_callback(completed_count, len(post_urls), f"Processed {completed_count}/{len(post_urls)} posts (error)")
         
         # Print final stats
         elapsed_time = time.time() - start_time

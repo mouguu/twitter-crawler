@@ -405,6 +405,9 @@ app.post(
                           action: message,
                         });
                       },
+                      onLog: (message, level = 'info') => {
+                        eventBusInstance.emitLog(message, level as any);
+                      },
                     });
                   }
 

@@ -12,6 +12,7 @@ export interface RedditScrapeOptions {
   strategy?: 'auto' | 'super_full' | 'super_recent' | 'new';
   saveJson?: boolean;
   onProgress?: (current: number, total: number, message: string) => void;
+  onLog?: (message: string, level?: string) => void;
 }
 
 export interface RedditScrapeResult {
@@ -60,7 +61,7 @@ export class RedditApiClient {
    * 爬取 subreddit
    */
   async scrapeSubreddit(options: RedditScrapeOptions): Promise<RedditScrapeResult> {
-    const { subreddit = 'UofT', maxPosts = 100, strategy = 'auto', saveJson = false, onProgress } = options;
+    const { subreddit = 'UofT', maxPosts = 100, strategy = 'auto', saveJson = false, onProgress, onLog } = options;
 
     try {
       const controller = new AbortController();
@@ -118,6 +119,8 @@ export class RedditApiClient {
             
             if (data.type === 'progress' && onProgress) {
               onProgress(data.current, data.total, data.message);
+            } else if (data.type === 'log' && onLog) {
+              onLog(data.message || '', data.level || 'info');
             } else if (data.type === 'result') {
               finalResult = {
                 success: data.success,
