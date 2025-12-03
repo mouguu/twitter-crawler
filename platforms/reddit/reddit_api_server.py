@@ -201,7 +201,7 @@ def status():
 
 if __name__ == '__main__':
     port = int(os.environ.get('REDDIT_API_PORT', 5002))
-    host = os.environ.get('REDDIT_API_HOST', '127.0.0.1')
+    host = os.environ.get('REDDIT_API_HOST', '0.0.0.0')  # bind all interfaces for container access
     
     print(f"🚀 Starting Reddit API Server on {host}:{port}")
     app.run(host=host, port=port, debug=False)
