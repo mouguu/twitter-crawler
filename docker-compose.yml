@@ -37,7 +37,7 @@ services:
       - ./data:/app/data
       - ./data/output:/app/output
       - ./data/cookies:/app/cookies
-    command: ["node", "dist/worker.js"]
+    command: ["node", "dist/cmd/start-worker.js"]
     restart: unless-stopped
 
 volumes:

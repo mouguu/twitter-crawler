@@ -17,8 +17,7 @@
         "middleware/**/*",
         "tests/**/*",
         "server/**/*",
-        "worker.ts",
-        "cli.ts"
+        "cmd/**/*"
     ],
     "exclude": [
         "node_modules",

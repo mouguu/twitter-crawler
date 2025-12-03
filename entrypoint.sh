@@ -5,4 +5,4 @@ set -e
 mkdir -p /app/data/output /app/data/cookies
 
 
-exec node dist/server/index.js
+exec node dist/cmd/start-server.js
