@@ -4,11 +4,11 @@
  * Starts the BullMQ worker process for scraping jobs
  */
 
-import { createScrapeWorker, shutdownWorker } from './core/queue/worker';
-import { closeScrapeQueue } from './core/queue/scrape-queue';
-import { closeRedisConnections } from './core/queue/connection';
-import { createEnhancedLogger } from './utils/logger';
-import { getConfigManager } from './utils/config-manager';
+import { createScrapeWorker, shutdownWorker } from '../core/queue/worker';
+import { closeScrapeQueue } from '../core/queue/scrape-queue';
+import { closeRedisConnections } from '../core/queue/connection';
+import { createEnhancedLogger } from '../utils/logger';
+import { getConfigManager } from '../utils/config-manager';
 
 const logger = createEnhancedLogger('WorkerMain');
 const config = getConfigManager();

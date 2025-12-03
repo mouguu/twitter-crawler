@@ -16,7 +16,7 @@ import multer from "multer";
 import { createBullBoard } from '@bull-board/api';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
-import jobRoutes from './routes/jobs';
+import jobRoutes from '../server/routes/jobs';
 
 // 创建服务器日志器
 const serverLogger = createEnhancedLogger("Server");
