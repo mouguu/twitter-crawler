@@ -109,6 +109,14 @@ node dist/cli.js twitter -u elonmusk -c 2000 --mode puppeteer
 
 **📖 For detailed installation and configuration, see [Installation Guide](./docs/INSTALLATION.md)**
 
+## 🦀 Rust + WASM Data Cleaner
+
+- Added a Rust micro-kernel (`wasm/tweet-cleaner`) compiled to WebAssembly that normalizes and deduplicates tweet batches before they hit the pipeline.
+- Timeline DOM/API runners automatically load the WASM module when `wasm/tweet-cleaner/pkg` is present; otherwise they fall back to the TypeScript path.
+- Build once with `pnpm run build:wasm` (requires Rust + `wasm-pack`). The compiled files live in `wasm/tweet-cleaner/pkg` and can be shipped with your deployment.
+- The cleaner enforces stricter normalization for large payloads (JSON/HTML heavy runs) so CPU-heavy parsing happens outside V8.
+- Experimental Reddit parser core lives at `wasm/reddit-cleaner` with a Node helper (`utils/reddit-cleaner.ts`) for normalizing Reddit listings in a CPU-friendly way; you can build it alongside tweet-cleaner.
+
 ## 🚀 Key Features
 
 ### 🔥 Deep Search (Date Chunking)

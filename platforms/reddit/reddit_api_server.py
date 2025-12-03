@@ -16,6 +16,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from scraper import scrape_reddit
 from post_scraper import RedditPostScraper
+from output_paths import resolve_output_dir
 
 app = Flask(__name__)
 CORS(app)  # 允许跨域请求
@@ -126,12 +127,8 @@ def scrape_post():
         result = scraper.scrape_post(post_url)
         
         if result.get('status') == 'success':
-            # 获取项目根目录（reddit_api_server.py 在 platforms/reddit/ 目录下）
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            project_root = os.path.dirname(os.path.dirname(script_dir))
-            
-            # 保存到项目根目录的 output/reddit 目录
-            output_dir = os.path.join(project_root, 'output', 'reddit')
+            # 统一输出目录（支持 REDDIT_OUTPUT_DIR 环境变量）
+            output_dir = resolve_output_dir()
             os.makedirs(output_dir, exist_ok=True)
             
             post_id = result['post']['id']
@@ -208,4 +205,3 @@ if __name__ == '__main__':
     
     print(f"🚀 Starting Reddit API Server on {host}:{port}")
     app.run(host=host, port=port, debug=False)
-

@@ -7,6 +7,7 @@ import argparse
 import json
 import sys
 import os
+from output_paths import resolve_output_dir
 
 # Ensure we can import from the same directory
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -44,7 +45,7 @@ def main():
             
             if result['status'] == 'success':
                 # Save to a consistent location
-                output_dir = os.path.join(os.getcwd(), 'output', 'reddit')
+                output_dir = resolve_output_dir()
                 os.makedirs(output_dir, exist_ok=True)
                 
                 output_file = os.path.join(output_dir, f"reddit_post_{result['post']['id']}.json")

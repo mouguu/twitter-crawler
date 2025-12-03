@@ -1,13 +1,14 @@
 import type { ScrapeTimelineConfig, ScrapeTimelineResult } from './scraper-engine.types';
 import type { ScraperEngine } from './scraper-engine';
 import { ScraperErrors } from './errors';
-import { ProfileInfo, Tweet, normalizeRawTweet } from '../types';
+import { ProfileInfo, Tweet } from '../types';
 import * as fileUtils from '../utils';
 import * as markdownUtils from '../utils';
 import * as exportUtils from '../utils';
 import * as screenshotUtils from '../utils';
 import * as dataExtractor from './data-extractor';
 import * as constants from '../config/constants';
+import { cleanTweetsFast } from '../utils';
 
 const throttle = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -47,6 +48,7 @@ export async function runTimelineDom(engine: ScraperEngine, config: ScrapeTimeli
     const collectedTweets: Tweet[] = [];
     const scrapedIds = new Set<string>();
     let profileInfo: ProfileInfo | null = null;
+    let wasmCleanerLogged = false;
 
     // Session 管理（与 GraphQL 模式一致）
     const attemptedSessions = new Set<string>();
@@ -193,37 +195,38 @@ export async function runTimelineDom(engine: ScraperEngine, config: ScrapeTimeli
                     }
                 }
 
+                const cleaned = await cleanTweetsFast([], tweetsOnPage, { limit });
+                if (cleaned.usedWasm && !wasmCleanerLogged) {
+                    engine.eventBus.emitLog('Using Rust/WASM tweet cleaner for normalization/dedup.', 'info');
+                    wasmCleanerLogged = true;
+                }
+
                 let addedCount = 0;
-                for (const rawTweet of tweetsOnPage) {
+                for (const tweet of cleaned.tweets) {
                     if (collectedTweets.length >= limit) break;
+                    if (scrapedIds.has(tweet.id)) continue;
 
-                    const tweetId = rawTweet.id;
-                    if (!scrapedIds.has(tweetId)) {
-                        // 使用统一的转换函数
-                        const tweet = normalizeRawTweet(rawTweet);
-
-                        // Check stop conditions
-                        if (config.stopAtTweetId && tweet.id === config.stopAtTweetId) {
-                            engine.eventBus.emitLog(`Reached stop tweet ID: ${tweet.id}`);
+                    // Check stop conditions
+                    if (config.stopAtTweetId && tweet.id === config.stopAtTweetId) {
+                        engine.eventBus.emitLog(`Reached stop tweet ID: ${tweet.id}`);
+                        consecutiveNoNew = maxNoNew; // Stop loop
+                        break;
+                    }
+                    if (config.sinceTimestamp && tweet.time) {
+                        const tweetTime = new Date(tweet.time).getTime();
+                        if (tweetTime < config.sinceTimestamp) {
+                            engine.eventBus.emitLog(`Reached time limit: ${tweet.time}`);
                             consecutiveNoNew = maxNoNew; // Stop loop
                             break;
                         }
-                        if (config.sinceTimestamp && tweet.time) {
-                            const tweetTime = new Date(tweet.time).getTime();
-                            if (tweetTime < config.sinceTimestamp) {
-                                engine.eventBus.emitLog(`Reached time limit: ${tweet.time}`);
-                                consecutiveNoNew = maxNoNew; // Stop loop
-                                break;
-                            }
-                        }
-
-                        collectedTweets.push(tweet);
-                        scrapedIds.add(tweetId);
-                        addedCount++;
                     }
+
+                    collectedTweets.push(tweet);
+                    scrapedIds.add(tweet.id);
+                    addedCount++;
                 }
 
-                engine.eventBus.emitLog(`Extracted ${tweetsOnPage.length} tweets, added ${addedCount} new. Total: ${collectedTweets.length}`);
+                engine.eventBus.emitLog(`Extracted ${cleaned.tweets.length} cleaned tweets (raw ${tweetsOnPage.length}), added ${addedCount} new. Total: ${collectedTweets.length}`);
 
                 // Update performance monitor
                 engine.performanceMonitor.recordTweets(collectedTweets.length);
@@ -368,22 +371,20 @@ export async function runTimelineDom(engine: ScraperEngine, config: ScrapeTimeli
 
                                     // 每滚动 scrollsPerExtraction 次后，提取一次推文
                                     const tweetsOnPage = await dataExtractor.extractTweetsFromPage(engine.getPageInstance()!);
-                                    let foundNew = false;
-
-                                    for (const rawTweet of tweetsOnPage) {
-                                        if (collectedTweets.length >= limit) break;
-
-                                        const tweetId = rawTweet.id;
-                                        // 检查是否已收集（通过 ID 集合或遍历已收集的推文）
-                                        const alreadyCollected = collectedTweets.some(t => t.id === tweetId);
-                                        if (!alreadyCollected) {
-                                            const normalized = normalizeRawTweet(rawTweet);
-                                            if (normalized) {
-                                                collectedTweets.push(normalized);
-                                                foundNew = true;
-                                            }
-                                        }
+                                    const cleaned = await cleanTweetsFast([], tweetsOnPage, { limit });
+                                    if (cleaned.usedWasm && !wasmCleanerLogged) {
+                                        engine.eventBus.emitLog('Using Rust/WASM tweet cleaner for normalization/dedup.', 'info');
+                                        wasmCleanerLogged = true;
                                     }
+
+                                    const beforeCount = collectedTweets.length;
+                                    for (const tweet of cleaned.tweets) {
+                                        if (collectedTweets.length >= limit) break;
+                                        if (scrapedIds.has(tweet.id)) continue;
+                                        collectedTweets.push(tweet);
+                                        scrapedIds.add(tweet.id);
+                                    }
+                                    const foundNew = collectedTweets.length > beforeCount;
 
                                     const currentCount = collectedTweets.length;
 
@@ -396,7 +397,7 @@ export async function runTimelineDom(engine: ScraperEngine, config: ScrapeTimeli
                                         });
 
                                         // 发现新推文，继续滚动
-                                        engine.eventBus.emitLog(`Found new tweets during deep scroll! Extracted ${tweetsOnPage.length} tweets, added ${currentCount - lastExtractionCount} new. Total: ${currentCount} (scrolled ${scrollCount} times)`, 'info');
+                                        engine.eventBus.emitLog(`Found new tweets during deep scroll! Extracted ${cleaned.tweets.length} cleaned tweets (raw ${tweetsOnPage.length}), added ${currentCount - lastExtractionCount} new. Total: ${currentCount} (scrolled ${scrollCount} times)`, 'info');
                                         lastExtractionCount = currentCount;
 
                                         // 如果已经超过目标深度，可以停止快速滚动
@@ -638,4 +639,3 @@ export async function runTimelineDom(engine: ScraperEngine, config: ScrapeTimeli
         return { success: false, tweets: collectedTweets, error: error.message };
     }
 }
-

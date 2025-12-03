@@ -4,18 +4,21 @@ import csv
 import time
 import threading
 from datetime import datetime
+from output_paths import resolve_output_dir
 
 class LocalDataManager:
     """
     Local file storage manager for Reddit scraper.
     Replaces Supabase with local JSON/CSV files.
     """
-    def __init__(self, base_output_dir="./output/reddit"):
-        # Convert to absolute path to avoid issues with working directory
-        if not os.path.isabs(base_output_dir):
-            base_output_dir = os.path.abspath(base_output_dir)
-        
-        self.base_output_dir = base_output_dir
+    def __init__(self, base_output_dir=None):
+        # Prefer explicit base_output_dir, fallback to env/default resolver
+        if base_output_dir:
+            if not os.path.isabs(base_output_dir):
+                base_output_dir = os.path.abspath(base_output_dir)
+            self.base_output_dir = base_output_dir
+        else:
+            self.base_output_dir = resolve_output_dir()
         self.current_session_dir = None
         self.posts_file = None
         self.csv_file = None

@@ -17,6 +17,8 @@
     "dev": "concurrently -n \"server,frontend,reddit\" -c \"blue,green,yellow\" \"pnpm run dev:server:watch\" \"pnpm run build:frontend:watch\" \"pnpm run dev:reddit\"",
     "dev:fast": "concurrently -n \"server,frontend,reddit\" -c \"blue,green,yellow\" \"pnpm run dev:server:watch\" \"pnpm run dev:frontend\" \"pnpm run dev:reddit\"",
     "build": "tsc",
+    "build:wasm": "cd wasm/tweet-cleaner && wasm-pack build --target nodejs --out-dir pkg",
+    "build:wasm:reddit": "cd wasm/reddit-cleaner && wasm-pack build --target nodejs --out-dir pkg",
     "serve": "node dist/server.js",
     "install:frontend": "cd frontend && pnpm install",
     "build:frontend": "cd frontend && pnpm run build",

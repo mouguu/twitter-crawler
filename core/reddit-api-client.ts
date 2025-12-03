@@ -94,7 +94,18 @@ export class RedditApiClient {
         });
       }
 
-      if (!response.body) {
+      if (!response.body || typeof (response.body as any).getReader !== 'function') {
+        // Fallback for non-streaming/testing environments
+        const data = await response.json().catch(() => null);
+        if (data) {
+          return {
+            success: !!data.success,
+            data: data.data,
+            error: data.error,
+            errorType: data.error_type,
+            traceback: data.traceback
+          };
+        }
         throw new Error('Response body is empty');
       }
 
@@ -237,4 +248,3 @@ export class RedditApiClient {
     }
   }
 }
-

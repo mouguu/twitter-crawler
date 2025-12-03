@@ -116,11 +116,12 @@ export class ScraperError extends Error {
   public getUserMessage(): string {
     switch (this.code) {
       case ErrorCode.RATE_LIMIT_EXCEEDED:
-        return "Rate limit exceeded. Waiting before retrying...";
+      case ErrorCode.RATE_LIMIT:
+        return "速率限制触发，稍后重试 (Rate limit exceeded).";
       case ErrorCode.AUTH_FAILED:
-        return "Authentication failed. Please check your credentials.";
+        return "认证失败，请检查账号或 Cookie (Authentication failed).";
       case ErrorCode.NETWORK_ERROR:
-        return "Network error. Please check your internet connection.";
+        return "网络连接失败，请检查网络 (Network error).";
       case ErrorCode.TIMEOUT:
         return "Operation timed out.";
       case ErrorCode.NOT_FOUND:
@@ -161,12 +162,13 @@ export class ScraperError extends Error {
   ): ScraperError {
     const statusCode = response.status;
     const statusText = response.statusText || String(statusCode);
+    const ctx: ErrorContext = { ...(context || {}), statusCode };
     
     if (statusCode === 429) {
       return new ScraperError(
-        ErrorCode.RATE_LIMIT_EXCEEDED,
+        ErrorCode.RATE_LIMIT,
         `Rate limit exceeded: ${statusText}`,
-        { retryable: true, statusCode, context }
+        { retryable: true, statusCode, context: ctx }
       );
     }
     
@@ -174,22 +176,22 @@ export class ScraperError extends Error {
       return new ScraperError(
         ErrorCode.AUTH_FAILED,
         `Authentication failed: ${statusText}`,
-        { retryable: false, statusCode, context }
+        { retryable: false, statusCode, context: ctx }
       );
     }
     
     if (statusCode >= 500) {
       return new ScraperError(
-        ErrorCode.SERVER_ERROR,
+        ErrorCode.API_ERROR,
         `Server error: ${statusText}`,
-        { retryable: true, statusCode, context }
+        { retryable: true, statusCode, context: ctx }
       );
     }
     
     return new ScraperError(
       ErrorCode.API_ERROR,
       `HTTP ${statusCode}: ${statusText}`,
-      { retryable: false, statusCode, context }
+      { retryable: false, statusCode, context: ctx }
     );
   }
 

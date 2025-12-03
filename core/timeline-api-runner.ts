@@ -11,6 +11,7 @@ import {
   extractNextCursor,
 } from "../types";
 import * as fileUtils from "../utils";
+import { cleanTweetsFast } from "../utils";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -42,6 +43,7 @@ export async function runTimelineApi(
   const scrapedIds = new Set<string>();
   let cursor: string | undefined;
   let userId: string | null = null;
+  let wasmCleanerLogged = false;
 
   if (mode === "timeline" && username) {
     try {
@@ -140,8 +142,17 @@ export async function runTimelineApi(
         continue;
       }
 
+      const cleaned = await cleanTweetsFast([], tweets, { limit });
+      if (cleaned.usedWasm && !wasmCleanerLogged) {
+        engine.eventBus.emitLog(
+          "Using Rust/WASM tweet cleaner for normalization/dedup.",
+          "info"
+        );
+        wasmCleanerLogged = true;
+      }
+
       let addedCount = 0;
-      for (const tweet of tweets) {
+      for (const tweet of cleaned.tweets) {
         if (collectedTweets.length >= limit) break;
 
         if (!scrapedIds.has(tweet.id)) {
@@ -162,11 +173,14 @@ export async function runTimelineApi(
           collectedTweets.push(tweet);
           scrapedIds.add(tweet.id);
           addedCount++;
+        } else {
+          // count deduped items from API response
+          cleaned.stats.deduped += 1;
         }
       }
 
       engine.eventBus.emitLog(
-        `Fetched ${tweets.length} tweets, added ${addedCount} new. Total: ${collectedTweets.length}`
+        `Fetched ${cleaned.tweets.length} cleaned tweets (raw ${tweets.length}), added ${addedCount} new. Total: ${collectedTweets.length}`
       );
       engine.eventBus.emitProgress({
         current: collectedTweets.length,
@@ -175,7 +189,7 @@ export async function runTimelineApi(
       });
       engine.progressManager.updateProgress(
         collectedTweets.length,
-        tweets[tweets.length - 1]?.id,
+        cleaned.tweets[cleaned.tweets.length - 1]?.id,
         nextCursor,
         engine.getCurrentSession()?.id
       );
