@@ -9,11 +9,167 @@ import {
   extractInstructionsFromResponse,
   parseTweetsFromInstructions,
   extractNextCursor,
+  parseTweetFromRestStatus,
 } from "../types";
 import * as fileUtils from "../utils";
 import { cleanTweetsFast } from "../utils";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Run timeline scraping using REST API v1.1
+ * 
+ * ⚠️ **WARNING: This function will fail with 404 errors.**
+ * 
+ * Twitter's REST API v1.1 requires OAuth tokens, not web cookies.
+ * This function is kept for:
+ * - Future OAuth implementation
+ * - Reference implementation of max_id pagination (similar to Tweepy)
+ * - Documentation purposes
+ * 
+ * **For production use, use GraphQL API (default).**
+ * 
+ * @deprecated REST API v1.1 not accessible with web cookies
+ * @param engine ScraperEngine instance
+ * @param config Timeline scraping configuration
+ * @returns Promise with scraping results (will likely fail)
+ */
+async function runTimelineRestApi(
+  engine: ScraperEngine,
+  config: ScrapeTimelineConfig
+): Promise<ScrapeTimelineResult> {
+  const { username, limit = 50 } = config;
+  if (!username) {
+    return { success: false, tweets: [], error: "Username is required for REST timeline", runContext: config.runContext };
+  }
+
+  // Log warning about REST API limitations
+  engine.eventBus.emitLog(
+    '⚠️  WARNING: REST API v1.1 requires OAuth tokens and will likely fail with web cookies.',
+    'warn'
+  );
+  engine.eventBus.emitLog(
+    'Expected error: 404 Not Found. Use GraphQL mode (default) for web-based scraping.',
+    'warn'
+  );
+
+  const totalTarget = limit;
+  const collectedTweets: Tweet[] = [];
+  const scrapedIds = new Set<string>();
+  let maxId: string | undefined;
+  let consecutiveEmpty = 0;
+  let lastError: string | undefined;
+
+  while (collectedTweets.length < limit) {
+    if (engine.shouldStop()) {
+      engine.eventBus.emitLog("Manual stop signal received.");
+      break;
+    }
+
+    try {
+      const apiClient = engine.ensureApiClient();
+      const pageSize = Math.min(200, limit - collectedTweets.length);
+
+      const response = await apiClient.getUserTimelineRest(username, {
+        count: pageSize,
+        maxId,
+        includeRts: true,
+        excludeReplies: config.withReplies ? false : undefined,
+      });
+
+      if (!Array.isArray(response) || response.length === 0) {
+        consecutiveEmpty += 1;
+        engine.eventBus.emitLog(
+          `REST timeline returned empty page (${consecutiveEmpty}/2). Collected ${collectedTweets.length}/${totalTarget}`
+        );
+        if (consecutiveEmpty >= 2) break;
+        await sleep(300 + Math.random() * 400);
+        continue;
+      }
+
+      consecutiveEmpty = 0;
+      let addedCount = 0;
+
+      for (const raw of response) {
+        const tweet = parseTweetFromRestStatus(raw, username);
+        if (!tweet) continue;
+
+        if (config.stopAtTweetId && tweet.id === config.stopAtTweetId) {
+          engine.eventBus.emitLog(`Reached stop tweet ID: ${tweet.id}`);
+          collectedTweets.push(...(scrapedIds.has(tweet.id) ? [] : [tweet]));
+          scrapedIds.add(tweet.id);
+          return {
+            success: collectedTweets.length > 0,
+            tweets: collectedTweets,
+            runContext: config.runContext,
+          };
+        }
+
+        if (config.sinceTimestamp && tweet.time) {
+          const ts = new Date(tweet.time).getTime();
+          if (ts < config.sinceTimestamp) {
+            engine.eventBus.emitLog(`Reached time limit at ${tweet.time}`);
+            return {
+              success: collectedTweets.length > 0,
+              tweets: collectedTweets,
+              runContext: config.runContext,
+            };
+          }
+        }
+
+        if (!scrapedIds.has(tweet.id) && collectedTweets.length < limit) {
+          collectedTweets.push(tweet);
+          scrapedIds.add(tweet.id);
+          addedCount++;
+        }
+      }
+
+      engine.eventBus.emitLog(
+        `REST timeline fetched ${response.length} items, added ${addedCount}. Total: ${collectedTweets.length}`
+      );
+      engine.eventBus.emitProgress({
+        current: collectedTweets.length,
+        target: totalTarget,
+        action: "scraping (rest)",
+      });
+
+      const oldestId =
+        response[response.length - 1]?.id_str ||
+        response[response.length - 1]?.id;
+      if (!oldestId) break;
+
+      try {
+        const next = BigInt(String(oldestId)) - 1n;
+        if (next <= 0) break;
+        maxId = next.toString();
+      } catch {
+        break;
+      }
+
+      if (response.length < pageSize) {
+        break;
+      }
+
+      const delay = 120 + Math.random() * 220;
+      await sleep(delay);
+    } catch (error: any) {
+      lastError = error instanceof Error ? error.message : String(error);
+      engine.eventBus.emitLog(
+        `REST timeline error: ${lastError}`,
+        "error"
+      );
+      break;
+    }
+  }
+
+  const success = collectedTweets.length > 0;
+  return {
+    success,
+    tweets: collectedTweets,
+    runContext: config.runContext,
+    error: success ? undefined : lastError || "No tweets collected",
+  };
+}
 
 export async function runTimelineApi(
   engine: ScraperEngine,
@@ -27,6 +183,7 @@ export async function runTimelineApi(
     scrapeMode = "graphql",
   } = config;
   const totalTarget = limit;
+  const apiVariant = config.apiVariant || "graphql";
 
   let { runContext } = config;
   if (!runContext) {
@@ -37,6 +194,17 @@ export async function runTimelineApi(
       baseOutputDir: config.outputDir,
     });
     engine.eventBus.emitLog(`Created new run context: ${runContext.runId}`);
+  }
+
+  if (apiVariant === "rest") {
+    if (mode !== "timeline" || !username || config.tab) {
+      engine.eventBus.emitLog(
+        `REST apiVariant only supports user timelines. Falling back to GraphQL mode for ${username || searchQuery || "request"}.`,
+        "warn"
+      );
+    } else {
+      return runTimelineRestApi(engine, { ...config, runContext });
+    }
   }
 
   const collectedTweets: Tweet[] = [];

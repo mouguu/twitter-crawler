@@ -226,6 +226,45 @@ export function parseTweetFromApiResult(result: TweetResult, fallbackUsername?: 
 }
 
 /**
+ * 从 v1.1 REST API 的状态对象解析推文
+ * 依赖 tweet_mode=extended 返回的 full_text，适合 max_id 翻页
+ */
+export function parseTweetFromRestStatus(status: any, fallbackUsername?: string): Tweet | null {
+    if (!status || (!status.id_str && !status.id)) return null;
+
+    const username = status.user?.screen_name || fallbackUsername || 'unknown';
+    const text =
+        status.full_text ||
+        status.extended_tweet?.full_text ||
+        status.text ||
+        '';
+
+    const tweetId = status.id_str || String(status.id);
+    const createdAt = status.created_at
+        ? new Date(status.created_at).toISOString()
+        : undefined;
+
+    return {
+        id: tweetId,
+        url: `https://x.com/${username}/status/${tweetId}`,
+        text,
+        time: createdAt,
+        likes: status.favorite_count ?? 0,
+        retweets: status.retweet_count ?? 0,
+        replies: status.reply_count ?? 0,
+        hasMedia: Boolean(
+            status.extended_entities?.media?.length || status.entities?.media?.length
+        ),
+        username,
+        userId: status.user?.id_str,
+        userDisplayName: status.user?.name,
+        userAvatar: status.user?.profile_image_url_https,
+        lang: status.lang,
+        isReply: Boolean(status.in_reply_to_status_id_str)
+    };
+}
+
+/**
  * 从 API 指令中解析推文列表
  */
 export function parseTweetsFromInstructions(instructions: any[], fallbackUsername?: string): Tweet[] {
@@ -420,4 +459,3 @@ export function parseTweetDetailResponse(data: any, focalTweetId: string): Tweet
 
     return result;
 }
-

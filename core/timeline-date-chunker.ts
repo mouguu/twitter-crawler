@@ -378,17 +378,21 @@ export async function runTimelineDateChunks(
                 for (const { index, result } of batchResults) {
                     const range = ranges[index];
 
-                    if (result.success && result.tweets && result.tweets.length > 0) {
-                        const newTweets = result.tweets;
-                        allTweets = allTweets.concat(newTweets);
-                        // 注意：进度已经在emitLog中通过增量更新了，这里只需要同步totalCollected
-                        totalCollected = sharedProgress.get(); // 同步到局部变量
-                        const cappedTotal = Math.min(totalCollected, globalLimit); // 不超过限制
-                        engine.eventBus.emitLog(`✅ [Parallel] Chunk ${index + 1}/${ranges.length} complete: ${newTweets.length} tweets collected | Global total: ${cappedTotal}/${globalLimit}`);
-                        
-                        // 如果达到全局限制，记录日志
-                        if (totalCollected >= globalLimit) {
-                            engine.eventBus.emitLog(`✅ Global limit of ${globalLimit} reached after chunk ${index + 1}. Stopping batch.`, 'info');
+                    if (result.success) {
+                        if (result.tweets && result.tweets.length > 0) {
+                            const newTweets = result.tweets;
+                            allTweets = allTweets.concat(newTweets);
+                            // 注意：进度已经在emitLog中通过增量更新了，这里只需要同步totalCollected
+                            totalCollected = sharedProgress.get(); // 同步到局部变量
+                            const cappedTotal = Math.min(totalCollected, globalLimit); // 不超过限制
+                            engine.eventBus.emitLog(`✅ [Parallel] Chunk ${index + 1}/${ranges.length} complete: ${newTweets.length} tweets collected | Global total: ${cappedTotal}/${globalLimit}`);
+                            
+                            // 如果达到全局限制，记录日志
+                            if (totalCollected >= globalLimit) {
+                                engine.eventBus.emitLog(`✅ Global limit of ${globalLimit} reached after chunk ${index + 1}. Stopping batch.`, 'info');
+                            }
+                        } else {
+                            engine.eventBus.emitLog(`✅ [Parallel] Chunk ${index + 1}/${ranges.length} complete: No tweets found (empty).`, 'info');
                         }
                     } else {
                         failedChunks.push({
@@ -459,11 +463,15 @@ export async function runTimelineDateChunks(
 
             const result = await scrapeChunkWithRetry(engine, chunkConfig, i, ranges.length, range);
 
-            if (result.success && result.tweets && result.tweets.length > 0) {
-                const newTweets = result.tweets;
-                allTweets = allTweets.concat(newTweets);
-                totalCollected += newTweets.length;
-                engine.eventBus.emitLog(`✅ Chunk ${i + 1}/${ranges.length} complete: ${newTweets.length} tweets collected | Global total: ${totalCollected}/${globalLimit}`);
+            if (result.success) {
+                if (result.tweets && result.tweets.length > 0) {
+                    const newTweets = result.tweets;
+                    allTweets = allTweets.concat(newTweets);
+                    totalCollected += newTweets.length;
+                    engine.eventBus.emitLog(`✅ Chunk ${i + 1}/${ranges.length} complete: ${newTweets.length} tweets collected | Global total: ${totalCollected}/${globalLimit}`);
+                } else {
+                    engine.eventBus.emitLog(`✅ Chunk ${i + 1}/${ranges.length} complete: No tweets found (empty).`, 'info');
+                }
             } else {
                 // Record failed chunk for global retry
                 failedChunks.push({

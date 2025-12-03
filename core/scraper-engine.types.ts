@@ -49,6 +49,8 @@ export interface ScrapeTimelineConfig {
   collectProfileInfo?: boolean;
   /** 爬取模式: 'graphql' 使用 API (默认), 'puppeteer' 使用 DOM, 'mixed' 先 API 后 DOM 补深度 */
   scrapeMode?: "graphql" | "puppeteer" | "mixed";
+  /** API 变体: 默认 GraphQL；如果希望用 v1.1 + max_id/tweet_mode=extended，请设置为 'rest' */
+  apiVariant?: "graphql" | "rest";
   resume?: boolean;
   dateRange?: {
     start: string;
@@ -103,5 +105,4 @@ export interface ScrapeThreadResult {
   retryable?: boolean;
   performance?: PerformanceStats;
 }
-
 

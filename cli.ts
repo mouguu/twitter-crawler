@@ -174,6 +174,7 @@ program
   .option('--resume', 'Resume from last saved progress', false)
   .option('--resume-from <tweetId>', 'Resume after the specified tweet ID')
   .option('--mode <graphql|puppeteer|mixed>', 'Scrape mode', twitterConfig.defaultMode)
+  .option('--api <graphql|rest>', 'API variant when using API mode (graphql default, rest uses tweet_mode=extended)', 'graphql')
   .option('-o, --output <dir>', 'Output directory', outputConfig.baseDir)
   .option('--timezone <timezone>', 'Timezone for timestamp output (IANA name)')
   .option('-d, --debug', 'Enable debug mode with verbose logs')
@@ -235,6 +236,12 @@ program
       if (!validModes.has(scrapeMode)) {
         console.warn(`Unknown mode "${options.mode}", falling back to "graphql".`);
         scrapeMode = 'graphql';
+      }
+      let apiVariant = (options.api || 'graphql').toLowerCase();
+      const validApiVariants = new Set(['graphql', 'rest']);
+      if (!validApiVariants.has(apiVariant)) {
+        console.warn(`Unknown api variant "${options.api}", falling back to "graphql".`);
+        apiVariant = 'graphql';
       }
       const outputDir = path.resolve(options.output || outputConfig.baseDir);
       const timezoneInput = options.timezone || timeUtils.getDefaultTimezone();
@@ -372,6 +379,7 @@ program
         timezone,
         sessionId: options.session,
         scrapeMode,
+        apiVariant,
         resume: !!options.resume,
         resumeFromTweetId: options.resumeFrom || undefined
       };

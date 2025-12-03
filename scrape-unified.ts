@@ -29,6 +29,8 @@ export interface ScrapeXFeedOptions extends Omit<ScrapeTimelineConfig, 'mode'> {
     sessionId?: string;
     /** 爬取模式: 'graphql' 使用 API, 'puppeteer' 使用 DOM */
     scrapeMode?: 'graphql' | 'puppeteer';
+    /** GraphQL（默认）或 REST v1.1（tweet_mode=extended, max_id 翻页） */
+    apiVariant?: 'graphql' | 'rest';
 }
 
 export interface ScrapeSearchOptions extends Omit<ScrapeTimelineConfig, 'mode' | 'searchQuery'> {
@@ -37,6 +39,7 @@ export interface ScrapeSearchOptions extends Omit<ScrapeTimelineConfig, 'mode' |
     deleteMerged?: boolean;
     headless?: boolean;
     sessionId?: string;
+    apiVariant?: 'graphql' | 'rest';
 }
 
 export interface ScrapeTwitterUsersOptions {
@@ -56,6 +59,7 @@ export interface ScrapeTwitterUsersOptions {
     scrapeMode?: 'graphql' | 'puppeteer' | 'mixed';
     resume?: boolean;
     resumeFromTweetId?: string;
+    apiVariant?: 'graphql' | 'rest';
 }
 
 export interface ScrapeTwitterUserResult {
@@ -251,6 +255,7 @@ export async function scrapeTwitterUsers(
                         runContext,
                         scrapeMode: 'puppeteer',
                         mode: 'search',
+                        apiVariant: options.apiVariant,
                         collectProfileInfo: !isSearchMode, // No profile info for search queries
                         resume: options.resume
                     });
@@ -265,6 +270,7 @@ export async function scrapeTwitterUsers(
                         exportJson: false,
                         runContext,
                         scrapeMode,
+                        apiVariant: options.apiVariant,
                         collectProfileInfo: true,
                         resume: options.resume
                     });
@@ -296,6 +302,7 @@ export async function scrapeTwitterUsers(
                             exportJson: false,
                             runContext,
                             scrapeMode,
+                            apiVariant: options.apiVariant,
                             resume: options.resume
                         });
 

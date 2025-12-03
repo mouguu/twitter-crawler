@@ -75,20 +75,36 @@ export async function runTimelineDom(engine: ScraperEngine, config: ScrapeTimeli
             try {
                 engine.performanceMonitor.startPhase('navigation');
                 await engine.navigationService.navigateToUrl(engine.getPageInstance()!, targetUrl);
-                await engine.navigationService.waitForTweets(engine.getPageInstance()!, { 
+                const tweetsFound = await engine.navigationService.waitForTweets(engine.getPageInstance()!, { 
                     timeout: 10000, // 减少超时时间
                     maxRetries: 1 // 只重试1次
                 });
+                
                 engine.performanceMonitor.endPhase();
                 navigationSuccess = true;
+
+                if (!tweetsFound) {
+                    engine.eventBus.emitLog('No tweets found for this query/chunk (valid empty state). Skipping extraction.', 'info');
+                    // Return early with success and empty tweets
+                    return {
+                        success: true,
+                        tweets: [],
+                        runContext,
+                        profile: profileInfo,
+                        performance: engine.performanceMonitor.getStats()
+                    };
+                }
             } catch (navError: any) {
                 engine.performanceMonitor.endPhase();
                 navigationAttempts++;
 
                 // 检查是否是找不到推文的错误（可能是session问题）
+                // Note: waitForTweets now returns false for valid empty states, so this catch block
+                // mainly handles timeouts (if neither tweets nor empty state found) or other errors.
                 const isNoTweetsError = navError.message.includes('No tweets found') ||
                     navError.message.includes('Waiting for selector') ||
-                    navError.message.includes('tweet');
+                    navError.message.includes('tweet') ||
+                    navError.message.includes('Timeout waiting for tweets');
 
                 if (isNoTweetsError && attemptedSessions.size < 4) {
                     engine.eventBus.emitLog(`Navigation/waitForTweets failed. Attempting session rotation...`, 'warn');
@@ -260,38 +276,41 @@ export async function runTimelineDom(engine: ScraperEngine, config: ScrapeTimeli
                     engine.eventBus.emitLog(`No new tweets found (consecutive: ${consecutiveNoNew}/${maxNoNew}). Continuing to scroll...`, 'debug');
 
                     // 智能判断：识别边界问题 vs session问题
-                    // 在日期分块模式下，每个日期范围的边界通常是100-300条推文
-                    // 1. 日期分块模式 + 收集了100+条 + 连续3次无新推文 = 边界问题，不是session问题
-                    // 2. 收集数量很少（< 100 且不是chunk模式）= session问题
-                    // 3. 收集数量很多（>= 500）= 深度限制
+                    // 关键改进：在 Date Chunking 模式下，更激进地识别边界
                     const totalCount = collectedTweets.length + progressBase;
-                    const isChunkMode = progressBase > 0;
+                    // 🔑 修复：通过 mode === 'search' 判断是否是 chunk 模式
+                    // 之前用 progressBase > 0 判断，但第一个 chunk 的 progressBase = 0！
+                    const isChunkMode = mode === 'search';
                     const chunkTweetCount = collectedTweets.length; // 这个chunk收集的推文数
                     
-                    // 日期分块模式下的边界判断：收集了100+条通常就是边界了
-                    // 在日期分块模式下，如果收集了100+条推文且连续3次无新推文，很可能是边界
-                    // 优先检查边界，避免误判为session问题
-                    const isLikelyBoundary = isChunkMode && chunkTweetCount >= 100 && consecutiveNoNew >= 3;
+                    // 日期分块模式下的边界判断（超级激进策略）:
+                    // 某些月份可能只有 0-5 条推文，不要误判为 session 问题
+                    // - 任何推文数 + 连续5次无新推文 = 确定是边界，直接停止
+                    // - 收集了10+条推文 + 连续3次无新推文 = 很可能是边界
+                    const isLikelyBoundary = isChunkMode && (
+                        consecutiveNoNew >= 5 ||  // 🔑 关键：5次无新直接认定边界
+                        (chunkTweetCount >= 10 && consecutiveNoNew >= 3)
+                    );
                     
-                    // 如果识别为边界，立即停止
+                    // 如果识别为边界，立即停止，不要浪费时间切换session
                     if (isLikelyBoundary) {
-                        engine.eventBus.emitLog(`Boundary likely reached (${chunkTweetCount} tweets collected in this date range). This is expected for date chunking. Stopping this chunk.`, 'info');
+                        engine.eventBus.emitLog(`✅ Chunk boundary reached (${chunkTweetCount} tweets, ${consecutiveNoNew} consecutive no-new). Moving to next chunk.`, 'info');
                         break; // 跳出循环，停止这个chunk
                     }
                     
-                    // 如果不是边界，继续判断其他情况
-                    const isLowCount = !isChunkMode && totalCount < 200; // 非chunk模式才判断为session问题
+                    // 如果不是边界，继续判断其他情况（仅非 chunk 模式）
+                    const isLowCount = !isChunkMode && totalCount < 200;
                     const isHighCount = totalCount >= 500;
                     
-                    // 调整切换session的阈值
+                    // 调整切换session的阈值（仅非 chunk 模式）
                     let sessionSwitchThreshold: number;
                     if (isLowCount && !isChunkMode) {
                         sessionSwitchThreshold = 5; // session问题，尽快切换（仅非chunk模式）
                     } else if (isHighCount) {
                         sessionSwitchThreshold = Math.min(maxNoNew, 8); // 深度限制，可以多尝试
                     } else {
-                        // 日期分块模式下，如果不确定，倾向于认为是边界而不是session问题
-                        sessionSwitchThreshold = isChunkMode ? Math.min(maxNoNew, 5) : Math.min(maxNoNew, 6);
+                        // 在 chunk 模式下，这段代码已经不会被触发（因为上面会 break）
+                        sessionSwitchThreshold = Math.min(maxNoNew, 6);
                     }
 
                     if (consecutiveNoNew >= sessionSwitchThreshold && attemptedSessions.size < 4 && !isLikelyBoundary) {
@@ -320,8 +339,8 @@ export async function runTimelineDom(engine: ScraperEngine, config: ScrapeTimeli
                                 // waitForTweets 失败时快速重试一次，减少超时时间
                                 try {
                                     await engine.navigationService.waitForTweets(engine.getPageInstance()!, { 
-                                        timeout: 3000, // 从5秒减少到3秒
-                                        maxRetries: 0 // 不重试，直接快速切换
+                                        timeout: 10000, // Increase from 3s to 10s to prevent flakes
+                                        maxRetries: 1 // Allow 1 retry
                                     });
                                 } catch (navErr) {
                                     engine.eventBus.emitLog(`waitForTweets after session switch failed, skipping retry for faster switching...`, 'warn');

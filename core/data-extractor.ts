@@ -455,6 +455,35 @@ export async function detectErrorPage(page: Page): Promise<boolean> {
 }
 
 /**
+ * 检测页面是否显示"无结果"信息
+ * @param page Puppeteer Page 实例
+ * @returns 是否检测到无结果页面
+ */
+export async function detectNoResultsPage(page: Page): Promise<boolean> {
+    try {
+        const hasNoResults = await page.evaluate(() => {
+            const bodyText = document.body.innerText.toLowerCase();
+            const noResultsPatterns = [
+                'no results for',
+                'no results found',
+                'the term you entered did not bring up any results',
+                'didn\'t find any results' // Generic fallback
+            ];
+            
+            // Also check for specific empty state element if known
+            const emptyState = document.querySelector('[data-testid="emptyState"]');
+            if (emptyState) return true;
+
+            return noResultsPatterns.some(pattern => bodyText.includes(pattern));
+        });
+        
+        return hasNoResults;
+    } catch (e) {
+        return false;
+    }
+}
+
+/**
  * 尝试从错误页面恢复：检测错误并点击 "Try Again" 按钮
  * @param page Puppeteer Page 实例
  * @param maxRetries 最大重试次数

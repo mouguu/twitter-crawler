@@ -51,24 +51,56 @@ export class NavigationService {
     }
 
     async waitForTweets(page: Page, options: NavigationOptions = {}): Promise<boolean> {
-        const maxRetries = options.maxRetries || 1;
-        // 减少默认超时时间，加快切换（并行模式下更快）
-        const defaultTimeout = options.timeout || 10000; // 从20秒减少到10秒
+        const defaultTimeout = options.timeout || 10000;
+        const startTime = Date.now();
 
         try {
-            await retryUtils.retryWaitForSelector(
-                page,
-                X_SELECTORS.TWEET,
-                { timeout: defaultTimeout },
-                {
-                    maxRetries,
-                    baseDelay: 500, // 减少重试延迟，从800ms减少到500ms
-                    onRetry: (error: any, attempt: number) => {
-                        this._log(`Waiting for tweets failed (attempt ${attempt}/${maxRetries}): ${error.message}`, 'warn');
+            while (Date.now() - startTime < defaultTimeout) {
+                // 1. Check for tweets
+                const tweetsFound = await page.$(X_SELECTORS.TWEET);
+                if (tweetsFound) return true;
+
+                // 2. Check for no results (valid empty state)
+                // We import detectNoResultsPage dynamically or assume it's imported
+                // Since I can't easily change imports in this tool without replacing the whole file header,
+                // I'll assume I need to add the import too. 
+                // Wait, I can use the imported function if I added it to the imports.
+                // I need to check if I added the import. I didn't.
+                // I will use a separate tool call to add the import first.
+                
+                // For now, let's just use the logic here or call the function if available.
+                // I'll use the function `recoverFromErrorPage` is imported from `./data-extractor`.
+                // I should check if `detectNoResultsPage` is exported from there. Yes I added it.
+                // But I need to update the import statement in this file.
+                
+                // Let's assume I'll update imports in a separate step or this step if I can.
+                // I'll just write the logic here to be safe and avoid import issues for now, 
+                // OR I'll do a separate edit for imports.
+                
+                // Let's do the loop logic first.
+                const noResults = await import('./data-extractor').then(m => m.detectNoResultsPage(page));
+                if (noResults) {
+                    this._log('No results found for query (valid empty state).', 'info');
+                    return false; // Return false to indicate "no tweets but valid state"
+                }
+
+                // 3. Check for error page
+                const hasError = await import('./data-extractor').then(m => m.detectErrorPage(page));
+                if (hasError) {
+                    this._log('Error page detected during wait. Attempting recovery...', 'warn');
+                    const recovered = await import('./data-extractor').then(m => m.recoverFromErrorPage(page));
+                    if (recovered) {
+                        this._log('Recovered from error page. Continuing wait...', 'info');
+                        continue; // Continue waiting for tweets
+                    } else {
+                        throw ScraperErrors.navigationFailed('Page shows error message and recovery failed');
                     }
                 }
-            );
-            return true;
+
+                await new Promise(r => setTimeout(r, 500));
+            }
+
+            throw new Error(`Timeout waiting for tweets or empty state (${defaultTimeout}ms)`);
         } catch (error: any) {
             this._log(`No tweets found: ${error.message}`, 'error');
             throw ScraperErrors.dataExtractionFailed(`No tweets found: ${error.message}`, { page: 'waitForTweets' });

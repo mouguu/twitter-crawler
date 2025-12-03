@@ -83,6 +83,34 @@ export class XApiClient {
         throw ScraperErrors.apiRequestFailed('Request failed after maximum retry attempts', undefined, { operation: op.operationName });
     }
 
+    private async requestRest(url: string) {
+        let delay = RETRY_INITIAL_DELAY_MS;
+
+        for (let attempt = 0; attempt <= RETRY_MAX_ATTEMPTS; attempt++) {
+            try {
+                return await this.performRestRequest(url);
+            } catch (error: any) {
+                if (this.isRateLimitError(error)) {
+                    throw error;
+                }
+
+                const isNetworkError = this.isNetworkError(error);
+                const isTransientApiError = this.isTransientApiError(error);
+
+                if (attempt < RETRY_MAX_ATTEMPTS && (isNetworkError || isTransientApiError)) {
+                    console.warn(`[Retry] REST request failed (attempt ${attempt + 1}/${RETRY_MAX_ATTEMPTS + 1}): ${error?.message || 'Unknown error'}. Retrying in ${delay}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    delay *= RETRY_BACKOFF;
+                    continue;
+                }
+
+                throw error;
+            }
+        }
+
+        throw ScraperErrors.apiRequestFailed('REST request failed after maximum retry attempts');
+    }
+
     private isNetworkError(error: any): boolean {
         const message = (error?.message || '').toLowerCase();
         return message.includes('network') || message.includes('timeout') || message.includes('econnreset') || message.includes('fetch failed');
@@ -167,6 +195,46 @@ export class XApiClient {
         return response.json();
     }
 
+    /**
+     * Perform REST API v1.1 request
+     * 
+     * ⚠️ WARNING: REST API v1.1 endpoints return 404 with web cookie authentication.
+     * This method is kept for potential future OAuth support.
+     * 
+     * @private
+     * @param url Full REST API endpoint URL
+     * @returns API response (will likely throw 404 error)
+     */
+    private async performRestRequest(url: string) {
+        // Use same headers as GraphQL (already has Bearer Token, CSRF, Cookie)
+        // Note: REST API v1.1 requires OAuth, web cookies alone are insufficient
+        const headers: Record<string, string> = {
+            ...this.headers,
+            'accept': 'application/json'
+        };
+
+        const response = await fetch(url, {
+            method: 'GET',
+            headers
+        });
+
+        if (!response.ok) {
+            if (response.status === 429) {
+                throw ScraperErrors.rateLimitExceeded();
+            }
+            if (response.status === 401 || response.status === 403) {
+                throw ScraperErrors.authenticationFailed(`Authentication failed (${response.status})`, response.status);
+            }
+            throw ScraperErrors.apiRequestFailed(
+                `REST API request failed: ${response.status} ${response.statusText}`,
+                response.status,
+                { operation: 'REST', url }
+            );
+        }
+
+        return response.json();
+    }
+
     async getUserByScreenName(screenName: string): Promise<string | null> {
         try {
             const data = await this.request(X_API_OPS.UserByScreenName, {
@@ -206,6 +274,56 @@ export class XApiClient {
         }
 
         return this.request(X_API_OPS.UserTweets, variables);
+    }
+
+    /**
+     * Get user timeline using REST API v1.1
+     * 
+     * ⚠️ **WARNING: This endpoint does NOT work with web cookie authentication.**
+     * 
+     * Twitter's REST API v1.1 requires OAuth 1.0a tokens from a Twitter Developer Account.
+     * Web cookies (used by default in this scraper) will result in 404 errors.
+     * 
+     * **For normal web-based scraping, use GraphQL API instead (default).**
+     * 
+     * This method is kept for:
+     * - Future OAuth implementation
+     * - Reference implementation of max_id pagination
+     * - Testing purposes
+     * 
+     * @deprecated Use GraphQL API unless you have OAuth tokens
+     * @see https://developer.twitter.com/en/docs/authentication
+     * @param screenName Twitter username (without @)
+     * @param options Timeline options including pagination parameters
+     * @returns Promise resolving to array of tweet objects (will likely fail with 404)
+     */
+    async getUserTimelineRest(
+        screenName: string,
+        options: {
+            count?: number;
+            maxId?: string;
+            sinceId?: string;
+            includeRts?: boolean;
+            excludeReplies?: boolean;
+        } = {}
+    ) {
+        const params = new URLSearchParams();
+        params.set('screen_name', screenName);
+        const count = Math.min(Math.max(options.count ?? 200, 1), 200);
+        params.set('count', String(count));
+        params.set('tweet_mode', 'extended'); // ensure full_text
+
+        if (options.maxId) params.set('max_id', options.maxId);
+        if (options.sinceId) params.set('since_id', options.sinceId);
+        if (options.includeRts !== undefined) {
+            params.set('include_rts', options.includeRts ? '1' : '0');
+        }
+        if (options.excludeReplies !== undefined) {
+            params.set('exclude_replies', options.excludeReplies ? 'true' : 'false');
+        }
+
+        const url = `https://api.twitter.com/1.1/statuses/user_timeline.json?${params.toString()}`;
+        return this.requestRest(url);
     }
 
     async searchTweets(query: string, count: number = 20, cursor?: string) {
