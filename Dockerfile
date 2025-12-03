@@ -8,12 +8,12 @@ RUN apt-get update && \
 
 WORKDIR /app
 COPY package*.json ./
-# Install server deps
-RUN npm ci
+# Install server deps (use npm install to tolerate lock drift)
+RUN npm install
 
 # Install frontend deps (cached separately)
 COPY frontend/package*.json ./frontend/
-RUN cd frontend && npm ci
+RUN cd frontend && npm install
 
 # Copy source
 COPY . .
