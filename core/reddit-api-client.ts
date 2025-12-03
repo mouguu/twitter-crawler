@@ -4,6 +4,7 @@
  */
 
 import { ScraperError, ErrorCode } from './errors';
+import { parseRedditPayload } from '../utils';
 
 export interface RedditScrapeOptions {
   subreddit?: string;
@@ -28,6 +29,9 @@ export interface RedditScrapeResult {
   error?: string;
   errorType?: string;
   traceback?: string;
+  normalizedPosts?: any[];
+  parseStats?: { total: number; deduped: number; dropped: number };
+  usedWasm?: boolean;
 }
 
 export class RedditApiClient {
@@ -98,12 +102,16 @@ export class RedditApiClient {
         // Fallback for non-streaming/testing environments
         const data = await response.json().catch(() => null);
         if (data) {
+          const parsed = await parseRedditPayload(data).catch(() => null);
           return {
             success: !!data.success,
             data: data.data,
             error: data.error,
             errorType: data.error_type,
-            traceback: data.traceback
+            traceback: data.traceback,
+            normalizedPosts: parsed?.posts,
+            parseStats: parsed?.stats,
+            usedWasm: parsed?.usedWasm
           };
         }
         throw new Error('Response body is empty');
@@ -150,6 +158,17 @@ export class RedditApiClient {
       }
 
       if (finalResult) {
+        try {
+          const parsed = await parseRedditPayload(finalResult.data || finalResult);
+          finalResult = {
+            ...finalResult,
+            normalizedPosts: parsed.posts,
+            parseStats: parsed.stats,
+            usedWasm: parsed.usedWasm
+          };
+        } catch (_) {
+          // Ignore parsing issues; return raw
+        }
         return finalResult;
       }
       
