@@ -49,6 +49,8 @@ services:
     volumes:
       - ./:/app
       - ./data:/app/data
+    environment:
+      - REDDIT_OUTPUT_DIR=/app/data/output/reddit
     command: ["/bin/sh", "-c", "mkdir -p /app/data/output /app/data/cookies && rm -rf /app/output && ln -s /app/data/output /app/output && pip install -r requirements.txt && python reddit_api_server.py"]
     ports:
       - "5002:5002"
