@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { ErrorNotification } from "./components/ErrorNotification";
 import { SessionManager } from "./components/SessionManager";
 import { HeaderBar } from "./components/HeaderBar";
@@ -120,6 +120,7 @@ function App() {
   const [redditStrategy, setRedditStrategy] = useState("auto");
 
   // Advanced Options
+  const [isScraping, setIsScraping] = useState(false);
   const [autoRotateSessions, setAutoRotateSessions] = useState(true);
   const [enableDeepSearch, setEnableDeepSearch] = useState(false);
   const [parallelChunks, setParallelChunks] = useState(1); // 并行处理chunks数量（1=串行，2-3=并行）
@@ -198,49 +199,6 @@ function App() {
     }
   }, [apiKey]);
 
-  useEffect(() => {
-    // Legacy progress endpoint removed; no-op listener
-    const eventSource = new EventSource(withBase("/api/job/dummy/stream"));
-
-    const handleLog = (event: MessageEvent) => {
-      const data = JSON.parse(event.data);
-      setLogs((prev) => [
-        ...prev,
-        `[${new Date().toLocaleTimeString()}] ${data.level?.toUpperCase?.() || "INFO"
-        }: ${data.message}`,
-      ]);
-    };
-
-    const handleProgress = (event: MessageEvent) => {
-      const data = JSON.parse(event.data);
-      setProgress({ current: data.current, target: data.target });
-    };
-
-    const handlePerformance = (event: MessageEvent) => {
-      const data = JSON.parse(event.data);
-      if (data.stats) {
-        setPerformanceStats(data.stats);
-      }
-    };
-
-    // Explicitly listen to named SSE events; keep onmessage as a fallback for older payloads.
-    eventSource.addEventListener("log", handleLog);
-    eventSource.addEventListener("progress", handleProgress);
-    eventSource.addEventListener("performance", handlePerformance);
-    eventSource.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === "log") return handleLog(event);
-      if (data.type === "progress") return handleProgress(event);
-      if (data.type === "performance") return handlePerformance(event);
-    };
-
-    return () => {
-      eventSource.removeEventListener("log", handleLog);
-      eventSource.removeEventListener("progress", handleProgress);
-      eventSource.removeEventListener("performance", handlePerformance);
-      eventSource.close();
-    };
-  }, [apiKey, withBase]);
 
   // Auto-scroll removed as per user request
   // useEffect(() => {
@@ -321,10 +279,9 @@ function App() {
 
     try {
       await cancelJob(latestJobId);
-      setLogs((prev) => [...prev, `🛑 Abort signal sent for job ${latestJobId}`]);
     } catch (err: any) {
-      setLogs((prev) => [...prev, `❌ Failed to abort job ${latestJobId}: ${err?.message || err}`]);
     } finally {
+      setIsScraping(false);
     }
   };
 
