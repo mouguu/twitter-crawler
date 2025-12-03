@@ -21,6 +21,17 @@ import jobRoutes from './server/routes/jobs';
 // 创建服务器日志器
 const serverLogger = createEnhancedLogger("Server");
 
+// Normalize profile input to username (strip https://x.com/... and @)
+function normalizeUsername(input: string | undefined): string | undefined {
+  if (!input) return undefined;
+  const trimmed = input.trim();
+  // Remove protocol and domain if present
+  const withoutDomain = trimmed.replace(/^https?:\/\/(?:www\.)?(?:x\.com|twitter\.com)\//i, "");
+  // Remove leading @ and trailing paths
+  const cleaned = withoutDomain.replace(/^@/, "").split(/[/?#]/)[0];
+  return cleaned || undefined;
+}
+
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -180,8 +191,9 @@ app.post(
 
       // Configure based on type
       if (isTwitter) {
+        const normalizedUsername = type === 'profile' ? normalizeUsername(input) : undefined;
         jobData.config = {
-          username: type === 'profile' ? input : undefined,
+          username: normalizedUsername,
           tweetUrl: type === 'thread' ? input : undefined,
           searchQuery: type === 'search' ? input : undefined,
           limit: limit || 50,

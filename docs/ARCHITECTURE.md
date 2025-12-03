@@ -127,7 +127,7 @@ To bypass the ~800 tweet limit, XRCrawler uses intelligent date chunking:
 - Component-based architecture:
   - `HeaderBar`: API key and navigation
   - `TaskForm`: Task creation
-  - `ResultsPanel`: Results display and download
+  - `Mission Control` cards: Live queue status, logs, and download
   - `SessionManager`: Cookie file management
   - `ErrorNotification`: Error display
 
@@ -254,4 +254,3 @@ XRCrawler/
 - Progress management with checkpointing
 - Mixed mode automatic switching
 - Enhanced error handling and classification
-

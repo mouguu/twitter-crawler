@@ -4,9 +4,8 @@ import { SessionManager } from "./components/SessionManager";
 import { HeaderBar } from "./components/HeaderBar";
 import { TaskForm } from "./components/TaskForm";
 import { DashboardPanel } from "./components/DashboardPanel";
-import { ResultsPanel } from "./components/ResultsPanel";
 import { submitJob, cancelJob } from "./utils/queueClient";
-import type { TabType, Progress, PerformanceStats } from "./types/ui";
+import type { TabType } from "./types/ui";
 
 // Error types
 export enum ErrorType {
@@ -96,12 +95,6 @@ function App() {
   const [input, setInput] = useState("");
   const [limit, setLimit] = useState(50);
   
-  // Legacy single-task state (kept for ResultsPanel compatibility)
-  const [isScraping, setIsScraping] = useState(false);
-  const [logs, setLogs] = useState<string[]>([]);
-  const [progress, setProgress] = useState<Progress>({ current: 0, target: 0 });
-  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
-  const [performanceStats, setPerformanceStats] = useState<PerformanceStats | null>(null);
   
   const [apiKey, setApiKey] = useState<string>(""); // applied key
   const [apiKeyInput, setApiKeyInput] = useState<string>(""); // input buffer
@@ -138,9 +131,8 @@ function App() {
   const [currentError, setCurrentError] = useState<AppError | null>(null);
 
   const trimmedInput = input.trim();
-  const canSubmit = !isScraping && trimmedInput.length > 0;
+  const canSubmit = trimmedInput.length > 0;
 
-  const logEndRef = useRef<HTMLDivElement>(null);
 
   const withBase = useCallback(
     (path: string): string => {
@@ -307,7 +299,6 @@ function App() {
       });
 
       setLatestJobId(jobInfo.jobId);
-      setIsScraping(true);
       // Add job to Dashboard Panel
       const addJobFn = (window as any).__addJobToPanel;
       if (addJobFn) {
@@ -325,8 +316,6 @@ function App() {
 
   const handleStop = async () => {
     if (!latestJobId) {
-      setLogs((prev) => [...prev, "⚠️ No active job to stop."]);
-      setIsScraping(false);
       return;
     }
 
@@ -336,7 +325,6 @@ function App() {
     } catch (err: any) {
       setLogs((prev) => [...prev, `❌ Failed to abort job ${latestJobId}: ${err?.message || err}`]);
     } finally {
-      setIsScraping(false);
     }
   };
 
@@ -406,27 +394,11 @@ function App() {
               onJobComplete={(jobId, downloadUrl) => {
                 console.log(`Job ${jobId} completed`, downloadUrl);
                 setLatestJobId((prev) => (prev === jobId ? null : prev));
-                setIsScraping(false);
-              }}
+                        }}
               appendApiKey={appendApiKey}
             />
           </div>
 
-          {/* Legacy Results Panel - Only show if there's active state or history */}
-          {(isScraping || logs.length > 0 || downloadUrl) && (
-            <ResultsPanel
-              isScraping={isScraping}
-              progress={progress}
-              logs={logs}
-              downloadUrl={downloadUrl}
-              appendApiKey={appendApiKey}
-              performanceStats={performanceStats}
-              activeTab={activeTab}
-              input={input}
-              logEndRef={logEndRef}
-            />
-          )}
-          
           {/* Session Management - Only for Twitter, not Reddit */}
           {activeTab !== "reddit" && (
             <div className="max-w-4xl mx-auto px-6">
