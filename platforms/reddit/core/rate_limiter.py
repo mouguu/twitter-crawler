@@ -5,14 +5,15 @@ Manages request rate limiting with intelligent backoff strategies.
 """
 
 import time
+import random
 
 
 class SmartRateController:
     """智能速率控制器 - 统一管理所有反爬策略"""
     
     def __init__(self):
-        self.base_delay = 1.0
-        self.current_delay = 1.0
+        self.base_delay = 2.5  # 增加基础延迟以避免限流
+        self.current_delay = 2.5
         self.consecutive_429s = 0
         self.success_streak = 0
         self.last_429_time = 0
@@ -35,8 +36,8 @@ class SmartRateController:
         if self.cooldown_mode and self.success_streak >= 3:
             self.exit_cooldown_mode()
 
-        # 连续成功时逐渐减少延迟
-        if self.success_streak > 10 and self.current_delay > 0.5:
+        # 连续成功时逐渐减少延迟 - 更保守的阈值
+        if self.success_streak > 20 and self.current_delay > 1.5:
             self.current_delay *= 0.95
 
     def record_429_error(self):
@@ -71,7 +72,7 @@ class SmartRateController:
         # 如果最近遇到429，额外增加延迟
         if time.time() - self.last_429_time < 60:
             return self.current_delay * 2
-        return max(0.5, self.current_delay)
+        return max(1.5, self.current_delay)  # 提高最小延迟
 
     def should_skip_strategy(self):
         """判断是否应该跳过当前策略"""

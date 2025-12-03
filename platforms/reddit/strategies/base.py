@@ -4,6 +4,8 @@ Base Scraping Strategy Interface
 All scraping strategies inherit from this base class.
 """
 
+import time
+import random
 from abc import ABC, abstractmethod
 from typing import List, Tuple, Optional, Callable
 
@@ -55,8 +57,6 @@ class ScrapingStrategy(ABC):
         
         if self.rate_controller.cooldown_mode:
             print("🧊 冷却模式激活...")
-            import time
-            import random
             
             # 模拟人类行为
             wait_time = random.uniform(3, 8)
@@ -68,7 +68,6 @@ class ScrapingStrategy(ABC):
             print(f"❄️ 冷却等待 {cooldown_time:.1f}s...")
             time.sleep(cooldown_time)
         else:
-            import time
             delay = self.rate_controller.get_delay()
             print(f"⏱️ 常规延迟 {delay:.1f}s...")
             time.sleep(delay)
