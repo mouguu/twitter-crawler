@@ -1,164 +1,90 @@
 # XRCrawler
 
-<div align="center">
+> AI-powered Twitter/X & Reddit archiver with queue-based workers, live SSE telemetry, and WASM-accelerated processing.
 
-**The Ultimate AI-Powered Social Media Archiver**
-**Bypasses Twitter's 800-tweet limit • 5x Faster with Rust/WASM • Zero Data Gaps**
+## Table of Contents
+- [Overview](#overview)
+- [What’s Inside](#whats-inside)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Configure Cookies](#configure-cookies)
+- [Run (Web UI)](#run-web-ui)
+- [Run (CLI)](#run-cli)
+- [Realtime Pipeline](#realtime-pipeline)
+- [Output Layout](#output-layout)
+- [Troubleshooting](#troubleshooting)
 
-[![GitHub stars](https://img.shields.io/github/stars/mouguu/XRCrawler?style=social)](https://github.com/mouguu/XRCrawler/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/mouguu/XRCrawler?style=social)](https://github.com/mouguu/XRCrawler/network/members)
-[![Rust Powered](https://img.shields.io/badge/Powered%20by-Rust%20%2B%20WASM-orange.svg)](https://www.rust-lang.org/)
-[![TypeScript](https://img.shields.io/badge/typescript-%5E5.0-blue)](https://www.typescriptlang.org/)
-[![License](https://img.shields.io/github/license/mouguu/XRCrawler)](https://github.com/mouguu/XRCrawler/blob/main/LICENSE)
+## Overview
+XRCrawler bypasses Twitter/X’s ~800-tweet wall using date chunking, resilient session rotation, and a Rust/WASM micro-kernel for fast, low-memory exports. A queue-based pipeline (BullMQ + Redis) streams live logs and progress to the Mission Control web UI, with one-click markdown downloads.
 
-**Built by a non-coder using 100% AI-generated code.**
+## What’s Inside
+- **Platforms**: Twitter/X + Reddit (optional helper API).
+- **Mission Control UI**: Live SSE logs/progress, Abort/Dismiss controls, one-click **Download .md**, friendly session labels for `account1.json`–`account4.json` (e.g., Sistine Fibel, pretextyourmama, Shirone, Jeanne Howard).
+- **Queue & Telemetry**: BullMQ on Redis; workers publish progress/logs via Pub/Sub to `/api/job/:id/stream` (EventSource).
+- **Exports**: Markdown (LLM-ready), JSON; WASM micro-kernel handles dedupe/normalization for speed and stability.
+- **Session Rotation**: Drop multiple cookie files under `cookies/` for automatic rotation.
 
-[Quick Start](#-quick-start) • [Why XRCrawler?](#-why-xrcrawler) • [Performance](#-performance) • [Documentation](#-documentation)
+## Requirements
+- Node.js 18+
+- pnpm
+- Redis running locally on `6379` (queue + SSE)
+- Python 3 (for the optional Reddit helper API started by `pnpm run dev`)
 
-</div>
-
----
-
-## 🚀 Why XRCrawler?
-
-Most Twitter scrapers hit a hard wall: **The ~800 tweet limit**. Twitter's API and frontend stop returning older tweets after a certain depth.
-
-**XRCrawler shatters this limit.**
-
-### 🏆 Breakthrough Capabilities
-
-- **♾️ Unlimited Historical Reach**: Uses intelligent **Date Chunking** to bypass platform limits. We successfully scraped **1000+ tweets** in minutes where others fail at 800.
-- **⚡ 5x Faster Performance**: Core data processing (deduplication, normalization) is offloaded to a **Rust/WASM micro-kernel**, making it blazingly fast and memory-efficient (<300MB RAM).
-- **🧠 Intelligent Boundary Detection**: Smart algorithms detect "No Results" pages and chunk boundaries instantly, saving **95% of wasted time** on empty scrolls.
-- **🛡️ Self-Healing Sessions**: Automatically detects soft-bans, error pages, and rate limits, rotating sessions seamlessly to ensure zero data loss.
-
-## ⚡ Performance Benchmarks
-
-| Metric          | XRCrawler                    | Standard Scrapers |
-| --------------- | ---------------------------- | ----------------- |
-| **Tweet Limit** | **Unlimited** (tested 3000+) | ~800              |
-| **Speed**       | **~15s per month chunk**     | ~1m+ per chunk    |
-| **Memory**      | **~270 MB** (Stable)         | 500MB - 1GB+      |
-| **Stability**   | **99.9%** (Auto-recovery)    | Fails on timeouts |
-
-## 🛠️ Key Features
-
-### 🔥 Deep Search Engine
-
-Automatically splits large date ranges into smaller, manageable chunks (e.g., monthly). Scrapes them in parallel or serially, stitching the results into a perfect, gap-free timeline.
-
-### 🦀 Rust + WASM Core
-
-A custom-built Rust library (`wasm/tweet-cleaner`) handles the heavy lifting:
-
-- **Micro-second Deduplication**: Uses `IndexMap` for O(1) lookups.
-- **Strict Normalization**: Ensures data consistency across thousands of tweets.
-- **Low CPU Usage**: Frees up the Node.js event loop for network operations.
-
-### 📊 Smart Exports
-
-- **Markdown**: Beautifully formatted, LLM-ready Markdown files (perfect for RAG).
-- **JSON**: Raw, structured data for analysis.
-- **Persona Analysis**: (Optional) AI-generated psychological profiles based on tweet history.
-
-### 🎛️ Mission Control (Web UI)
-- Queue-based scraping with live **SSE logs & progress** (BullMQ + Redis).
-- Session Manager with friendly names for `account1.json`–`account4.json` (e.g., Sistine Fibel, pretextyourmama, Shirone, Jeanne Howard).
-- One-click **Download .md** button per completed job.
-- Abort/dismiss controls per job card.
-
----
-
-## ⚡ Quick Start
-
-### Prerequisites
-
-- **Node.js** 18+
-- **pnpm** (recommended)
-- **Redis** running locally on default port (6379) for queue + SSE
-
-### Installation
-
+## Installation
 ```bash
-git clone https://github.com/yourusername/XRCrawler.git
+git clone https://github.com/mouguu/XRCrawler.git
 cd XRCrawler
 pnpm install
-pnpm run install:frontend   # install frontend deps
+pnpm run install:frontend    # install frontend deps
 ```
 
-### 1) Configure Cookies
+Optional (rebuild WASM toolchain if you change Rust code):
+```bash
+pnpm run build:wasm:all
+```
 
-Export your Twitter cookies (using "EditThisCookie" extension) and save them as `cookies/account1.json`. Add multiple files (`account2.json`, etc.) for auto-rotation. In the UI these map to friendly names.
+## Configure Cookies
+Export Twitter cookies (e.g., via EditThisCookie) and place them in `cookies/`:
+- `cookies/account1.json`, `account2.json`, … are auto-rotated.
+- Mission Control shows friendly labels for account1–4.
 
-### 2) Run It
-
-**The Easy Way (Web UI):**
-
+## Run (Web UI)
 ```bash
 pnpm run dev
-# Open http://localhost:5173
-# Starts server, worker, frontend, and Reddit helper API in watch mode
-# Requirements: Redis running on 6379; Python3 available for Reddit helper (auto-venv under platforms/reddit)
+# Opens http://localhost:5173 (frontend)
+# Also starts: server, worker, Reddit helper API (auto-venv under platforms/reddit)
 ```
+Ensure Redis is running; otherwise progress/log streaming will be missing.
 
-**The Hacker Way (CLI):**
-
+## Run (CLI)
 ```bash
-# Build first
 pnpm run build
-
-# Scrape unlimited tweets from a user (Deep Search Mode)
 node dist/cli.js twitter -u elonmusk --mode search --deep-search --start-date 2020-01-01
 ```
+See `docs/CLI_USAGE.md` for more options (profile/thread/search, limits, date ranges, etc.).
 
----
+## Realtime Pipeline
+1) BullMQ enqueues jobs.  
+2) Worker processes, publishes `job:{id}:progress` and `job:{id}:log` via Redis Pub/Sub.  
+3) Server streams them over SSE at `/api/job/:id/stream`.  
+4) Mission Control renders live progress/logs; on completion, it shows a **Download .md** button.  
+If SSE payload lacks `downloadUrl`, the UI will fetch `/api/job/{id}` as a fallback.
 
-## 📖 Documentation
-
-- **[Installation Guide](./docs/INSTALLATION.md)** - Detailed setup
-- **[Architecture](./docs/ARCHITECTURE.md)** - How the Date Chunking & WASM works
-- **[CLI Reference](./docs/CLI_USAGE.md)** - Command line options
-- **[Web Interface](./docs/WEB_INTERFACE.md)** - UI Guide
-- **[API Reference](./docs/API_REFERENCE.md)** - Queue/REST endpoints and `/api/job/:id/stream` SSE
-- **WASM Build**: `pnpm run build:wasm:all` (rebuild Rust/WASM micro-kernels if needed)
-
-## 📂 Output Structure
-
-Results are organized for both humans and machines:
-
+## Output Layout
 ```
 output/
 ├── x/{username}/run-{timestamp}/
-│   ├── index.md           # 📖 Beautiful summary (Great for reading)
-│   ├── tweets.json        # 💾 Full raw data (Great for code)
-│   ├── metadata.json      # 📊 Run statistics
-│   └── 001-xxxx.md        # 📄 Individual tweet files (Optional)
+│   ├── index.md        # summary / entry point
+│   ├── tweets.json     # full raw data
+│   ├── metadata.json   # run stats
+│   └── 001-xxxx.md     # optional per-tweet markdown
 ```
 
----
+## Troubleshooting
+- **No live logs/progress**: Verify Redis is running; check `/api/job/{id}/stream` in DevTools Network for events.
+- **Download button missing URL**: Click “Get Download” on the card (it will fetch `/api/job/{id}`); ensure worker writes `downloadUrl` to the job result.
+- **Redis connection errors**: Confirm host/port match your Redis instance (defaults to localhost:6379).
+- **Reddit helper not starting**: Ensure Python 3 is installed; the script creates `.venv` under `platforms/reddit` automatically.
 
-## 🛰️ Live Telemetry (Queue + SSE)
-
-- **Pipeline**: BullMQ enqueues jobs → Worker processes and publishes progress/logs to Redis Pub/Sub (`job:{id}:progress` / `job:{id}:log`) → `/api/job/:id/stream` SSE relays events → Mission Control shows live progress/logging.
-- **Requirements**: Redis running locally (default 6379). EventSource reachable from frontend.
-- **Fallbacks**: If the SSE payload lacks `downloadUrl`, the UI fetches `/api/job/{id}` to hydrate the download button.
-- **Troubleshooting**:
-  - Check Redis is up; see `/api/job/{id}/stream` in DevTools Network and verify incoming events.
-  - Worker publishes via `ctx.emitProgress` and `ctx.emitLog`; server subscribes and streams to the client.
-- **API Key (optional)**: If you set `x-api-key` in requests, the UI appends `api_key` to download links for secured downloads.
-
----
-
-## ⚠️ Disclaimer
-
-This tool is for **educational and research purposes only**.
-
-- Respect Twitter/X's Terms of Service and Robots.txt.
-- Use rate limiting (built-in) to avoid stressing their servers.
-- The authors are not responsible for any misuse.
-
-<div align="center">
-
-**Made with ❤️ by a non-coder using 100% AI-generated code**
-
-</div>
+## License
+ISC (see LICENSE).
