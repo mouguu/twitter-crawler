@@ -58,6 +58,18 @@ pnpm run dev
 
 ### 🐳 One-command Docker Compose
 
+**Setup cookies first**:
+
+```bash
+mkdir -p data/cookies
+# Then place your cookie files:
+# data/cookies/account1.json
+# data/cookies/account2.json
+# ...
+```
+
+**Run**:
+
 ```bash
 docker compose up --build -d
 ```
