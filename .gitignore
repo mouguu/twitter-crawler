@@ -2,6 +2,10 @@
 node_modules/
 frontend/node_modules/
 
+# Package managers (enforce pnpm only)
+package-lock.json
+yarn.lock
+
 # Python virtual environment
 platforms/reddit/.venv/
 __pycache__/

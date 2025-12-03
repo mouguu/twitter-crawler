@@ -18,7 +18,6 @@
         "tests/**/*",
         "server/**/*",
         "worker.ts",
-        "scrape-unified.ts",
         "cli.ts"
     ],
     "exclude": [

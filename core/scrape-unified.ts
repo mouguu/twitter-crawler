@@ -11,11 +11,11 @@ import {
     ScrapeThreadResult,
     getShouldStopScraping,
     ScraperErrors
-} from './core';
-import * as markdownUtils from './utils/markdown';
-import * as exportUtils from './utils/export';
-import * as fileUtils from './utils/fileutils';
-import { Tweet, ProfileInfo } from './types';
+} from './index';  // core/index.ts
+import * as markdownUtils from '../utils/markdown';
+import * as exportUtils from '../utils/export';
+import * as fileUtils from '../utils/fileutils';
+import { Tweet, ProfileInfo } from '../types';
 
 // Re-export types for consumers
 export type { ScrapeTimelineResult, ScrapeThreadResult };
@@ -306,7 +306,7 @@ export async function scrapeTwitterUsers(
                             resume: options.resume
                         });
 
-                        const likedTweets = (likesResult.tweets || []).map(t => ({ ...t, isLiked: true }));
+                        const likedTweets = (likesResult.tweets || []).map((t: Tweet) => ({ ...t, isLiked: true }));
                         combinedTweets = combinedTweets.concat(likedTweets);
                     } catch (likeError: any) {
                         console.warn(`Failed to scrape likes for ${resultIdentifier}: ${likeError.message}`);
