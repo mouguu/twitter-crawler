@@ -17,6 +17,7 @@
         "middleware/**/*",
         "tests/**/*",
         "server.ts",
+        "worker.ts",
         "scrape-unified.ts",
         "cli.ts"
     ],

@@ -7,7 +7,7 @@ Replaces the bloated EnhancedUofTScraper.
 
 import re
 import time
-from typing import Dict, List, Any, Optional, Callable
+from typing import Dict, List, Any, Optional, Callable, Tuple
 from datetime import datetime
 
 from core.rate_limiter import SmartRateController
