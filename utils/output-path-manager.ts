@@ -3,10 +3,10 @@
  * 统一管理输出路径，提供安全的路径操作和目录结构管理
  */
 
-import * as path from 'path';
-import * as fs from 'fs';
-import { promises as fsPromises } from 'fs';
-import { sanitizeSegment } from './fileutils';
+import * as path from "path";
+import * as fs from "fs";
+import { promises as fsPromises } from "fs";
+import { sanitizeSegment } from "./fileutils";
 
 export interface OutputPathConfig {
   baseDir?: string;
@@ -25,7 +25,7 @@ export interface RunPathResult {
   metadataPath: string;
 }
 
-const DEFAULT_BASE_DIR = path.resolve(process.cwd(), 'output');
+const DEFAULT_BASE_DIR = path.resolve(process.cwd(), "output");
 
 let singletonInstance: OutputPathManager | null = null;
 
@@ -33,10 +33,8 @@ export class OutputPathManager {
   private baseDir: string;
 
   constructor(config: OutputPathConfig = {}) {
-    this.baseDir = config.baseDir || 
-                   process.env.OUTPUT_DIR || 
-                   DEFAULT_BASE_DIR;
-    
+    this.baseDir = config.baseDir || process.env.OUTPUT_DIR || DEFAULT_BASE_DIR;
+
     // 确保基础目录存在
     if (!fs.existsSync(this.baseDir)) {
       fs.mkdirSync(this.baseDir, { recursive: true });
@@ -79,8 +77,8 @@ export class OutputPathManager {
       this.getIdentifierDir(platform, identifier),
       runId
     );
-    const markdownDir = path.join(runDir, 'markdown');
-    const screenshotDir = path.join(runDir, 'screenshots');
+    const markdownDir = path.join(runDir, "markdown");
+    const screenshotDir = path.join(runDir, "screenshots");
 
     // 创建所有必要的目录
     await fsPromises.mkdir(runDir, { recursive: true });
@@ -94,20 +92,37 @@ export class OutputPathManager {
       runDir,
       markdownDir,
       screenshotDir,
-      jsonPath: path.join(runDir, 'tweets.json'),
-      csvPath: path.join(runDir, 'tweets.csv'),
-      markdownIndexPath: path.join(runDir, 'index.md'),
-      metadataPath: path.join(runDir, 'metadata.json')
+      jsonPath: path.join(runDir, "tweets.json"),
+      csvPath: path.join(runDir, "tweets.csv"),
+      markdownIndexPath: path.join(runDir, "index.md"),
+      metadataPath: path.join(runDir, "metadata.json"),
     };
   }
 
   /**
    * 检查路径是否安全（在基础目录内）
+   * 支持符号链接的真实路径解析
    */
   isPathSafe(filePath: string): boolean {
-    const resolved = path.resolve(filePath);
-    const baseResolved = path.resolve(this.baseDir);
-    return resolved.startsWith(baseResolved + path.sep) || resolved === baseResolved;
+    try {
+      // 1. 解析输入路径和baseDir的真实路径（跟随符号链接）
+      const realPath = fs.existsSync(filePath)
+        ? fs.realpathSync(filePath)
+        : path.resolve(filePath);
+
+      const baseRealPath = fs.existsSync(this.baseDir)
+        ? fs.realpathSync(this.baseDir)
+        : path.resolve(this.baseDir);
+
+      // 2. 检查解析后的真实路径是否在baseDir内
+      return (
+        realPath.startsWith(baseRealPath + path.sep) ||
+        realPath === baseRealPath
+      );
+    } catch (error) {
+      // 如果解析失败（如权限问题），返回 false
+      return false;
+    }
   }
 
   /**
@@ -115,8 +130,8 @@ export class OutputPathManager {
    */
   resolvePath(relativePath: string): string {
     // 检测路径遍历尝试
-    if (relativePath.includes('..') || path.isAbsolute(relativePath)) {
-      throw new Error('Path traversal detected');
+    if (relativePath.includes("..") || path.isAbsolute(relativePath)) {
+      throw new Error("Path traversal detected");
     }
 
     return path.join(this.baseDir, relativePath);
@@ -126,7 +141,9 @@ export class OutputPathManager {
 /**
  * 获取单例 OutputPathManager 实例
  */
-export function getOutputPathManager(config?: OutputPathConfig): OutputPathManager {
+export function getOutputPathManager(
+  config?: OutputPathConfig
+): OutputPathManager {
   if (!singletonInstance || config) {
     singletonInstance = new OutputPathManager(config);
   }
