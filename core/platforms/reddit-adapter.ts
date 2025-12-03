@@ -1,4 +1,5 @@
 import { RedditScraper } from './reddit/scraper';
+import { exportRedditToMarkdown } from './reddit/markdown-export';
 import { createEnhancedLogger } from '../../utils/logger';
 import { getOutputPathManager } from '../../utils';
 import { PlatformAdapter } from './types';
@@ -35,7 +36,7 @@ export const redditAdapter: PlatformAdapter = {
             comments: result.comments,
           }];
 
-          // Save to file
+          // Save to files
           const outputPathManager = getOutputPathManager();
           const postId = result.post.id;
           const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -47,8 +48,17 @@ export const redditAdapter: PlatformAdapter = {
           );
 
           fs.mkdirSync(runDir, { recursive: true });
-          outputPath = path.join(runDir, 'post.json');
-          fs.writeFileSync(outputPath, JSON.stringify(posts[0], null, 2));
+          
+          // Save JSON
+          const jsonPath = path.join(runDir, 'post.json');
+          fs.writeFileSync(jsonPath, JSON.stringify(posts[0], null, 2));
+
+          // Export Markdown with post title
+          const mdPath = exportRedditToMarkdown(
+            [{ post: result.post, comments: result.comments }],
+            runDir
+          );
+          outputPath = mdPath; // Use markdown as primary output
 
           await ctx.log(`Saved post with ${result.comments.length} comments`, 'info');
         } else {
@@ -99,7 +109,7 @@ export const redditAdapter: PlatformAdapter = {
           await ctx.log(`Progress: ${current}/${postUrls.length} posts processed`);
         }
 
-        // Save to file
+        // Save to files
         const outputPathManager = getOutputPathManager();
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const runDir = path.join(
@@ -110,10 +120,25 @@ export const redditAdapter: PlatformAdapter = {
         );
 
         fs.mkdirSync(runDir, { recursive: true });
-        outputPath = path.join(runDir, 'posts.json');
-        fs.writeFileSync(outputPath, JSON.stringify(posts, null, 2));
+        
+        // Save JSON
+        const jsonPath = path.join(runDir, 'posts.json');
+        fs.writeFileSync(jsonPath, JSON.stringify(posts, null, 2));
 
-        await ctx.log(`Saved ${posts.length} posts to ${outputPath}`, 'info');
+        // Export Markdown (creates index + individual posts)
+        const postsWithComments = posts.map(p => ({
+          post: { ...p, comments: undefined },
+          comments: p.comments || []
+        }));
+        
+        const mdPath = exportRedditToMarkdown(
+          postsWithComments,
+          runDir,
+          `r_${subreddit}_${posts.length}posts.md`
+        );
+        outputPath = mdPath; // Use markdown index as primary output
+
+        await ctx.log(`Saved ${posts.length} posts (JSON + Markdown)`, 'info');
       }
 
       const duration = Date.now() - startTime;
