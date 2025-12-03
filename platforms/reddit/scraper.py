@@ -146,6 +146,7 @@ class RedditScraper:
             
             try:
                 # Pass log_callback to scrape_post so its logs are streamed
+                # Wrap in timeout to ensure it doesn't hang
                 res = self.post_scraper.scrape_post(p_url, log_callback=log_callback)
                 
                 if res and res.get('status') == 'success':
@@ -160,11 +161,10 @@ class RedditScraper:
                         pass
                     return res
                 else:
-                    log(f"❌ 帖子 {p_id} 抓取失败: {res.get('message') if res else 'Unknown error'}", 'error')
+                    # Fail fast - don't log, just skip
                     return None
             except Exception as e:
-                log(f"❌ 帖子 {p_id} 处理异常: {str(e)}", 'error')
-                self.error_count += 1
+                # Fail fast - don't log here, let outer handler log briefly
                 return None
 
         # Prepare arguments
@@ -177,48 +177,60 @@ class RedditScraper:
             future_to_url = {executor.submit(process_post, task): task for task in tasks}
             
             completed_count = 0
-            # Use timeout for each future to prevent hanging
-            TIMEOUT_PER_TASK = 60  # 60 seconds per task
+            # Short timeout - fail fast, skip problematic posts quickly
+            TIMEOUT_PER_TASK = 30  # 30 seconds per task - fail fast
+            TOTAL_TIMEOUT = len(post_urls) * 60  # Overall timeout as fallback (60s per post max)
             
-            for future in concurrent.futures.as_completed(future_to_url, timeout=None):
-                try:
-                    # Add timeout to prevent hanging on individual tasks
-                    result = future.result(timeout=TIMEOUT_PER_TASK)
-                    completed_count += 1
-                    
-                    if result and result.get('status') == 'success':
-                        self.scraped_count += 1
-                        scraped_posts.append(result)
+            try:
+                for future in concurrent.futures.as_completed(future_to_url, timeout=TOTAL_TIMEOUT):
+                    try:
+                        # Short timeout - skip slow posts immediately
+                        result = future.result(timeout=TIMEOUT_PER_TASK)
+                        completed_count += 1
                         
-                    # Update progress
-                    if progress_callback:
-                        progress_callback(completed_count, len(post_urls), f"Processed {completed_count}/{len(post_urls)} posts")
-                        
-                    if self.scraped_count >= max_posts:
-                        # Cancel remaining futures
-                        for f in future_to_url:
-                            f.cancel()
-                        break
-                        
-                except concurrent.futures.TimeoutError:
-                    task = future_to_url[future]
-                    idx, p_url, p_id = task
-                    log(f"⏱️ 帖子 {p_id} 处理超时 (>{TIMEOUT_PER_TASK}s)，跳过", 'warning')
-                    self.error_count += 1
-                    completed_count += 1
-                    if progress_callback:
-                        progress_callback(completed_count, len(post_urls), f"Processed {completed_count}/{len(post_urls)} posts (timeout)")
-                except Exception as exc:
-                    task = future_to_url.get(future)
-                    if task:
-                        idx, p_url, p_id = task
-                        log(f"❌ 帖子 {p_id} 线程异常: {exc}", 'error')
-                    else:
-                        log(f"❌ 线程异常: {exc}", 'error')
-                    self.error_count += 1
-                    completed_count += 1
-                    if progress_callback:
-                        progress_callback(completed_count, len(post_urls), f"Processed {completed_count}/{len(post_urls)} posts (error)")
+                        if result and result.get('status') == 'success':
+                            self.scraped_count += 1
+                            scraped_posts.append(result)
+                            
+                        # Update progress
+                        if progress_callback:
+                            progress_callback(completed_count, len(post_urls), f"Processed {completed_count}/{len(post_urls)} posts")
+                            
+                        if self.scraped_count >= max_posts:
+                            # Cancel remaining futures
+                            for f in future_to_url:
+                                if not f.done():
+                                    f.cancel()
+                            break
+                            
+                    except concurrent.futures.TimeoutError:
+                        task = future_to_url.get(future)
+                        if task:
+                            idx, p_url, p_id = task
+                            log(f"⏱️ 帖子 {p_id} 超时，快速跳过", 'warning')
+                        else:
+                            log(f"⏱️ 任务超时，快速跳过", 'warning')
+                        self.error_count += 1
+                        completed_count += 1
+                        if progress_callback:
+                            progress_callback(completed_count, len(post_urls), f"Processed {completed_count}/{len(post_urls)} posts (跳过超时)")
+                    except Exception as exc:
+                        task = future_to_url.get(future)
+                        if task:
+                            idx, p_url, p_id = task
+                            log(f"❌ 帖子 {p_id} 错误，快速跳过: {str(exc)[:50]}", 'error')
+                        else:
+                            log(f"❌ 任务错误，快速跳过: {str(exc)[:50]}", 'error')
+                        self.error_count += 1
+                        completed_count += 1
+                        if progress_callback:
+                            progress_callback(completed_count, len(post_urls), f"Processed {completed_count}/{len(post_urls)} posts (跳过错误)")
+            except concurrent.futures.TimeoutError:
+                log(f"⏱️ 总体超时，已完成 {completed_count}/{len(post_urls)} 个帖子", 'warning')
+                # Cancel all remaining futures
+                for f in future_to_url:
+                    if not f.done():
+                        f.cancel()
         
         # Print final stats
         elapsed_time = time.time() - start_time

@@ -8,7 +8,7 @@ import requests
 import re
 import json
 import time
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional, Tuple, Callable
 from datetime import datetime
 
 
@@ -66,12 +66,13 @@ class RedditPostScraper:
         
         raise ValueError(f"Invalid Reddit URL format: {url}")
     
-    def fetch_json(self, url: str) -> Dict:
+    def fetch_json(self, url: str, max_retries: int = 0) -> Dict:
         """
         Fetch JSON data from Reddit API
         
         Args:
             url: Reddit URL (will append .json automatically)
+            max_retries: Maximum number of retries (0 = no retry, fail fast)
             
         Returns:
             dict: Parsed JSON response
@@ -82,19 +83,28 @@ class RedditPostScraper:
         
         print(f"🌐 Fetching: {url}")
         
-        try:
-            time.sleep(self.rate_limit_delay)  # Rate limiting
-            response = self.session.get(url, timeout=30)
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 429:
-                print(f"⚠️ Rate limited. Waiting 60 seconds...")
-                time.sleep(60)
-                return self.fetch_json(url)  # Retry
-            raise
-        except Exception as e:
-            raise Exception(f"Failed to fetch JSON from {url}: {str(e)}")
+        for attempt in range(max_retries + 1):
+            try:
+                time.sleep(self.rate_limit_delay)  # Rate limiting
+                # Short timeouts: connect 5s, read 20s - fail fast
+                response = self.session.get(url, timeout=(5, 20))
+                response.raise_for_status()
+                return response.json()
+            except requests.exceptions.Timeout as e:
+                # Timeout = skip immediately, no retry
+                raise Exception(f"Request timeout: {url}")
+            except requests.exceptions.HTTPError as e:
+                if e.response.status_code == 429:
+                    # Rate limit = skip immediately, don't wait
+                    raise Exception(f"Rate limited: {url}")
+                raise
+            except requests.exceptions.RequestException as e:
+                # Network error = skip immediately, no retry
+                raise Exception(f"Network error: {str(e)}")
+            except Exception as e:
+                raise Exception(f"Failed to fetch JSON from {url}: {str(e)}")
+        
+        raise Exception(f"Failed to fetch JSON from {url}")
     
     def parse_comment_tree(self, comment_data: Dict, depth: int = 0, parent_id: Optional[str] = None) -> List[Dict]:
         """

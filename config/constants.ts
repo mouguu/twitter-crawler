@@ -59,6 +59,38 @@ export const WAIT_FOR_TWEETS_AFTER_REFRESH_TIMEOUT = 75000;
  */
 export const WAIT_FOR_NEW_TWEETS_TIMEOUT = 6000;
 
+// ==================== 速率限制配置 ====================
+
+/**
+ * API request rate limiting configuration
+ */
+export const API_RATE_LIMIT = {
+  /** Minimum wait time between API requests (ms) */
+  MIN_WAIT: 200,
+  /** Maximum wait time between API requests (ms) */
+  MAX_WAIT: 500,
+  /** Thread detail request wait time base (ms) */
+  THREAD_WAIT_BASE: 200,
+  /** Thread detail request wait time jitter (ms) */
+  THREAD_WAIT_JITTER: 300,
+} as const;
+
+/**
+ * Calculate random wait time for API requests
+ */
+export function getApiWaitTime(): number {
+  return API_RATE_LIMIT.MIN_WAIT + 
+         Math.random() * (API_RATE_LIMIT.MAX_WAIT - API_RATE_LIMIT.MIN_WAIT);
+}
+
+/**
+ * Calculate random wait time for thread detail requests
+ */
+export function getThreadDetailWaitTime(): number {
+  return API_RATE_LIMIT.THREAD_WAIT_BASE + 
+         Math.random() * API_RATE_LIMIT.THREAD_WAIT_JITTER;
+}
+
 // ==================== 重试配置 ====================
 
 /**
@@ -215,6 +247,36 @@ export function getScrollDelay(): number {
 export function getRefreshWaitDelay(): number {
   return REFRESH_WAIT_DELAY_BASE + Math.random() * REFRESH_WAIT_DELAY_JITTER;
 }
+
+// ==================== 浏览器池配置 ====================
+
+/**
+ * Browser pool configuration
+ */
+export const BROWSER_POOL_CONFIG = {
+  /** Maximum pool size */
+  MAX_SIZE: 3,
+  /** Minimum pool size */
+  MIN_SIZE: 1,
+  /** Maximum browser idle time (ms) before closing */
+  MAX_IDLE_TIME: 30000,
+  /** Browser acquisition timeout (ms) */
+  ACQUIRE_TIMEOUT: 30000,
+} as const;
+
+// ==================== 线程爬取配置 ====================
+
+/**
+ * Thread scraping configuration
+ */
+export const THREAD_CONFIG = {
+  /** Maximum replies to fetch per thread */
+  MAX_REPLIES: 100,
+  /** Maximum scroll attempts for DOM thread scraping */
+  MAX_SCROLL_ATTEMPTS: 50,
+  /** Replies per scroll attempt */
+  REPLIES_PER_SCROLL: 5,
+} as const;
 
 // ==================== 批处理配置 ====================
 

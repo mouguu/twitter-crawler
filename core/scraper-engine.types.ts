@@ -73,6 +73,8 @@ export interface ScrapeTimelineResult {
   runContext?: RunContext;
   profile?: ProfileInfo | null;
   error?: string;
+  code?: string;
+  retryable?: boolean;
   performance?: PerformanceStats;
 }
 
@@ -97,6 +99,8 @@ export interface ScrapeThreadResult {
   replies?: Tweet[];
   runContext?: RunContext;
   error?: string;
+  code?: string;
+  retryable?: boolean;
   performance?: PerformanceStats;
 }
 

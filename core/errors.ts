@@ -1,70 +1,74 @@
 /**
- * 统一的错误处理系统
- * 企业级错误管理：类型化、可追踪、可恢复
+ * Error handling module for XRCrawler
+ * Defines error types, codes, and classification logic
  */
 
+/**
+ * Standard error codes for the scraper
+ */
 export enum ErrorCode {
-  // 网络错误
-  NETWORK_ERROR = 'NETWORK_ERROR',
-  TIMEOUT = 'TIMEOUT',
-  CONNECTION_REFUSED = 'CONNECTION_REFUSED',
+  // Network Errors
+  NETWORK_ERROR = "NETWORK_ERROR",
+  CONNECTION_REFUSED = "CONNECTION_REFUSED",
+  TIMEOUT = "TIMEOUT",
+  DNS_ERROR = "DNS_ERROR",
   
-  // 认证错误
-  AUTHENTICATION_FAILED = 'AUTHENTICATION_FAILED',
-  AUTH_FAILED = 'AUTH_FAILED',
-  COOKIE_LOAD_FAILED = 'COOKIE_LOAD_FAILED',
-  COOKIE_INVALID = 'COOKIE_INVALID',
-  SESSION_INVALID = 'SESSION_INVALID',
-  SESSION_EXPIRED = 'SESSION_EXPIRED',
+  // Authentication Errors
+  AUTH_FAILED = "AUTH_FAILED",
+  LOGIN_REQUIRED = "LOGIN_REQUIRED",
+  SESSION_EXPIRED = "SESSION_EXPIRED",
+  ACCOUNT_LOCKED = "ACCOUNT_LOCKED",
+  ACCOUNT_SUSPENDED = "ACCOUNT_SUSPENDED",
   
-  // 速率限制
-  RATE_LIMIT = 'RATE_LIMIT',
-  RATE_LIMIT_EXCEEDED = 'RATE_LIMIT_EXCEEDED',
+  // Rate Limiting
+  RATE_LIMIT_EXCEEDED = "RATE_LIMIT_EXCEEDED",
+  THROTTLED = "THROTTLED",
   
-  // API 错误
-  API_ERROR = 'API_ERROR',
-  API_REQUEST_FAILED = 'API_REQUEST_FAILED',
-  API_NOT_FOUND = 'API_NOT_FOUND',
-  API_BAD_REQUEST = 'API_BAD_REQUEST',
-  API_CLIENT_NOT_INITIALIZED = 'API_CLIENT_NOT_INITIALIZED',
+  // API Errors
+  API_ERROR = "API_ERROR",
+  INVALID_RESPONSE = "INVALID_RESPONSE",
+  BAD_REQUEST = "BAD_REQUEST",
+  NOT_FOUND = "NOT_FOUND",
+  SERVER_ERROR = "SERVER_ERROR",
   
-  // 浏览器错误
-  BROWSER_ERROR = 'BROWSER_ERROR',
-  BROWSER_NOT_INITIALIZED = 'BROWSER_NOT_INITIALIZED',
-  PAGE_NOT_AVAILABLE = 'PAGE_NOT_AVAILABLE',
-  PAGE_ERROR = 'PAGE_ERROR',
-  NAVIGATION_FAILED = 'NAVIGATION_FAILED',
-  SELECTOR_NOT_FOUND = 'SELECTOR_NOT_FOUND',
+  // Browser/Puppeteer Errors
+  BROWSER_CRASHED = "BROWSER_CRASHED",
+  BROWSER_ERROR = "BROWSER_CRASHED", // Alias for BROWSER_CRASHED
+  NAVIGATION_FAILED = "NAVIGATION_FAILED",
+  SELECTOR_TIMEOUT = "SELECTOR_TIMEOUT",
+  ELEMENT_NOT_FOUND = "ELEMENT_NOT_FOUND",
   
-  // 数据错误
-  DATA_EXTRACTION_FAILED = 'DATA_EXTRACTION_FAILED',
-  DATA_PARSE_ERROR = 'DATA_PARSE_ERROR',
-  DATA_VALIDATION_ERROR = 'DATA_VALIDATION_ERROR',
-  USER_NOT_FOUND = 'USER_NOT_FOUND',
-  TWEET_NOT_FOUND = 'TWEET_NOT_FOUND',
+  // Data Extraction Errors
+  DATA_EXTRACTION_FAILED = "DATA_EXTRACTION_FAILED",
+  PARSING_ERROR = "PARSING_ERROR",
+  VALIDATION_ERROR = "VALIDATION_ERROR",
   
-  // 配置错误
-  INVALID_CONFIGURATION = 'INVALID_CONFIGURATION',
-  INVALID_CONFIG = 'INVALID_CONFIG',
-  MISSING_CONFIG = 'MISSING_CONFIG',
-  MISSING_REQUIRED_PARAMETER = 'MISSING_REQUIRED_PARAMETER',
+  // System Errors
+  UNKNOWN_ERROR = "UNKNOWN_ERROR",
+  INTERNAL_ERROR = "INTERNAL_ERROR",
+  CONFIG_ERROR = "CONFIG_ERROR",
+  FILE_SYSTEM_ERROR = "FILE_SYSTEM_ERROR",
   
-  // 系统错误
-  SYSTEM_ERROR = 'SYSTEM_ERROR',
-  FILE_SYSTEM_ERROR = 'FILE_SYSTEM_ERROR',
-  MEMORY_ERROR = 'MEMORY_ERROR',
-  
-  // 通用错误
-  UNKNOWN_ERROR = 'UNKNOWN_ERROR',
-  OPERATION_CANCELLED = 'OPERATION_CANCELLED'
+  // Backward compatibility aliases
+  RATE_LIMIT = "RATE_LIMIT_EXCEEDED", // Alias for RATE_LIMIT_EXCEEDED
+  INVALID_CONFIG = "CONFIG_ERROR", // Alias for CONFIG_ERROR
 }
 
+/**
+ * Context information for errors
+ */
 export interface ErrorContext {
+  url?: string;
+  username?: string;
+  tweetId?: string;
+  operation?: string;
+  statusCode?: number;
+  retryCount?: number;
   [key: string]: any;
 }
 
 /**
- * 统一的爬虫错误类
+ * Custom error class for scraper errors
  */
 export class ScraperError extends Error {
   public readonly code: ErrorCode;
@@ -85,7 +89,7 @@ export class ScraperError extends Error {
     } = {}
   ) {
     super(message);
-    this.name = 'ScraperError';
+    this.name = "ScraperError";
     this.code = code;
     this.retryable = options.retryable ?? false;
     this.context = options.context || {};
@@ -93,359 +97,463 @@ export class ScraperError extends Error {
     this.originalError = options.originalError;
     this.statusCode = options.statusCode;
 
+    // Capture stack trace
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, ScraperError);
     }
   }
 
   /**
-   * 从 HTTP 响应创建错误
+   * Check if the error is recoverable
    */
-  static fromHttpResponse(
-    response: Response,
-    context?: ErrorContext
-  ): ScraperError {
-    const status = response.status;
-    let code: ErrorCode;
-    let message: string;
-    let retryable = false;
+  public isRecoverable(): boolean {
+    return this.retryable;
+  }
 
-    switch (status) {
-      case 401:
-      case 403:
-        code = ErrorCode.AUTH_FAILED;
-        message = `Authentication failed (${status})`;
-        break;
-      case 404:
-        code = ErrorCode.API_NOT_FOUND;
-        message = `Resource not found (${status})`;
-        retryable = false;
-        break;
-      case 429:
-        code = ErrorCode.RATE_LIMIT;
-        message = `Rate limit exceeded (${status})`;
-        retryable = true;
-        break;
-      case 500:
-      case 502:
-      case 503:
-      case 504:
-        code = ErrorCode.API_ERROR;
-        message = `Server error (${status})`;
-        retryable = true;
-        break;
+  /**
+   * Get a user-friendly error message
+   */
+  public getUserMessage(): string {
+    switch (this.code) {
+      case ErrorCode.RATE_LIMIT_EXCEEDED:
+        return "Rate limit exceeded. Waiting before retrying...";
+      case ErrorCode.AUTH_FAILED:
+        return "Authentication failed. Please check your credentials.";
+      case ErrorCode.NETWORK_ERROR:
+        return "Network error. Please check your internet connection.";
+      case ErrorCode.TIMEOUT:
+        return "Operation timed out.";
+      case ErrorCode.NOT_FOUND:
+        return "Resource not found.";
       default:
-        code = ErrorCode.API_ERROR;
-        message = `API request failed (${status})`;
-        retryable = status >= 500;
+        return this.message;
     }
-
-    return new ScraperError(code, message, {
-      retryable,
-      statusCode: status,
-      context: {
-        ...context,
-        statusCode: status,
-        statusText: response.statusText
-      }
-    });
   }
 
   /**
-   * 从原生 Error 创建 ScraperError
+   * Convert error to JSON object
    */
-  static fromError(
-    error: Error,
-    code: ErrorCode = ErrorCode.UNKNOWN_ERROR,
-    retryable: boolean = false
-  ): ScraperError {
-    return new ScraperError(code, error.message, {
-      retryable,
-      originalError: error
-    });
-  }
-
-  /**
-   * 检查是否为速率限制错误
-   */
-  static isRateLimitError(error: Error): boolean {
-    if (error instanceof ScraperError) {
-      return error.code === ErrorCode.RATE_LIMIT || 
-             error.code === ErrorCode.RATE_LIMIT_EXCEEDED;
-    }
-    const msg = error.message.toLowerCase();
-    return msg.includes('rate limit') || 
-           msg.includes('429') || 
-           msg.includes('too many requests');
-  }
-
-  /**
-   * 检查是否为认证错误
-   */
-  static isAuthError(error: Error): boolean {
-    if (error instanceof ScraperError) {
-      return error.code === ErrorCode.AUTHENTICATION_FAILED ||
-             error.code === ErrorCode.AUTH_FAILED ||
-             error.code === ErrorCode.COOKIE_LOAD_FAILED ||
-             error.code === ErrorCode.COOKIE_INVALID ||
-             error.code === ErrorCode.SESSION_INVALID ||
-             error.code === ErrorCode.SESSION_EXPIRED;
-    }
-    const msg = error.message.toLowerCase();
-    return msg.includes('auth') || 
-           msg.includes('401') || 
-           msg.includes('403') ||
-           msg.includes('cookie');
-  }
-
-  /**
-   * 检查是否为网络错误
-   */
-  static isNetworkError(error: Error): boolean {
-    if (error instanceof ScraperError) {
-      return error.code === ErrorCode.NETWORK_ERROR ||
-             error.code === ErrorCode.TIMEOUT ||
-             error.code === ErrorCode.CONNECTION_REFUSED;
-    }
-    const msg = error.message.toLowerCase();
-    return msg.includes('network') ||
-           msg.includes('timeout') ||
-           msg.includes('connection') ||
-           msg.includes('econnrefused');
-  }
-
-  /**
-   * 检查是否为可恢复的错误
-   */
-  isRecoverable(): boolean {
-    return this.retryable || [
-      ErrorCode.RATE_LIMIT_EXCEEDED,
-      ErrorCode.API_REQUEST_FAILED,
-      ErrorCode.NAVIGATION_FAILED,
-      ErrorCode.NETWORK_ERROR,
-      ErrorCode.TIMEOUT
-    ].includes(this.code);
-  }
-
-  /**
-   * 转换为 JSON（用于日志和序列化）
-   */
-  toJSON(): Record<string, any> {
+  public toJSON(): Record<string, any> {
     return {
       name: this.name,
       code: this.code,
       message: this.message,
       retryable: this.retryable,
       context: this.context,
-      timestamp: this.timestamp.toISOString(),
-      statusCode: this.statusCode,
+      timestamp: this.timestamp,
       stack: this.stack,
-      originalError: this.originalError ? {
-        name: this.originalError.name,
-        message: this.originalError.message,
-        stack: this.originalError.stack
-      } : undefined
+      originalError: this.originalError
+        ? {
+            name: this.originalError.name,
+            message: this.originalError.message,
+            stack: this.originalError.stack,
+           }
+        : undefined,
     };
   }
 
   /**
-   * 获取用户友好的错误消息
+   * Create ScraperError from HTTP response (backward compatibility)
    */
-  getUserMessage(): string {
-    switch (this.code) {
-      case ErrorCode.RATE_LIMIT:
-      case ErrorCode.RATE_LIMIT_EXCEEDED:
-        return '已达到速率限制，请稍后重试或切换账户';
-      case ErrorCode.AUTHENTICATION_FAILED:
-      case ErrorCode.AUTH_FAILED:
-      case ErrorCode.COOKIE_LOAD_FAILED:
-      case ErrorCode.COOKIE_INVALID:
-      case ErrorCode.SESSION_EXPIRED:
-        return '认证失败，请检查 cookies 是否有效';
-      case ErrorCode.NETWORK_ERROR:
-      case ErrorCode.TIMEOUT:
-        return '网络连接失败，请检查网络设置';
-      case ErrorCode.API_ERROR:
-      case ErrorCode.API_REQUEST_FAILED:
-        return 'API 请求失败，请稍后重试';
-      default:
-        return this.message || '发生未知错误';
-    }
-  }
-}
-
-/**
- * 错误工厂函数（保持向后兼容）
- */
-export const ScraperErrors = {
-  authenticationFailed: (message: string = 'Authentication failed', statusCode?: number) =>
-    new ScraperError(ErrorCode.AUTHENTICATION_FAILED, message, { statusCode, retryable: false }),
-  
-  cookieLoadFailed: (message: string = 'Failed to load cookies', cause?: Error) =>
-    new ScraperError(ErrorCode.COOKIE_LOAD_FAILED, message, { originalError: cause, retryable: false }),
-  
-  rateLimitExceeded: (message: string = 'Rate limit exceeded') =>
-    new ScraperError(ErrorCode.RATE_LIMIT_EXCEEDED, message, { statusCode: 429, retryable: true }),
-  
-  apiRequestFailed: (message: string, statusCode?: number, context?: ErrorContext) => {
-    // Enhanced error message for 400 errors that might indicate Query ID expiration
-    let enhancedMessage = message;
-    let enhancedContext = { ...context };
+  public static fromHttpResponse(
+    response: { status: number; statusText?: string },
+    context?: ErrorContext
+  ): ScraperError {
+    const statusCode = response.status;
+    const statusText = response.statusText || String(statusCode);
     
-    if (statusCode === 400 && context?.operation) {
-      const operation = context.operation;
-      enhancedMessage = `${message}\n⚠️  提示：如果此错误持续出现，可能是 Query ID 已过期。\n请参考 docs/maintaining-query-ids.md 更新 ${operation} 的 Query ID。`;
-      enhancedContext = {
-        ...context,
-        possibleQueryIdExpiration: true,
-        maintenanceGuide: 'docs/maintaining-query-ids.md'
-      };
+    if (statusCode === 429) {
+      return new ScraperError(
+        ErrorCode.RATE_LIMIT_EXCEEDED,
+        `Rate limit exceeded: ${statusText}`,
+        { retryable: true, statusCode, context }
+      );
+    }
+    
+    if (statusCode === 401 || statusCode === 403) {
+      return new ScraperError(
+        ErrorCode.AUTH_FAILED,
+        `Authentication failed: ${statusText}`,
+        { retryable: false, statusCode, context }
+      );
+    }
+    
+    if (statusCode >= 500) {
+      return new ScraperError(
+        ErrorCode.SERVER_ERROR,
+        `Server error: ${statusText}`,
+        { retryable: true, statusCode, context }
+      );
     }
     
     return new ScraperError(
-      ErrorCode.API_REQUEST_FAILED,
-      enhancedMessage,
-      {
-        retryable: statusCode === 429 || statusCode === 502 || statusCode === 503,
-        statusCode,
-        context: enhancedContext,
-      }
+      ErrorCode.API_ERROR,
+      `HTTP ${statusCode}: ${statusText}`,
+      { retryable: false, statusCode, context }
     );
-  },
-  
-  apiClientNotInitialized: () =>
-    new ScraperError(ErrorCode.API_CLIENT_NOT_INITIALIZED, 'API Client not initialized', { retryable: false }),
-  
-  browserNotInitialized: () =>
-    new ScraperError(ErrorCode.BROWSER_NOT_INITIALIZED, 'Browser not initialized', { retryable: false }),
-  
-  pageNotAvailable: () =>
-    new ScraperError(ErrorCode.PAGE_NOT_AVAILABLE, 'Page not available', { retryable: false }),
-  
-  navigationFailed: (url: string, cause?: Error) =>
-    new ScraperError(ErrorCode.NAVIGATION_FAILED, `Navigation failed: ${url}`, { context: { url }, originalError: cause, retryable: true }),
-  
-  dataExtractionFailed: (message: string, context?: ErrorContext) =>
-    new ScraperError(ErrorCode.DATA_EXTRACTION_FAILED, message, { context, retryable: false }),
-  
-  userNotFound: (username: string) =>
-    new ScraperError(ErrorCode.USER_NOT_FOUND, `User not found: ${username}`, { context: { username }, retryable: false }),
-  
-  tweetNotFound: (tweetId: string) =>
-    new ScraperError(ErrorCode.TWEET_NOT_FOUND, `Tweet not found: ${tweetId}`, { context: { tweetId }, retryable: false }),
-  
-  invalidConfiguration: (message: string, context?: ErrorContext) =>
-    new ScraperError(ErrorCode.INVALID_CONFIGURATION, message, { context, retryable: false }),
-  
-  missingRequiredParameter: (paramName: string) =>
-    new ScraperError(ErrorCode.MISSING_REQUIRED_PARAMETER, `Missing required parameter: ${paramName}`, { context: { paramName }, retryable: false }),
-  
-  operationCancelled: () =>
-    new ScraperError(ErrorCode.OPERATION_CANCELLED, 'Operation cancelled by user', { retryable: false }),
-  
-  unknown: (message: string, cause?: Error) =>
-    new ScraperError(ErrorCode.UNKNOWN_ERROR, message, { originalError: cause, retryable: false })
-};
+  }
 
-/**
- * 错误分类器
- */
-export class ErrorClassifier {
   /**
-   * 分类错误并返回适当的错误代码
+   * Create ScraperError from native Error (backward compatibility)
    */
-  static classify(error: Error | unknown): ScraperError {
+  public static fromError(
+    error: Error,
+    code: ErrorCode = ErrorCode.UNKNOWN_ERROR,
+    retryable: boolean = false,
+    context?: ErrorContext
+  ): ScraperError {
+    return new ScraperError(code, error.message, {
+      retryable,
+      originalError: error,
+      context,
+    });
+  }
+
+  /**
+   * Check if error is a rate limit error
+   */
+  public static isRateLimitError(error: unknown): boolean {
     if (error instanceof ScraperError) {
-      return error;
+      return error.code === ErrorCode.RATE_LIMIT_EXCEEDED;
     }
-
     if (error instanceof Error) {
-      if (ScraperError.isRateLimitError(error)) {
-        return new ScraperError(
-          ErrorCode.RATE_LIMIT,
-          error.message,
-          { retryable: true, originalError: error }
-        );
-      }
-
-      if (ScraperError.isAuthError(error)) {
-        return new ScraperError(
-          ErrorCode.AUTH_FAILED,
-          error.message,
-          { retryable: false, originalError: error }
-        );
-      }
-
-      if (ScraperError.isNetworkError(error)) {
-        return new ScraperError(
-          ErrorCode.NETWORK_ERROR,
-          error.message,
-          { retryable: true, originalError: error }
-        );
-      }
-
-      return ScraperError.fromError(error);
+      return ErrorClassifier.isRateLimit(error);
     }
+    return false;
+  }
 
-    return new ScraperError(
-      ErrorCode.UNKNOWN_ERROR,
-      String(error),
-      { retryable: false }
-    );
+  /**
+   * Check if error is an auth error
+   */
+  public static isAuthError(error: unknown): boolean {
+    if (error instanceof ScraperError) {
+      return error.code === ErrorCode.AUTH_FAILED ||
+             error.code === ErrorCode.LOGIN_REQUIRED ||
+             error.code === ErrorCode.SESSION_EXPIRED ||
+             error.code === ErrorCode.ACCOUNT_LOCKED ||
+             error.code === ErrorCode.ACCOUNT_SUSPENDED;
+    }
+    if (error instanceof Error) {
+      const lower = error.message.toLowerCase();
+      return lower.includes('auth') || lower.includes('login') ||
+             lower.includes('unauthorized') || lower.includes('401') || lower.includes('403');
+    }
+    return false;
+  }
+
+  /**
+   * Check if error is a network error
+   */
+  public static isNetworkError(error: unknown): boolean {
+    if (error instanceof ScraperError) {
+      return error.code === ErrorCode.NETWORK_ERROR ||
+             error.code === ErrorCode.CONNECTION_REFUSED ||
+             error.code === ErrorCode.TIMEOUT ||
+             error.code === ErrorCode.DNS_ERROR;
+    }
+    if (error instanceof Error) {
+      return ErrorClassifier.isNetworkError(error);
+    }
+    return false;
   }
 }
 
 /**
- * 错误结果类型（用于统一返回格式）
+ * Result types for backward compatibility
  */
-export interface ErrorResult {
-  success: false;
-  error: string;
-  code?: ErrorCode;
-  statusCode?: number;
-  context?: ErrorContext;
-}
-
-/**
- * 成功结果类型
- */
-export interface SuccessResult<T = any> {
+export interface SuccessResult<T> {
   success: true;
   data: T;
 }
 
-/**
- * 统一结果类型
- */
-export type Result<T = any> = SuccessResult<T> | ErrorResult;
+export interface ErrorResult {
+  success: false;
+  error: string;
+  code?: ErrorCode;
+  retryable?: boolean;
+}
+
+export type Result<T> = SuccessResult<T> | ErrorResult;
 
 /**
- * 将错误转换为统一的结果格式
+ * Helper to create success result
  */
-export function errorToResult(error: Error | ScraperError): ErrorResult {
-  if (error instanceof ScraperError) {
-    return {
-      success: false,
-      error: error.message,
-      code: error.code,
-      statusCode: error.statusCode,
-      context: error.context
-    };
-  }
-  
+export function successResult<T>(data: T): SuccessResult<T> {
+  return { success: true, data };
+}
+
+/**
+ * Helper to create error result from error
+ */
+export function errorToResult(error: unknown): ErrorResult {
+  const scraperError = ErrorClassifier.classify(error);
   return {
     success: false,
-    error: error.message || 'Unknown error',
-    code: ErrorCode.UNKNOWN_ERROR
+    error: scraperError.getUserMessage(),
+    code: scraperError.code,
+    retryable: scraperError.retryable,
   };
 }
 
 /**
- * 创建成功结果
+ * Factory for creating common errors
  */
-export function successResult<T>(data: T): SuccessResult<T> {
-  return {
-    success: true,
-    data
-  };
+export const ScraperErrors = {
+  NetworkError: (message: string, context?: ErrorContext, originalError?: Error) =>
+    new ScraperError(ErrorCode.NETWORK_ERROR, message, {
+      retryable: true,
+      context,
+      originalError,
+    }),
+
+  RateLimitError: (message: string = "Rate limit exceeded", context?: ErrorContext) =>
+    new ScraperError(ErrorCode.RATE_LIMIT_EXCEEDED, message, {
+      retryable: true,
+      context,
+    }),
+
+  AuthError: (message: string, context?: ErrorContext) =>
+    new ScraperError(ErrorCode.AUTH_FAILED, message, {
+      retryable: false,
+      context,
+    }),
+
+  TimeoutError: (message: string, context?: ErrorContext) =>
+    new ScraperError(ErrorCode.TIMEOUT, message, {
+      retryable: true,
+      context,
+    }),
+
+  BrowserError: (message: string, context?: ErrorContext, originalError?: Error) =>
+    new ScraperError(ErrorCode.BROWSER_CRASHED, message, {
+      retryable: true,
+      context,
+      originalError,
+    }),
+    
+  DataError: (message: string, context?: ErrorContext) =>
+    new ScraperError(ErrorCode.DATA_EXTRACTION_FAILED, message, {
+      retryable: false,
+      context,
+    }),
+    
+  ApiError: (message: string, statusCode?: number, context?: ErrorContext) =>
+    new ScraperError(ErrorCode.API_ERROR, message, {
+      retryable: statusCode ? [429, 500, 502, 503, 504].includes(statusCode) : true,
+      statusCode,
+      context,
+    }),
+
+  apiClientNotInitialized: () =>
+    new ScraperError(ErrorCode.INTERNAL_ERROR, "API Client not initialized", {
+      retryable: false,
+    }),
+
+  browserNotInitialized: () =>
+    new ScraperError(ErrorCode.INTERNAL_ERROR, "Browser not initialized", {
+      retryable: false,
+    }),
+
+  pageNotAvailable: () =>
+    new ScraperError(ErrorCode.INTERNAL_ERROR, "Page not available", {
+      retryable: false,
+    }),
+
+  invalidConfiguration: (message: string, context?: ErrorContext) =>
+    new ScraperError(ErrorCode.CONFIG_ERROR, message, {
+      retryable: false,
+      context,
+    }),
+
+  apiRequestFailed: (message: string, statusCode?: number, context?: ErrorContext) =>
+    new ScraperError(ErrorCode.API_ERROR, message, {
+      retryable: statusCode ? [429, 500, 502, 503, 504].includes(statusCode) : true,
+      statusCode,
+      context,
+    }),
+
+  rateLimitExceeded: (message: string = "Rate limit exceeded", context?: ErrorContext) =>
+    new ScraperError(ErrorCode.RATE_LIMIT_EXCEEDED, message, {
+      retryable: true,
+      context,
+    }),
+
+  userNotFound: (username: string, context?: ErrorContext) =>
+    new ScraperError(ErrorCode.NOT_FOUND, `User not found: ${username}`, {
+      retryable: false,
+      context: { ...context, username },
+    }),
+
+  dataExtractionFailed: (message: string, context?: ErrorContext) =>
+    new ScraperError(ErrorCode.DATA_EXTRACTION_FAILED, message, {
+      retryable: false,
+      context,
+    }),
+
+  cookieLoadFailed: (message: string, context?: ErrorContext) =>
+    new ScraperError(ErrorCode.INTERNAL_ERROR, message, {
+      retryable: false,
+      context,
+    }),
+
+  navigationFailed: (url: string | Error, error?: Error) =>
+    typeof url === 'string'
+      ? new ScraperError(ErrorCode.NAVIGATION_FAILED, `Navigation failed: ${url}`, {
+          retryable: true,
+          context: { url },
+          originalError: error,
+        })
+      : new ScraperError(ErrorCode.NAVIGATION_FAILED, `Navigation failed: ${url.message}`, {
+          retryable: true,
+          originalError: url,
+        }),
+
+  authenticationFailed: (message: string, statusCode?: number, context?: ErrorContext) =>
+    new ScraperError(ErrorCode.AUTH_FAILED, message, {
+      retryable: false,
+      statusCode,
+      context,
+    }),
+};
+
+/**
+ * Utility to classify unknown errors
+ */
+export class ErrorClassifier {
+  /**
+   * Classify an unknown error into a ScraperError
+   */
+  public static classify(error: unknown, context?: ErrorContext): ScraperError {
+    if (error instanceof ScraperError) {
+      if (context) {
+        // Merge context if provided
+        Object.assign(error.context, context);
+      }
+      return error;
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
+    const originalError = error instanceof Error ? error : undefined;
+    const lowerMessage = message.toLowerCase();
+
+    // Rate Limiting
+    if (
+      lowerMessage.includes("rate limit") ||
+      lowerMessage.includes("too many requests") ||
+      lowerMessage.includes("429")
+    ) {
+      return new ScraperError(ErrorCode.RATE_LIMIT_EXCEEDED, message, {
+        retryable: true,
+        context,
+        originalError,
+      });
+    }
+
+    // Network Errors
+    if (
+      lowerMessage.includes("network") ||
+      lowerMessage.includes("connection refused") ||
+      lowerMessage.includes("econnrefused") ||
+      lowerMessage.includes("socket hang up") ||
+      lowerMessage.includes("fetch failed")
+    ) {
+      return new ScraperError(ErrorCode.NETWORK_ERROR, message, {
+        retryable: true,
+        context,
+        originalError,
+      });
+    }
+
+    // Timeouts
+    if (
+      lowerMessage.includes("timeout") ||
+      lowerMessage.includes("timed out")
+    ) {
+      return new ScraperError(ErrorCode.TIMEOUT, message, {
+        retryable: true,
+        context,
+        originalError,
+      });
+    }
+
+    // Authentication
+    if (
+      lowerMessage.includes("auth") ||
+      lowerMessage.includes("login") ||
+      lowerMessage.includes("unauthorized") ||
+      lowerMessage.includes("401") ||
+      lowerMessage.includes("403")
+    ) {
+      return new ScraperError(ErrorCode.AUTH_FAILED, message, {
+        retryable: false,
+        context,
+        originalError,
+      });
+    }
+
+    // Browser/Puppeteer
+    if (
+      lowerMessage.includes("puppeteer") ||
+      lowerMessage.includes("chromium") ||
+      lowerMessage.includes("browser") ||
+      lowerMessage.includes("target closed") ||
+      lowerMessage.includes("session closed")
+    ) {
+      return new ScraperError(ErrorCode.BROWSER_CRASHED, message, {
+        retryable: true,
+        context,
+        originalError,
+      });
+    }
+    
+    // Navigation
+    if (
+      lowerMessage.includes("navigation") ||
+      lowerMessage.includes("navigating")
+    ) {
+      return new ScraperError(ErrorCode.NAVIGATION_FAILED, message, {
+        retryable: true,
+        context,
+        originalError,
+      });
+    }
+    
+    // Selectors
+    if (
+      lowerMessage.includes("selector") ||
+      lowerMessage.includes("element")
+    ) {
+      return new ScraperError(ErrorCode.ELEMENT_NOT_FOUND, message, {
+        retryable: true,
+        context,
+        originalError,
+      });
+    }
+
+    // Default to Unknown Error
+    return new ScraperError(ErrorCode.UNKNOWN_ERROR, message, {
+      retryable: false,
+      context,
+      originalError,
+    });
+  }
+  
+  /**
+   * Check if an error represents a rate limit
+   */
+  public static isRateLimit(error: unknown): boolean {
+    const classified = this.classify(error);
+    return classified.code === ErrorCode.RATE_LIMIT_EXCEEDED;
+  }
+  
+  /**
+   * Check if an error represents a network issue
+   */
+  public static isNetworkError(error: unknown): boolean {
+    const classified = this.classify(error);
+    return classified.code === ErrorCode.NETWORK_ERROR || 
+           classified.code === ErrorCode.TIMEOUT ||
+           classified.code === ErrorCode.DNS_ERROR ||
+           classified.code === ErrorCode.CONNECTION_REFUSED;
+  }
 }
