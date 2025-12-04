@@ -28,6 +28,30 @@ RUN npm install --ignore-scripts
 # -------------------- 阶段 3: 最终运行镜像 --------------------
 FROM node:22-slim AS runtime
 
+# Install system dependencies for Puppeteer and Prisma (OpenSSL)
+RUN apt-get update && apt-get install -y \
+    chromium \
+    chromium-sandbox \
+    fonts-liberation \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libcups2 \
+    libdbus-1-3 \
+    libdrm2 \
+    libgbm1 \
+    libgtk-3-0 \
+    libnspr4 \
+    libnss3 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxrandr2 \
+    xdg-utils \
+    curl \
+    ca-certificates \
+    openssl \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # 从 deps 阶段复制 node_modules
@@ -49,6 +73,7 @@ COPY wasm/url-normalizer/pkg ./wasm/url-normalizer/pkg
 COPY tsconfig.json ./
 COPY core ./core
 COPY cmd ./cmd
+COPY config ./config
 COPY server ./server
 COPY types ./types
 COPY utils ./utils
