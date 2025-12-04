@@ -23,16 +23,7 @@ interface SessionInfo {
     cookieCount: number;
 }
 
-const FRIENDLY_ACCOUNT_NAMES: Record<string, string> = {
-    'account1.json': 'Sistine Fibel',
-    'account2.json': 'pretextyourmama',
-    'account3.json': 'Shirone',
-    'account4.json': 'Jeanne Howard',
-    account1: 'Sistine Fibel',
-    account2: 'pretextyourmama',
-    account3: 'Shirone',
-    account4: 'Jeanne Howard',
-};
+
 
 export function SessionManager() {
     const [sessions, setSessions] = useState<SessionInfo[]>([]);
@@ -301,9 +292,9 @@ export function SessionManager() {
                                     
                                     <div className="flex-1 min-w-0">
                                         <h4 className="font-medium truncate group-hover:text-foreground transition-colors">
-                                            {FRIENDLY_ACCOUNT_NAMES[session.filename] 
-                                                || FRIENDLY_ACCOUNT_NAMES[session.filename.replace(/\.json$/i, '')] 
-                                                || (session.username ? `@${session.username}` : 'Unknown User')}
+                                            {session.username 
+                                                ? `@${session.username}` 
+                                                : session.filename.replace(/\.json$/i, '')}
                                         </h4>
                                         
                                         <div className="flex items-center gap-2 mt-2">

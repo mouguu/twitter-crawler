@@ -26,25 +26,11 @@
 
 ---
 
-## 🏎️ Architecture & Status
-
-> **TL;DR:** XRCrawler is now a **production-grade industrial crawler** with database persistence and intelligent error handling.
->
-> - **Phase 1-3 Complete**: PostgreSQL, Advanced Error Handling, Operations Monitoring
-> - **Database-Backed**: Resume-capable with PostgreSQL + Prisma
-> - **Smart Error Handling**: Intelligent retry strategies based on error types
-> - **Operations Ready**: Health checks, rate limiting, dashboard API
-
-👉 **[Read DATABASE.md](docs/DATABASE.md)** for schema and SQL analysis tools.
-👉 **[Read OPERATIONS.md](docs/OPERATIONS.md)** for monitoring and health checks.
-
----
-
 ## ✨ Highlights
 
 - **Break the ~800 tweet wall**: Date chunking + resilient session rotation for deep timelines.
 - **Rust/WASM micro-kernel**: Fast, low-memory dedupe/normalization; LLM-ready Markdown export.
-- **Mission Control UI**: Live EventSource logs/progress, Abort/Dismiss, one-click **Download .md**, friendly session labels for `account1.json`–`account4.json`.
+- **Modern Web UI**: Real-time SSE streaming, live progress/logs, one-click **Download .md**, with custom session naming.
 - **Queue-first architecture**: BullMQ on Redis; workers publish progress/logs via Pub/Sub, server streams to `/api/job/:id/stream`.
 - **Multi-platform**: Twitter/X + Reddit, all in TypeScript with plugin-style adapters.
 
@@ -52,7 +38,7 @@
 
 ## 🧰 Requirements
 
-- **Node.js** 18+
+- **Node.js** 20+ (LTS recommended)
 - **pnpm** (enforced - no npm/yarn)
 - **Redis** on `localhost:6379` (for queue + SSE pub/sub)
 - **PostgreSQL** 14+ (for data persistence and resume capabilities)
@@ -104,17 +90,16 @@ npx prisma generate
 
 ### 3. Configure Cookies
 
-Export Twitter cookies (e.g., using [EditThisCookie](https://www.editthiscookie.com/)) to:
+Export Twitter cookies (e.g., using [EditThisCookie](https://www.editthiscookie.com/) or browser DevTools) to the `cookies/` directory:
 
 ```
 cookies/
-├── account1.json
-├── account2.json
-├── account3.json
-└── account4.json
+├── my_main_account.json
+├── backup_account.json
+└── ...any_name_you_want.json
 ```
 
-The UI shows friendly labels for the first four accounts; rotation happens automatically.
+> **Tip:** Use the Web UI's **Session Manager** to upload cookies with custom names. The system supports unlimited accounts with automatic rotation.
 
 ---
 
@@ -415,12 +400,14 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
 ### Frontend
 
-| Technology                                        | Purpose                           |
-| ------------------------------------------------- | --------------------------------- |
-| **[React](https://react.dev/) 18**                | UI components                     |
-| **[Vite](https://vitejs.dev/)**                   | Fast dev server and build tool    |
-| **[TypeScript](https://www.typescriptlang.org/)** | Type-safe frontend code           |
-| **Vanilla CSS**                                   | Custom styling with CSS variables |
+| Technology                                          | Purpose                                   |
+| --------------------------------------------------- | ----------------------------------------- |
+| **[React](https://react.dev/) 18**                  | UI components                             |
+| **[Vite](https://vitejs.dev/)**                     | Fast dev server and build tool            |
+| **[TypeScript](https://www.typescriptlang.org/)**   | Type-safe frontend code                   |
+| **[Tailwind CSS](https://tailwindcss.com/)**        | Utility-first CSS framework               |
+| **[shadcn/ui](https://ui.shadcn.com/)**             | High-quality accessible component library |
+| **[Framer Motion](https://www.framer.com/motion/)** | Smooth animations and transitions         |
 
 ### Performance (Rust/WASM)
 
