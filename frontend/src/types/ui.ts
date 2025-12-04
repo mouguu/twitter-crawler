@@ -1,4 +1,4 @@
-export type TabType = "profile" | "thread" | "search" | "monitor" | "reddit";
+export type TabType = "profile" | "thread" | "search" | "reddit";
 
 export interface Progress {
   current: number;

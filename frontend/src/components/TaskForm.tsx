@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { ArrowRight, Square, Zap, Globe, MessageSquare, Radio, MessageCircle } from "lucide-react";
+import { ArrowRight, Square, Zap, Globe, MessageSquare, MessageCircle } from "lucide-react";
 
 import type { TabType } from "../types/ui";
 
@@ -30,8 +30,6 @@ interface TaskFormProps {
   enableProxy: boolean;
   startDate: string;
   endDate: string;
-  lookbackHours: number;
-  keywords: string;
   redditStrategy: string;
   isScraping: boolean;
   canSubmit: boolean;
@@ -46,8 +44,6 @@ interface TaskFormProps {
   onToggleProxy: (value: boolean) => void;
   onStartDateChange: (value: string) => void;
   onEndDateChange: (value: string) => void;
-  onLookbackHoursChange: (value: number) => void;
-  onKeywordsChange: (value: string) => void;
   onRedditStrategyChange: (value: string) => void;
   onSubmit: () => void;
   onStop: () => void;
@@ -57,7 +53,6 @@ const tabs = [
   { id: "profile" as const, label: "Profile", icon: Globe, description: "Scrape user tweets" },
   { id: "thread" as const, label: "Thread", icon: MessageSquare, description: "Get full conversations" },
   { id: "search" as const, label: "Search", icon: Zap, description: "Query-based extraction" },
-  { id: "monitor" as const, label: "Monitor", icon: Radio, description: "Real-time tracking" },
   { id: "reddit" as const, label: "Reddit", icon: MessageCircle, description: "Subreddit scraping" },
 ];
 
@@ -87,8 +82,6 @@ export function TaskForm(props: TaskFormProps) {
     enableProxy,
     startDate,
     endDate,
-    lookbackHours,
-    keywords,
     redditStrategy,
     isScraping,
     canSubmit,
@@ -103,8 +96,6 @@ export function TaskForm(props: TaskFormProps) {
     onToggleProxy,
     onStartDateChange,
     onEndDateChange,
-    onLookbackHoursChange,
-    onKeywordsChange,
     onRedditStrategyChange,
     onSubmit,
     onStop,
@@ -181,7 +172,6 @@ export function TaskForm(props: TaskFormProps) {
                     {activeTab === "profile" && "Username or Profile URL"}
                     {activeTab === "thread" && "Tweet URL"}
                     {activeTab === "search" && "Search Query"}
-                    {activeTab === "monitor" && "Usernames to Monitor"}
                     {activeTab === "reddit" && "Subreddit or Post URL"}
                   </Label>
                   <span className="text-xs text-muted-foreground font-mono">
@@ -195,7 +185,6 @@ export function TaskForm(props: TaskFormProps) {
                     placeholder={
                       activeTab === "profile" ? "elonmusk or https://x.com/elonmusk"
                       : activeTab === "thread" ? "https://x.com/user/status/..."
-                      : activeTab === "monitor" ? "user1, user2, user3"
                       : activeTab === "reddit" ? "MachineLearning or https://reddit.com/r/..."
                       : "#AI from:elonmusk -is:retweet"
                     }
@@ -228,7 +217,7 @@ export function TaskForm(props: TaskFormProps) {
                 {/* Left Column */}
                 <div className="space-y-6">
                   {/* Limit */}
-                  {activeTab !== "monitor" && !isRedditPostUrl && (
+                  {!isRedditPostUrl && (
                     <div className="space-y-2">
                       <Label className="text-sm font-medium">
                         {activeTab === "thread" ? "Max Replies" : activeTab === "reddit" ? "Post Limit" : "Tweet Limit"}
@@ -245,30 +234,7 @@ export function TaskForm(props: TaskFormProps) {
                     </div>
                   )}
 
-                  {/* Monitor Settings */}
-                  {activeTab === "monitor" && (
-                    <>
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">Lookback Hours</Label>
-                        <Input
-                          type="number"
-                          value={lookbackHours}
-                          onChange={(e) => onLookbackHoursChange(parseInt(e.target.value))}
-                          min={1}
-                          max={168}
-                          className="w-32 font-mono"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">Keywords Filter</Label>
-                        <Input
-                          value={keywords}
-                          onChange={(e) => onKeywordsChange(e.target.value)}
-                          placeholder="AI, crypto, tech"
-                        />
-                      </div>
-                    </>
-                  )}
+
 
                   {/* Reddit Strategy */}
                   {activeTab === "reddit" && !isRedditPostUrl && (
@@ -467,7 +433,7 @@ export function TaskForm(props: TaskFormProps) {
                     size="lg"
                     className="gap-2 px-8 rounded-xl hover-lift"
                   >
-                    {activeTab === "monitor" ? "Start Monitoring" : "Begin Extraction"}
+                    Begin Extraction
                     <ArrowRight className="w-4 h-4" />
                   </Button>
                 ) : (
