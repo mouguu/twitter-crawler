@@ -121,42 +121,17 @@ pnpm run dev
 
 ---
 
-### 5. Run (Docker Compose - One Command)
-
-**Setup cookies first**:
+### 5. Run (Docker Compose)
 
 ```bash
-mkdir -p data/cookies
-# Place your cookie files:
-# data/cookies/account1.json
-# data/cookies/account2.json
-# ...
+# Place cookies in data/cookies/, then:
+docker compose up -d --build
 ```
 
-**Run**:
+Access at **http://localhost:5001** — PostgreSQL, Redis, Server, and Worker all included.
 
 ```bash
-docker compose up --build -d
-```
-
-**Services**:
-
-- `postgres`: PostgreSQL database
-- `redis`: Queue + Pub/Sub
-- `app`: Server + Static UI
-- `worker`: Job processor
-
-**Volumes**: `./data` → `/app/data` (cookies + output)
-
-**Ports**:
-
-- `5001`: Server/UI
-- `6379`: Redis
-
-**Logs**:
-
-```bash
-docker compose logs -f app worker
+docker compose logs -f app worker  # View logs
 ```
 
 ---
@@ -203,15 +178,15 @@ node dist/cmd/cli.js reddit -r programming -c 500
 
 We have comprehensive documentation for all aspects of the project:
 
-| Document                                      | Description                                                    |
-| --------------------------------------------- | -------------------------------------------------------------- |
-| [**DATABASE.md**](docs/DATABASE.md)           | PostgreSQL schema, repositories, and SQL analysis tools        |
-| [**OPERATIONS.md**](docs/OPERATIONS.md)       | Health checks, monitoring, rate limiting, dashboard API        |
-| [**ARCHITECTURE.md**](docs/ARCHITECTURE.md)   | Technical architecture and component overview                  |
-| [**API_REFERENCE.md**](docs/API_REFERENCE.md) | REST API endpoints documentation                               |
-| [**CONFIGURATION.md**](docs/CONFIGURATION.md) | Configuration system guide (ConfigManager, env vars, priority) |
-| [**LOGGING.md**](docs/LOGGING.md)             | Logging standards for Node.js and Python services              |
-| [**CONTRIBUTING.md**](CONTRIBUTING.md)        | Contribution guidelines and code standards                     |
+| Document                                      | Description                                          |
+| --------------------------------------------- | ---------------------------------------------------- |
+| [**DATABASE.md**](docs/DATABASE.md)           | PostgreSQL schema and Prisma repositories            |
+| [**OPERATIONS.md**](docs/OPERATIONS.md)       | Health checks, monitoring, and rate limiting         |
+| [**ARCHITECTURE.md**](docs/ARCHITECTURE.md)   | Technical architecture and component overview        |
+| [**API_REFERENCE.md**](docs/API_REFERENCE.md) | REST API endpoints documentation                     |
+| [**CONFIGURATION.md**](docs/CONFIGURATION.md) | Configuration system guide (ConfigManager, env vars) |
+| [**LOGGING.md**](docs/LOGGING.md)             | Structured logging standards with winston            |
+| [**CONTRIBUTING.md**](CONTRIBUTING.md)        | Contribution guidelines and code standards           |
 
 ---
 

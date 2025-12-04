@@ -4,7 +4,7 @@ Deep dive into XRCrawler's technical architecture and design decisions.
 
 ## Overview
 
-XRCrawler implements enterprise-grade features for reliability and stealth, using a hybrid Node.js + Python architecture.
+XRCrawler implements enterprise-grade features for reliability and stealth, built entirely in TypeScript.
 
 ## Core Components
 
@@ -22,16 +22,19 @@ The main orchestrator that coordinates all scraping activities:
 ### Timeline Runners
 
 **GraphQL API Runner** (`core/timeline-api-runner.ts`):
+
 - Fast, lightweight scraping using Twitter's internal GraphQL API
 - No browser needed
 - Limited to ~800 tweets (server-side restriction)
 
 **Puppeteer DOM Runner** (`core/timeline-dom-runner.ts`):
+
 - Full browser automation for deeper timeline access
 - Handles complex scenarios and error recovery
 - Virtually unlimited depth
 
 **Date Chunker** (`core/timeline-date-chunker.ts`):
+
 - Implements reverse-chronological date chunking
 - Splits timeframes into monthly chunks
 - Uses search queries (`from:user since:A until:B`) instead of scrolling
@@ -48,15 +51,18 @@ To bypass the ~800 tweet limit, XRCrawler uses intelligent date chunking:
 ### Session Management
 
 **Session Manager** (`core/session-manager.ts`):
+
 - Loads all cookie files from `cookies/` directory
 - Automatic rotation on rate limits
 - Chunk retry mechanism (prevents data gaps)
 
 **Cookie Manager** (`core/cookie-manager.ts`):
+
 - Cookie file loading and validation
 - Session validation before use
 
 **Key Features**:
+
 - **Multi-Account Support**: Multiple cookie files
 - **Automatic Rotation**: Switches sessions on 429 errors or load failures
 - **Chunk Retry**: If session fails during a chunk, next session retries the same chunk
@@ -65,14 +71,17 @@ To bypass the ~800 tweet limit, XRCrawler uses intelligent date chunking:
 ### Browser Management
 
 **Browser Manager** (`core/browser-manager.ts`):
+
 - Creates and manages browser instances
 - Handles browser lifecycle
 
 **Browser Pool** (`core/browser-pool.ts`):
+
 - Reuses browser instances to reduce overhead
 - Improves performance for multiple scrapes
 
 **Fingerprint Manager** (`core/fingerprint-manager.ts`):
+
 - Injects realistic browser fingerprints using `fingerprint-injector`
 - Canvas & WebGL noise randomization
 - Hardware emulation matching User-Agent
@@ -80,21 +89,25 @@ To bypass the ~800 tweet limit, XRCrawler uses intelligent date chunking:
 ### Rate Limiting & Error Handling
 
 **Rate Limit Manager** (`core/rate-limit-manager.ts`):
+
 - Detects 429 errors and rate limit responses
 - Triggers session rotation
 - Configurable retry delays
 
 **Error Snapshotter** (`core/error-snapshotter.ts`):
+
 - Captures screenshots on errors
 - Saves error details for debugging
 
 **Error Classifier** (`utils/error-classifier.ts`):
+
 - Classifies errors into categories
 - Provides user-friendly error messages
 
 ### Progress Management
 
 **Progress Manager** (`core/progress-manager.ts`):
+
 - Tracks scraping progress
 - Saves checkpoints (oldest tweet ID)
 - Enables resume functionality
@@ -102,16 +115,19 @@ To bypass the ~800 tweet limit, XRCrawler uses intelligent date chunking:
 ### Performance Monitoring
 
 **Metrics Collector** (`core/metrics-collector.ts`):
+
 - Collects real-time performance metrics
 - Scraping speed, success rates, resource usage
 
 **Performance Monitor** (`core/performance-monitor.ts`):
+
 - Real-time performance tracking
 - Resource usage monitoring
 
 ### Request Queue
 
 **Task Queue** (`server/task-queue.ts`):
+
 - Manages concurrent requests
 - Priority-based queuing
 - Prevents conflicts and ensures orderly execution
@@ -141,57 +157,42 @@ To bypass the ~800 tweet limit, XRCrawler uses intelligent date chunking:
 - REST API endpoints for frontend
 - SSE streaming for real-time updates
 
-### Python Bridge (Reddit Integration)
+### Platform Adapters
 
-**Location**: `platforms/reddit/`
+**Location**: `core/platforms/`
 
-- Node.js communicates with Python via HTTP API
-- `reddit_api_server.py`: Lightweight HTTP server
-- Structured JSON responses
-- Health checks and observability
-
-**Why HTTP instead of stdout parsing?**
-- Structured errors
-- Health checks
-- Easier observability
-- Better error handling
+- Modular adapter system for multi-platform support
+- `twitter-adapter.ts`: Twitter/X scraping
+- `reddit-adapter.ts`: Reddit scraping via HTTP API
+- Registry pattern for easy platform addition
 
 ## Directory Structure
 
 ```
 XRCrawler/
-├── frontend/              # React application
-│   ├── src/
-│   │   ├── components/    # UI components
-│   │   ├── types/         # TypeScript types
-│   │   └── utils/         # Frontend utilities
-│   └── vite.config.ts
-├── server.ts              # Main Express backend
-├── server/
-│   └── task-queue.ts      # Task queue management
-├── core/                  # Twitter scraping logic
-│   ├── scraper-engine.ts
-│   ├── timeline-api-runner.ts
-│   ├── timeline-dom-runner.ts
-│   ├── timeline-date-chunker.ts
-│   ├── session-manager.ts
-│   ├── cookie-manager.ts
-│   ├── browser-manager.ts
-│   ├── browser-pool.ts
-│   ├── fingerprint-manager.ts
-│   ├── rate-limit-manager.ts
-│   ├── error-snapshotter.ts
-│   ├── progress-manager.ts
-│   ├── metrics-collector.ts
-│   └── ...
-├── platforms/reddit/      # Python Reddit scripts
-│   └── reddit_api_server.py
-├── cookies/               # Session storage
-├── output/                # Scraped data
-├── middleware/            # Express middleware
-├── utils/                 # Utility functions
-├── types/                 # TypeScript types
-└── config/                # Configuration
+├── cmd/                   # Entry points
+│   ├── cli.ts            # CLI application
+│   ├── start-server.ts   # API server
+│   └── start-worker.ts   # Queue worker
+├── core/                  # Core business logic
+│   ├── scrape-unified.ts # Main scraping API
+│   ├── platforms/        # Platform adapters
+│   │   ├── twitter-adapter.ts
+│   │   ├── reddit-adapter.ts
+│   │   └── registry.ts
+│   ├── queue/            # BullMQ workers
+│   ├── db/               # Prisma repositories
+│   └── ...               # Scraping modules
+├── frontend/             # React + Vite UI
+│   └── src/components/   # shadcn/ui components
+├── wasm/                 # Rust/WASM modules
+│   ├── tweet-cleaner/
+│   ├── reddit-cleaner/
+│   └── url-normalizer/
+├── cookies/              # Session storage
+├── output/               # Scraped data
+├── docs/                 # Documentation
+└── config/               # Configuration
 ```
 
 ## Security Features

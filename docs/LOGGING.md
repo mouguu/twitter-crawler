@@ -67,59 +67,6 @@ logger.info("Job completed", {
 
 ---
 
-## Python Logging (Future)
-
-When implementing Python services (e.g., Reddit API server), use this format to match Node.js:
-
-### Standard Format
-
-```python
-import logging
-import json
-from datetime import datetime
-
-# Configure JSON logging
-class JSONFormatter(logging.Formatter):
-    def format(self, record):
-        log_data = {
-            'timestamp': datetime.utcnow().isoformat() + 'Z',
-            'level': record.levelname.lower(),
-            'message': record.getMessage(),
-            'service': 'xrcrawler',
-            'module': record.name
-        }
-        # Add extra fields
-        if hasattr(record, 'context'):
-            log_data.update(record.context)
-        return json.dumps(log_data)
-
-# Setup logger
-logger = logging.getLogger('RedditAPI')
-handler = logging.StreamHandler()
-handler.setFormatter(JSONFormatter())
-logger.addHandler(handler)
-logger.setLevel(logging.INFO)
-
-# Usage
-logger.info('Reddit scrape started', extra={'context': {'subreddit': 'python', 'limit': 500}})
-```
-
-### Output Example
-
-```json
-{
-  "timestamp": "2025-12-03T18:06:41.000Z",
-  "level": "info",
-  "message": "Reddit scrape started",
-  "service": "xrcrawler",
-  "module": "RedditAPI",
-  "subreddit": "python",
-  "limit": 500
-}
-```
-
----
-
 ## Log Levels
 
 Use levels consistently:
