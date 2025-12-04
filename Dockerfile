@@ -63,7 +63,8 @@ COPY package.json ./
 # 生成 Prisma Client（需要 schema 和 config）
 COPY prisma ./prisma
 COPY prisma.config.ts ./
-RUN npx prisma generate
+# 构建时需要 DATABASE_URL 给 prisma.config.ts，用临时值即可（不会实际连接）
+RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" npx prisma generate
 
 # 复制预编译的 WASM 模块（在本地编译好）
 COPY wasm/tweet-cleaner/pkg ./wasm/tweet-cleaner/pkg
