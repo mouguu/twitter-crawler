@@ -85,6 +85,8 @@ export async function scrapeXFeed(options: ScrapeXFeedOptions = {}): Promise<Scr
 
     try {
         await engine.init();
+        // CLI mode: disable proxy by default (direct connection)
+        engine.proxyManager.setEnabled(false);
         const cookiesLoaded = await engine.loadCookies();
         if (!cookiesLoaded) {
             throw ScraperErrors.cookieLoadFailed('Failed to load cookies');
@@ -118,6 +120,8 @@ export async function scrapeSearch(options: ScrapeSearchOptions): Promise<Scrape
     });
     try {
         await engine.init();
+        // CLI mode: disable proxy by default (direct connection)
+        engine.proxyManager.setEnabled(false);
         const cookiesLoaded = await engine.loadCookies();
         if (!cookiesLoaded) {
             throw ScraperErrors.cookieLoadFailed('Failed to load cookies');
@@ -148,6 +152,8 @@ export async function scrapeThread(options: ScrapeThreadOptions): Promise<Scrape
     });
     try {
         await engine.init();
+        // CLI mode: disable proxy by default (direct connection)
+        engine.proxyManager.setEnabled(false);
         const cookiesLoaded = await engine.loadCookies();
         if (!cookiesLoaded) {
             throw ScraperErrors.cookieLoadFailed('Failed to load cookies');
@@ -199,6 +205,8 @@ export async function scrapeTwitterUsers(
 
     try {
         await engine.init();
+        // CLI mode: disable proxy by default (direct connection)
+        engine.proxyManager.setEnabled(false);
         const cookiesLoaded = await engine.loadCookies();
         if (!cookiesLoaded) {
             throw ScraperErrors.cookieLoadFailed('Failed to load cookies');
