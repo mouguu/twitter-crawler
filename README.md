@@ -106,20 +106,18 @@ cookies/
 
 ```bash
 pnpm run dev
-# Opens http://localhost:5173
-# Starts server, worker, frontend, and database concurrently
+# Opens http://localhost:5001
+# Starts server, worker, and frontend build watcher concurrently
 ```
 
 > **Important**: Ensure Redis and PostgreSQL are running; otherwise progress/log streaming will be missing.
 
 **Access**:
 
-- **Frontend**: http://localhost:5173
-- **API**: http://localhost:5001
+- **Web UI & API**: http://localhost:5001
 - **Queue Dashboard**: http://localhost:5001/admin/queues
 - **Database Studio**: `npx prisma studio` → http://localhost:5555
 - **Health Check**: http://localhost:5001/api/health
-- **Stats Dashboard**: http://localhost:5001/api/stats
 
 ---
 
