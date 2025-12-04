@@ -1,0 +1,19 @@
+# Bun Configuration for XRCrawler
+# https://bun.sh/docs/runtime/configuration
+
+[install]
+# Frozen lockfile for production
+# frozen = true
+
+[test]
+# Test configuration
+coverage = false
+timeout = 30000  # 30 seconds for Puppeteer tests
+
+[run]
+# Automatically load .env files
+# (Bun does this by default)
+
+# Node.js compatibility shims (if needed)
+# [install.scopes]
+# Enable Node.js compatibility for specific packages

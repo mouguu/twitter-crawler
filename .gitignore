@@ -2,9 +2,10 @@
 node_modules/
 frontend/node_modules/
 
-# Package managers (enforce pnpm only)
+# Package managers (using Bun, keep bun.lockb in git)
 package-lock.json
 yarn.lock
+pnpm-lock.yaml
 
 # Python virtual environment
 platforms/reddit/.venv/
