@@ -6,6 +6,42 @@ const logger = createEnhancedLogger('TweetRepo');
 
 export class TweetRepository {
   /**
+   * Validate if a jobId exists in the database
+   */
+  private static async validateJobId(jobId: string | undefined): Promise<string | undefined> {
+    if (!jobId) return undefined;
+    
+    try {
+      // Check if this is a valid UUID (DB job ID) vs a BullMQ queue ID
+      // BullMQ IDs typically look like: "profile-1701234567890-abc123"
+      // DB UUIDs look like: "550e8400-e29b-41d4-a716-446655440000"
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      
+      if (!uuidRegex.test(jobId)) {
+        // Not a UUID, likely a BullMQ queue ID - don't use it for DB
+        logger.debug(`Skipping non-UUID jobId for DB: ${jobId}`);
+        return undefined;
+      }
+      
+      // Verify the job exists in the database
+      const job = await prisma.job.findUnique({
+        where: { id: jobId },
+        select: { id: true }
+      });
+      
+      if (!job) {
+        logger.debug(`Job ${jobId} not found in database, saving tweet without job association`);
+        return undefined;
+      }
+      
+      return jobId;
+    } catch (error) {
+      logger.warn(`Failed to validate jobId ${jobId}`, { error });
+      return undefined;
+    }
+  }
+
+  /**
    * Save a single tweet
    */
   static async saveTweet(data: {
@@ -24,18 +60,20 @@ export class TweetRepository {
         return null;
       }
 
+      // Validate jobId exists in DB before using it (prevents FK violations)
+      const validatedJobId = await this.validateJobId(jobId);
+
       return await prisma.tweet.upsert({
         where: { id: tweetId },
         update: {
-          jobId, // Update job association if re-scraped? Maybe keep original?
-          // For now, let's update it to the latest job that touched it
+          jobId: validatedJobId, // Only set if job exists in DB
           scrapedAt: new Date(),
           metrics: tweet.metrics || {},
           // Don't overwrite creation time or static data if not needed
         },
         create: {
           id: tweetId,
-          jobId,
+          jobId: validatedJobId,
           text: tweet.text || tweet.full_text,
           username: tweet.username || tweet.core?.user_results?.result?.legacy?.screen_name || 'unknown',
           userId: tweet.userId || tweet.core?.user_results?.result?.rest_id,
