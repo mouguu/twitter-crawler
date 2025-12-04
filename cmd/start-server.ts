@@ -37,6 +37,33 @@ function normalizeUsername(input: string | undefined): string | undefined {
   return cleaned || undefined;
 }
 
+/**
+ * Parse Reddit input to extract subreddit name or post URL
+ * Supports:
+ * - Subreddit name: "HomeofChonglang" → "HomeofChonglang"
+ * - Subreddit URL: "https://www.reddit.com/r/HomeofChonglang/" → "HomeofChonglang"
+ * - Post URL: "https://www.reddit.com/r/HomeofChonglang/comments/xxx" → full URL
+ */
+function parseRedditInput(input: string): { subreddit?: string; postUrl?: string } {
+  if (!input) return {};
+  
+  const trimmed = input.trim();
+  
+  // Check if it's a post URL (contains /comments/)
+  if (trimmed.includes('/comments/') || trimmed.includes('redd.it/')) {
+    return { postUrl: trimmed };
+  }
+  
+  // Try to extract subreddit from URL
+  const subredditMatch = trimmed.match(/reddit\.com\/r\/([^\/\?#]+)/i);
+  if (subredditMatch) {
+    return { subreddit: subredditMatch[1] };
+  }
+  
+  // Assume it's a plain subreddit name
+  return { subreddit: trimmed };
+}
+
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -208,13 +235,10 @@ app.post(
           dateRange,
         };
       } else if (isReddit) {
-        const isPostUrl = input && (
-          input.includes('reddit.com/r/') && input.includes('/comments/') ||
-          input.includes('redd.it/')
-        );
+        const parsed = parseRedditInput(input);
         config = {
-          subreddit: !isPostUrl ? input : undefined,
-          postUrl: isPostUrl ? input : undefined,
+          subreddit: parsed.subreddit,
+          postUrl: parsed.postUrl,
           limit: limit || 500,
           strategy: strategy || 'auto',
         };
