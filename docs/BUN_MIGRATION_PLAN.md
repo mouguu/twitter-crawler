@@ -2,7 +2,7 @@
 
 > 分支: `feature/bun-migration`  
 > 创建日期: 2025-12-04  
-> 状态: 🚧 进行中
+> 状态: ✅ **第一阶段完成** (循环依赖已解决，服务器成功启动)
 
 ## 📋 概述
 
@@ -20,27 +20,27 @@
 
 ### 第一阶段：基础设施替换
 
-- [ ] **1.1 替换包管理器**
+- [x] **1.1 替换包管理器** ✅
 
   ```bash
   rm -rf node_modules pnpm-lock.yaml package-lock.json
-  bun install
+  bun install  # 5.59秒完成！
   ```
 
-- [ ] **1.2 更新 package.json scripts**
+- [x] **1.2 更新 package.json scripts** ✅
   - 将 `node` 命令替换为 `bun`
   - 移除 `ts-node`，Bun 原生支持 TypeScript
   - 将 `pnpm` 命令替换为 `bun`
 
-- [ ] **1.3 替换测试框架为 bun:test**
-  - 移除 `jest`、`ts-jest` 依赖
+- [ ] **1.3 替换测试框架为 bun:test** (部分完成)
+  - [x] 移除 `jest`、`ts-jest` 依赖
   - 删除 `jest.config.js`
   - 更新测试文件使用 `bun:test` API
   - 更新 `package.json` 中的 test script
 
-- [ ] **1.4 处理锁文件**
-  - 提交 `bun.lockb`（单人开发，直接提交二进制锁文件最快）
-  - 更新 `.gitignore`
+- [x] **1.4 处理锁文件** ✅
+  - [x] 提交 `bun.lockb`（单人开发，直接提交二进制锁文件最快）
+  - [x] 更新 `.gitignore`
 
 ### 第二阶段：Puppeteer 适配（关键）
 
@@ -61,35 +61,35 @@
 
 ### 第三阶段：依赖兼容性修复
 
-- [ ] **3.1 Prisma 适配**
-  - 确保使用最新版 `@prisma/client`
-  - 验证 Prisma 在 Bun 环境下正常工作
+- [x] **3.1 Prisma 适配** ✅
+  - [x] 确保使用最新版 `@prisma/client`
+  - [x] 验证 Prisma 在 Bun 环境下正常工作
 
-- [ ] **3.2 BullMQ (Redis 队列) 验证**
-  - BullMQ 底层用 `ioredis`
-  - 验证 Bun 兼容性，必要时配置 `bunfig.toml`
+- [x] **3.2 BullMQ (Redis 队列) 验证** ✅
+  - [x] BullMQ 底层用 `ioredis`
+  - [x] 验证 Bun 兼容性，必要时配置 `bunfig.toml`
 
-- [ ] **3.3 WASM 加载优化**
+- [ ] **3.3 WASM 加载优化** (可选)
   - Bun 原生支持直接 import `.wasm` 文件
   - 可选：简化 WASM 加载逻辑
 
 ### 第四阶段：Docker 迁移（多阶段构建）
 
-- [ ] **4.1 创建新 Dockerfile**
-  - 使用 **多阶段构建 (Multi-stage Build)**
-  - Builder 阶段：安装依赖 → 编译前端 → 生成 Prisma
-  - Runner 阶段：只复制必要产物，基于 `bun:slim` 镜像
+- [x] **4.1 创建新 Dockerfile** ✅
+  - [x] 使用 **多阶段构建 (Multi-stage Build)**
+  - [x] Builder 阶段：安装依赖 → 编译前端 → 生成 Prisma
+  - [x] Runner 阶段：只复制必要产物，基于 `bun:slim` 镜像
 
-- [ ] **4.2 更新 docker-compose.yml**
-  - 更新镜像引用
-  - 调整启动命令
+- [x] **4.2 更新 docker-compose.yml** ✅
+  - [x] 更新镜像引用
+  - [x] 调整启动命令
 
 ### 第五阶段：测试与验证
 
-- [ ] **5.1 本地开发测试**
-  - 验证 `bun run dev` 正常工作
-  - 验证 CLI 命令正常工作
-  - 验证爬虫功能正常
+- [x] **5.1 本地开发测试** ✅ (部分完成)
+  - [x] 验证 `bun run cmd/start-server.ts` 正常工作
+  - [ ] 验证 CLI 命令正常工作
+  - [ ] 验证爬虫功能正常
 
 - [ ] **5.2 Docker 构建测试**
   - 验证镜像构建成功
