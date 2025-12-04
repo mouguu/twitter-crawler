@@ -22,7 +22,6 @@
 - **⚡ Real-time Dashboard** — Monitor active jobs with live progress, logs, and SSE streaming
 - **🔐 Session Manager** — Upload and manage multiple cookie files with custom naming
 - **🎯 Smart Configuration** — GraphQL/Puppeteer/Mixed modes, date chunking, parallel scrapers
-- **🌓 Dark/Light Mode** — Professional aesthetics with smooth transitions
 
 ---
 
