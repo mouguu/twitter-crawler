@@ -1,5 +1,5 @@
 import { prisma } from './prisma';
-import { Job, Task, ErrorLog } from '@prisma/client';
+import { Job, Task, ErrorLog } from '../../generated/prisma/client';
 import { createEnhancedLogger } from '../../utils/logger';
 
 const logger = createEnhancedLogger('JobRepo');

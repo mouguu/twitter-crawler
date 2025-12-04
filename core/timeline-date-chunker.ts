@@ -8,7 +8,7 @@ import * as markdownUtils from '../utils/markdown';
 import * as exportUtils from '../utils/export';
 import { CHUNK_RETRY_CONFIG } from '../config/constants';
 import { JobRepository } from './db/job-repo';
-import { Task } from '@prisma/client';
+import { Task } from '../generated/prisma/client';
 
 interface FailedChunk {
     index: number;

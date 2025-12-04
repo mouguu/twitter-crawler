@@ -1,11 +1,14 @@
 generator client {
-  provider      = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+  // ⚠️ 关键：为了 Docker (Debian) 依然要加上这个
+  // 虽然 Client 模式用 WASM，但 Migrate CLI 可能还需要二进制
   binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
+// Prisma v7: url 已移至 prisma.config.ts
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // High-level job (e.g., "Scrape @elonmusk")

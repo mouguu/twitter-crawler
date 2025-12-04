@@ -1,5 +1,5 @@
 import { prisma } from './prisma';
-import { Tweet } from '@prisma/client';
+import { Tweet } from '../../generated/prisma/client';
 import { createEnhancedLogger } from '../../utils/logger';
 
 const logger = createEnhancedLogger('TweetRepo');
