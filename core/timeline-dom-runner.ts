@@ -1,7 +1,7 @@
 import type { ScrapeTimelineConfig, ScrapeTimelineResult } from './scraper-engine.types';
 import type { ScraperEngine } from './scraper-engine';
 import { ScraperErrors } from './errors';
-import { ProfileInfo, Tweet } from '../types';
+import type { ProfileInfo, Tweet } from '../types/tweet-definitions';
 import * as fileUtils from '../utils';
 import * as markdownUtils from '../utils';
 import * as exportUtils from '../utils';

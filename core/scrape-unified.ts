@@ -15,7 +15,7 @@ import {
 import * as markdownUtils from '../utils/markdown';
 import * as exportUtils from '../utils/export';
 import * as fileUtils from '../utils/fileutils';
-import { Tweet, ProfileInfo } from '../types';
+import type { Tweet, ProfileInfo } from '../types/tweet-definitions';
 
 // Re-export types for consumers
 export type { ScrapeTimelineResult, ScrapeThreadResult };

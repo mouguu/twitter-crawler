@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { Tweet, RawTweetData, normalizeRawTweet } from '../types';
+import type { Tweet, RawTweetData } from '../types/tweet-definitions';
+import { normalizeRawTweet } from '../types/tweet-definitions';
 
 export interface CleanStats {
   added: number;

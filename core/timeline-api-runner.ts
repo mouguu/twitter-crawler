@@ -4,13 +4,13 @@ import type {
 } from "./scraper-engine.types";
 import type { ScraperEngine } from "./scraper-engine";
 import { ScraperError, ScraperErrors } from "./errors";
+import type { Tweet } from "../types/tweet-definitions";
 import {
-  Tweet,
   extractInstructionsFromResponse,
   parseTweetsFromInstructions,
   extractNextCursor,
   parseTweetFromRestStatus,
-} from "../types";
+} from "../types/tweet-definitions";
 import * as fileUtils from "../utils";
 import { cleanTweetsFast } from "../utils";
 

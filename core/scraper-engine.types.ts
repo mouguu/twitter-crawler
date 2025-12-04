@@ -3,7 +3,7 @@ import type { BrowserPool, BrowserPoolOptions } from "./browser-pool";
 import type { ScraperEventBus } from "./event-bus";
 import type { ScraperDependencies } from "./scraper-dependencies";
 import type { RunContext } from "../utils";
-import type { Tweet, ProfileInfo } from "../types";
+import type { Tweet, ProfileInfo } from "../types/tweet-definitions";
 import type { PerformanceStats } from "./performance-monitor";
 
 export interface ScraperEngineOptions {

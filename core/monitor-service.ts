@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ScraperEngine } from './scraper-engine';
-import { Tweet } from '../types';
+import type { Tweet } from '../types/tweet-definitions';
 import * as fileUtils from '../utils';
 import { ScraperEventBus } from './event-bus';
 

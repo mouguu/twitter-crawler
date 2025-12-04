@@ -1,7 +1,7 @@
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import { RunContext } from './fileutils';
-import { Tweet, ProfileInfo } from '../types';
+import type { Tweet, ProfileInfo } from '../types/tweet-definitions';
 
 type AnalysisType = 'persona' | 'feed_analysis';
 

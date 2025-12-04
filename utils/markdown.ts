@@ -10,8 +10,8 @@ import * as timeUtils from './time';
 import { RunContext } from './fileutils';
 
 // 从统一类型定义导入并重新导出
-import { Tweet } from '../types';
-export { Tweet };
+import type { Tweet } from '../types/tweet-definitions';
+export type { Tweet };
 
 export interface SaveTweetsOptions {
   batchSize?: number;

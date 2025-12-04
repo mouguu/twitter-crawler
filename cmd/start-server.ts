@@ -13,7 +13,7 @@ import {
 } from "../utils";
 import * as fileUtils from "../utils/fileutils";
 import { apiKeyMiddleware } from "../middleware/api-key";
-import { ScrapeRequest } from "../types";
+import { ScrapeRequest } from "../types/api";
 import multer from "multer";
 import { createBullBoard } from '@bull-board/api';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';

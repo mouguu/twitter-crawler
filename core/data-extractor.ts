@@ -6,10 +6,11 @@
 import { Page } from 'puppeteer';
 import * as constants from '../config/constants';
 import { ERROR_RECOVERY_CONFIG, SCROLL_CONFIG } from '../config/constants';
-import { Tweet, ProfileInfo, RawTweetData, normalizeRawTweet } from '../types';
+import type { Tweet, ProfileInfo, RawTweetData } from '../types/tweet-definitions';
+import { normalizeRawTweet } from '../types/tweet-definitions';
 
 // 重新导出统一类型
-export { Tweet, ProfileInfo, RawTweetData };
+export type { Tweet, ProfileInfo, RawTweetData };
 
 // Twitter 选择器
 export const X_SELECTORS = {

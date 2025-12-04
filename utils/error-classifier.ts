@@ -4,7 +4,7 @@
  * Classifies errors into specific types with recovery suggestions
  */
 
-import { ErrorType, AppError } from '../types';
+import { ErrorType, AppError } from '../types/errors';
 
 export function classifyError(error: any): AppError {
     const errorMessage = error?.message || String(error);
