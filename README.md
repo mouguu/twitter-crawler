@@ -48,87 +48,21 @@
 
 ## 🚀 Quick Start
 
-### 1. Install
+### Docker (Recommended)
 
 ```bash
 git clone https://github.com/mouguu/XRCrawler.git
 cd XRcrawler
-pnpm install                # Installs deps + auto-builds WASM
-pnpm run install:frontend   # Install frontend deps
-```
 
-> **Note**: `pnpm install` automatically runs `postinstall` to build Rust/WASM modules.
+# Place your Twitter cookie files in data/cookies/
+mkdir -p data/cookies
+# Export cookies via EditThisCookie or DevTools → data/cookies/my_account.json
 
----
-
-### 2. Setup Database (PostgreSQL)
-
-**Option A: Docker Compose (Recommended)**
-
-```bash
-docker-compose up -d postgres
-```
-
-**Option B: Use your own PostgreSQL**
-
-```bash
-# Set DATABASE_URL
-export DATABASE_URL="postgresql://user:password@localhost:5432/xrcrawler"
-```
-
-**Push Schema:**
-
-```bash
-npx prisma db push
-npx prisma generate
-```
-
-👉 **See [DATABASE.md](docs/DATABASE.md)** for detailed database setup.
-
----
-
-### 3. Configure Cookies
-
-Export Twitter cookies (e.g., using [EditThisCookie](https://www.editthiscookie.com/) or browser DevTools) to the `cookies/` directory:
-
-```
-cookies/
-├── my_main_account.json
-├── backup_account.json
-└── ...any_name_you_want.json
-```
-
-> **Tip:** Use the Web UI's **Session Manager** to upload cookies with custom names. The system supports unlimited accounts with automatic rotation.
-
----
-
-### 4. Run (Web UI - Recommended)
-
-```bash
-pnpm run dev
-# Opens http://localhost:5001
-# Starts server, worker, and frontend build watcher concurrently
-```
-
-> **Important**: Ensure Redis and PostgreSQL are running; otherwise progress/log streaming will be missing.
-
-**Access**:
-
-- **Web UI & API**: http://localhost:5001
-- **Queue Dashboard**: http://localhost:5001/admin/queues
-- **Database Studio**: `npx prisma studio` → http://localhost:5555
-- **Health Check**: http://localhost:5001/api/health
-
----
-
-### 5. Run (Docker Compose)
-
-```bash
-# Place cookies in data/cookies/, then:
+# One command to rule them all
 docker compose up -d --build
 ```
 
-Access at **http://localhost:5001** — PostgreSQL, Redis, Server, and Worker all included.
+Open **http://localhost:5001** — everything included (PostgreSQL, Redis, Server, Worker).
 
 ```bash
 docker compose logs -f app worker  # View logs
@@ -136,41 +70,40 @@ docker compose logs -f app worker  # View logs
 
 ---
 
+### Local Development (Alternative)
+
+```bash
+pnpm install                # Installs deps + builds WASM
+pnpm run install:frontend   # Frontend deps
+
+# Requires: Redis + PostgreSQL running locally
+docker compose up -d postgres redis  # Or use your own
+
+npx prisma db push          # Push schema
+pnpm run dev                # Start all services
+```
+
+Access at **http://localhost:5001** | Queue Dashboard: `/admin/queues`
+
+---
+
 ## 🛠️ CLI Usage
 
-### Build First
+Build first: `pnpm run build`
 
 ```bash
-pnpm run build
-```
-
-### Examples
-
-**Scrape a Twitter profile**:
-
-```bash
+# Twitter Profile
 node dist/cmd/cli.js twitter -u elonmusk -c 50
-```
 
-**Scrape a thread**:
-
-```bash
+# Twitter Thread
 node dist/cmd/cli.js twitter --thread https://x.com/user/status/123456
-```
 
-**Search Twitter**:
-
-```bash
+# Twitter Search
 node dist/cmd/cli.js twitter --query "climate change" -c 100
-```
 
-**Scrape Reddit**:
-
-```bash
+# Reddit
 node dist/cmd/cli.js reddit -r programming -c 500
 ```
-
-**More Options**: See detailed CLI guide below.
 
 ---
 
