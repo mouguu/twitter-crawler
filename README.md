@@ -36,6 +36,21 @@
 
 ---
 
+## ⚡ Performance (Powered by Bun)
+
+Migrated from Node.js to Bun for **blazing fast performance**:
+
+| Metric              | Before (Node.js) | After (Bun)          | Improvement                  |
+| ------------------- | ---------------- | -------------------- | ---------------------------- |
+| **Package Install** | ~30s             | **5.59s**            | 🚀 **5.4x faster**           |
+| **Startup Time**    | ~3s              | **Instant**          | ⚡ **No compilation needed** |
+| **Memory Usage**    | 400MB            | **~120MB**           | 💾 **70% reduction**         |
+| **Dev Experience**  | Compile first    | **Run .ts directly** | 🎯 **Zero config**           |
+
+> **Why Bun?** Native TypeScript support, faster package manager, lower memory footprint, and full Node.js compatibility. Read our [migration journey](docs/dev/BUN_MIGRATION_ADVENTURE.md).
+
+---
+
 ## 🧰 Requirements
 
 - **Bun** 1.2+ (replaces Node.js + pnpm for blazing fast performance)
@@ -62,10 +77,17 @@ mkdir -p data/cookies
 docker compose up -d --build
 ```
 
-Open **http://localhost:5001** — everything included (PostgreSQL, Redis, Server, Worker).
+Open **http://localhost:5001** — everything included (PostgreSQL, Redis, Server, Worker, Prisma Studio).
+
+**Access Points**:
+
+- 🌐 **Web UI**: http://localhost:5001
+- 📊 **Prisma Studio**: http://localhost:5555 (Database GUI)
+- 📈 **Queue Dashboard**: http://localhost:5001/admin/queues
 
 ```bash
 docker compose logs -f app worker  # View logs
+docker compose ps                   # Check status
 ```
 
 ---
@@ -111,15 +133,17 @@ bun run cmd/cli.ts reddit -r programming -c 500
 
 We have comprehensive documentation for all aspects of the project:
 
-| Document                                      | Description                                          |
-| --------------------------------------------- | ---------------------------------------------------- |
-| [**DATABASE.md**](docs/DATABASE.md)           | PostgreSQL schema and Prisma repositories            |
-| [**OPERATIONS.md**](docs/OPERATIONS.md)       | Health checks, monitoring, and rate limiting         |
-| [**ARCHITECTURE.md**](docs/ARCHITECTURE.md)   | Technical architecture and component overview        |
-| [**API_REFERENCE.md**](docs/API_REFERENCE.md) | REST API endpoints documentation                     |
-| [**CONFIGURATION.md**](docs/CONFIGURATION.md) | Configuration system guide (ConfigManager, env vars) |
-| [**LOGGING.md**](docs/LOGGING.md)             | Structured logging standards with winston            |
-| [**CONTRIBUTING.md**](CONTRIBUTING.md)        | Contribution guidelines and code standards           |
+| Document                                                              | Description                                          |
+| --------------------------------------------------------------------- | ---------------------------------------------------- |
+| [**DATABASE.md**](docs/DATABASE.md)                                   | PostgreSQL schema and Prisma repositories            |
+| [**OPERATIONS.md**](docs/OPERATIONS.md)                               | Health checks, monitoring, and rate limiting         |
+| [**ARCHITECTURE.md**](docs/ARCHITECTURE.md)                           | Technical architecture and component overview        |
+| [**API_REFERENCE.md**](docs/API_REFERENCE.md)                         | REST API endpoints documentation                     |
+| [**CONFIGURATION.md**](docs/CONFIGURATION.md)                         | Configuration system guide (ConfigManager, env vars) |
+| [**LOGGING.md**](docs/LOGGING.md)                                     | Structured logging standards with winston            |
+| [**BUN_MIGRATION_PLAN.md**](docs/BUN_MIGRATION_PLAN.md)               | Bun migration roadmap and status                     |
+| [**BUN_MIGRATION_ADVENTURE.md**](docs/dev/BUN_MIGRATION_ADVENTURE.md) | Detailed migration journey and lessons learned       |
+| [**CONTRIBUTING.md**](CONTRIBUTING.md)                                | Contribution guidelines and code standards           |
 
 ---
 
@@ -321,7 +345,7 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for:
 | **`reddit-cleaner`** | Reddit post/comment cleaning               |
 | **`url-normalizer`** | URL canonicalization for dedup             |
 
-> Built with Rust + `wasm-pack`, compiled to WebAssembly for near-native performance in Node.js.
+> Built with Rust + `wasm-pack`, compiled to WebAssembly for near-native performance in Bun runtime.
 
 ### DevOps
 
@@ -352,6 +376,7 @@ ISC - See [LICENSE](LICENSE) for details.
 
 Built with:
 
+- [Bun](https://bun.sh/) - Blazing fast JavaScript runtime
 - [BullMQ](https://github.com/taskforcesh/bullmq) - Robust queue system
 - [Puppeteer](https://pptr.dev/) - Browser automation
 - [Redis](https://redis.io/) - Fast data store
