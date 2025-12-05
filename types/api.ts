@@ -33,6 +33,14 @@ export interface ScrapeRequest {
   parallelChunks?: number;
   /** Reddit only: subreddit scraping strategy */
   strategy?: RedditStrategy;
+  /** 
+   * Anti-detection level (optional, default: 'high')
+   * - 'low': Basic fingerprint only
+   * - 'medium': + Advanced fingerprint (Canvas/WebGL/Audio)
+   * - 'high': + Human behavior simulation (recommended)
+   * - 'paranoid': Full protection with realistic delays (slowest)
+   */
+  antiDetectionLevel?: 'low' | 'medium' | 'high' | 'paranoid';
 }
 
 export interface MonitorRequest {

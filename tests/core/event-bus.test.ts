@@ -1,3 +1,4 @@
+import { describe, test, expect, beforeEach } from 'bun:test';
 import { ScraperEventBus } from '../../core/event-bus';
 
 describe('ScraperEventBus', () => {

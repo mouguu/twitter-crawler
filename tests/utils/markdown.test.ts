@@ -1,3 +1,4 @@
+import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test';
 /**
  * Markdown 工具单元测试
  */
@@ -44,7 +45,7 @@ describe('Markdown Utils', () => {
   ];
 
   describe('saveTweetAsMarkdown', () => {
-    it('should save tweet as markdown file', async () => {
+    test('should save tweet as markdown file', async () => {
       const filePath = await markdown.saveTweetAsMarkdown(mockTweets[0], testRunContext, 0);
       
       expect(filePath).toBeTruthy();
@@ -55,14 +56,14 @@ describe('Markdown Utils', () => {
       expect(content).toContain('https://twitter.com/user/status/1');
     });
 
-    it('should return null for invalid tweet', async () => {
+    test('should return null for invalid tweet', async () => {
       const invalidTweet = {} as Tweet;
       const filePath = await markdown.saveTweetAsMarkdown(invalidTweet, testRunContext);
       
       expect(filePath).toBeNull();
     });
 
-    it('should handle missing markdownDir', async () => {
+    test('should handle missing markdownDir', async () => {
       const invalidContext = { ...testRunContext, markdownDir: undefined };
       
       await expect(
@@ -72,7 +73,7 @@ describe('Markdown Utils', () => {
   });
 
   describe('saveTweetsAsMarkdown', () => {
-    it('should save multiple tweets', async () => {
+    test('should save multiple tweets', async () => {
       const result = await markdown.saveTweetsAsMarkdown(mockTweets, testRunContext);
       
       expect(result.perTweetFiles.length).toBe(1);
@@ -82,7 +83,7 @@ describe('Markdown Utils', () => {
       expect(fs.existsSync(indexPath)).toBe(true);
     });
 
-    it('should create index file', async () => {
+    test('should create index file', async () => {
       const result = await markdown.saveTweetsAsMarkdown(mockTweets, testRunContext);
       
       const indexPath = result.indexPath!;
@@ -92,7 +93,7 @@ describe('Markdown Utils', () => {
       expect(content).toContain('Test tweet 1');
     });
 
-    it('should handle empty tweet array', async () => {
+    test('should handle empty tweet array', async () => {
       const result = await markdown.saveTweetsAsMarkdown([], testRunContext);
       
       expect(result.perTweetFiles.length).toBe(0);

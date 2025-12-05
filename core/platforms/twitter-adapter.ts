@@ -1,13 +1,13 @@
-import { ScraperEngine } from '../scraper-engine';
-import { ScraperErrors } from '../errors';
-import { createEventBus } from '../event-bus';
-import { createEnhancedLogger } from '../../utils/logger';
-import { PlatformAdapter } from './types';
+import { ScraperEngine } from "../scraper-engine";
+import { ScraperErrors } from "../errors";
+import { createEventBus } from "../event-bus";
+import { createEnhancedLogger } from "../../utils/logger";
+import { PlatformAdapter } from "./types";
 
-const logger = createEnhancedLogger('TwitterAdapter');
+const logger = createEnhancedLogger("TwitterAdapter");
 
 export const twitterAdapter: PlatformAdapter = {
-  name: 'twitter',
+  name: "twitter",
 
   async process(data, ctx) {
     const { config: jobConfig } = data;
@@ -18,12 +18,12 @@ export const twitterAdapter: PlatformAdapter = {
       ctx.emitProgress({
         current: progress.current ?? 0,
         target: progress.target ?? jobConfig.limit ?? 0,
-        action: progress.action || 'scraping',
+        action: progress.action || "scraping",
       });
     });
     jobEventBus.on(jobEventBus.events.LOG_MESSAGE, (log: any) => {
       ctx.emitLog({
-        level: (log.level || 'info') as any,
+        level: (log.level || "info") as any,
         message: log.message,
         timestamp: log.timestamp ? new Date(log.timestamp).getTime() : Date.now(),
       });
@@ -33,14 +33,12 @@ export const twitterAdapter: PlatformAdapter = {
       `Starting Twitter scrape: ${jobConfig.username || jobConfig.tweetUrl || jobConfig.searchQuery}`
     );
 
-    const engine = new ScraperEngine(
-      () => ctx.getShouldStop(),
-      { 
-        apiOnly: jobConfig.mode === 'graphql', 
-        eventBus: jobEventBus,
-        jobId: data.jobId // Pass BullMQ Job ID
-      }
-    );
+    const engine = new ScraperEngine(() => ctx.getShouldStop(), {
+      apiOnly: jobConfig.mode === "graphql",
+      eventBus: jobEventBus,
+      jobId: data.jobId, // Pass BullMQ Job ID
+      antiDetectionLevel: jobConfig.antiDetectionLevel,
+    });
 
     let result: any;
 
@@ -50,22 +48,22 @@ export const twitterAdapter: PlatformAdapter = {
 
       const cookiesLoaded = await engine.loadCookies(jobConfig.enableRotation !== false);
       if (!cookiesLoaded) {
-        throw ScraperErrors.cookieLoadFailed('Failed to load cookies');
+        throw ScraperErrors.cookieLoadFailed("Failed to load cookies");
       }
 
       if (jobConfig.username) {
-        await ctx.log(`Scraping @${jobConfig.username}'s ${jobConfig.tab || 'posts'}...`);
+        await ctx.log(`Scraping @${jobConfig.username}'s ${jobConfig.tab || "posts"}...`);
 
         const timelineConfig: any = {
           username: jobConfig.username,
           limit: jobConfig.limit || 50,
           saveMarkdown: true,
-          scrapeMode: (jobConfig.mode || 'puppeteer') as 'puppeteer' | 'graphql',
+          scrapeMode: (jobConfig.mode || "puppeteer") as "puppeteer" | "graphql",
           dateRange: jobConfig.dateRange,
           jobId: data.jobId, // Pass to config as well
         };
 
-        if (jobConfig.tab === 'likes' || jobConfig.tab === 'replies') {
+        if (jobConfig.tab === "likes" || jobConfig.tab === "replies") {
           timelineConfig.tab = jobConfig.tab;
         }
 
@@ -79,14 +77,14 @@ export const twitterAdapter: PlatformAdapter = {
           });
         }
 
-        if (jobConfig.likes && jobConfig.mode !== 'graphql') {
-          await ctx.log('Fetching liked tweets...');
+        if (jobConfig.likes && jobConfig.mode !== "graphql") {
+          await ctx.log("Fetching liked tweets...");
           const likesResult = await engine.scrapeTimeline({
             username: jobConfig.username,
-            tab: 'likes',
+            tab: "likes",
             limit: jobConfig.limit || 50,
             saveMarkdown: false,
-            scrapeMode: 'puppeteer',
+            scrapeMode: "puppeteer",
           });
 
           if (likesResult.success && likesResult.tweets) {
@@ -105,7 +103,7 @@ export const twitterAdapter: PlatformAdapter = {
           tweetUrl: jobConfig.tweetUrl,
           maxReplies: jobConfig.limit || 50,
           saveMarkdown: true,
-          scrapeMode: (jobConfig.mode || 'puppeteer') as 'puppeteer' | 'graphql',
+          scrapeMode: (jobConfig.mode || "puppeteer") as "puppeteer" | "graphql",
         });
 
         if (result?.tweets) {
@@ -119,11 +117,11 @@ export const twitterAdapter: PlatformAdapter = {
         await ctx.log(`Searching: "${jobConfig.searchQuery}"`);
 
         result = await engine.scrapeTimeline({
-          mode: 'search',
+          mode: "search",
           searchQuery: jobConfig.searchQuery,
           limit: jobConfig.limit || 50,
           saveMarkdown: true,
-          scrapeMode: jobConfig.mode || 'puppeteer',
+          scrapeMode: jobConfig.mode || "puppeteer",
           dateRange: jobConfig.dateRange,
         });
 
@@ -136,12 +134,12 @@ export const twitterAdapter: PlatformAdapter = {
         }
       } else {
         throw new Error(
-          'Invalid Twitter job configuration: missing username, tweetUrl, or searchQuery'
+          "Invalid Twitter job configuration: missing username, tweetUrl, or searchQuery"
         );
       }
     } catch (error: any) {
-      await ctx.log(`Error: ${error.message}`, 'error');
-      logger.error('Twitter scraping failed', error);
+      await ctx.log(`Error: ${error.message}`, "error");
+      logger.error("Twitter scraping failed", error);
       throw error;
     } finally {
       await engine.close();
@@ -149,10 +147,7 @@ export const twitterAdapter: PlatformAdapter = {
 
     if (result?.success && result.runContext?.markdownIndexPath) {
       const duration = Date.now() - startTime;
-      await ctx.log(
-        `Scraping completed successfully! (${(duration / 1000).toFixed(1)}s)`,
-        'info'
-      );
+      await ctx.log(`Scraping completed successfully! (${(duration / 1000).toFixed(1)}s)`, "info");
 
       return {
         success: true,
@@ -165,13 +160,13 @@ export const twitterAdapter: PlatformAdapter = {
       };
     }
 
-    throw new Error(result?.error || 'Scraping failed with unknown error');
+    throw new Error(result?.error || "Scraping failed with unknown error");
   },
 
   classifyError(err: any) {
-    if (err?.response?.status === 401) return 'auth';
-    if (err?.response?.status === 404) return 'not_found';
-    if (err?.response?.status === 429) return 'rate_limit';
-    return 'unknown';
+    if (err?.response?.status === 401) return "auth";
+    if (err?.response?.status === 404) return "not_found";
+    if (err?.response?.status === 429) return "rate_limit";
+    return "unknown";
   },
 };

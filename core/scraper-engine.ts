@@ -6,7 +6,7 @@ import { CookieManager } from './cookie-manager';
 import { SessionManager, Session } from './session-manager';
 import { ProxyManager } from './proxy-manager';
 import { ErrorSnapshotter } from './error-snapshotter';
-import { FingerprintManager } from './fingerprint-manager';
+import { AntiDetection } from './anti-detection';
 import * as dataExtractor from './data-extractor';
 import { NavigationService } from './navigation-service';
 import { RateLimitManager } from './rate-limit-manager';
@@ -86,7 +86,7 @@ export class ScraperEngine {
     public get sessionManager() { return this.deps.sessionManager; }
     public get proxyManager() { return this.deps.proxyManager; }
     public get errorSnapshotter() { return this.deps.errorSnapshotter; }
-    public get fingerprintManager() { return this.deps.fingerprintManager; }
+    public get antiDetection() { return this.deps.antiDetection; }
     public get performanceMonitor() { return this.deps.performanceMonitor; }
     public get progressManager() { return this.deps.progressManager; }
     /** Get dependencies (shared for parallel processing) */
@@ -130,10 +130,12 @@ export class ScraperEngine {
         this.eventBus = options.eventBus || eventBusInstance;
         
         // Use dependency injection to decouple dependency creation
+        // antiDetectionLevel: 'high' is the recommended default for most use cases
         this.deps = options.dependencies || createDefaultDependencies(
             this.eventBus,
             './cookies',
-            './data/progress'
+            './data/progress',
+            options.antiDetectionLevel || 'high'
         );
         
         this.browserManager = null;
@@ -207,7 +209,9 @@ export class ScraperEngine {
 
         const sessionId = path.basename(session.filePath);
         if (options.refreshFingerprint !== false) {
-            await this.fingerprintManager.injectFingerprint(this.page, sessionId);
+            // 使用完整的反检测系统 (指纹伪装 + 高级指纹 + 人性化行为)
+            await this.antiDetection.prepare(this.page, sessionId);
+            this.eventBus.emitLog(`[AntiDetection] Applied ${this.antiDetection.getLevel()} level protection`);
         }
 
         await this.sessionManager.injectSession(this.page, session, options.clearExistingCookies !== false);

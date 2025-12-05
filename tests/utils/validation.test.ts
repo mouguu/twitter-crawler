@@ -1,3 +1,4 @@
+import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test';
 /**
  * Validation 工具单元测试
  */
@@ -6,43 +7,43 @@ import * as validation from '../../utils/validation';
 
 describe('Validation Utils', () => {
   describe('validateTwitterUsername', () => {
-    it('should validate correct username', () => {
+    test('should validate correct username', () => {
       const result = validation.validateTwitterUsername('testuser');
       expect(result.valid).toBe(true);
       expect(result.normalized).toBe('testuser');
     });
 
-    it('should remove @ prefix', () => {
+    test('should remove @ prefix', () => {
       const result = validation.validateTwitterUsername('@testuser');
       expect(result.valid).toBe(true);
       expect(result.normalized).toBe('testuser');
     });
 
-    it('should trim whitespace', () => {
+    test('should trim whitespace', () => {
       const result = validation.validateTwitterUsername('  testuser  ');
       expect(result.valid).toBe(true);
       expect(result.normalized).toBe('testuser');
     });
 
-    it('should reject empty username', () => {
+    test('should reject empty username', () => {
       const result = validation.validateTwitterUsername('');
       expect(result.valid).toBe(false);
       expect(result.error).toContain('不能为空');
     });
 
-    it('should reject username longer than 15 characters', () => {
+    test('should reject username longer than 15 characters', () => {
       const result = validation.validateTwitterUsername('a'.repeat(16));
       expect(result.valid).toBe(false);
       expect(result.error).toContain('15');
     });
 
-    it('should reject username with invalid characters', () => {
+    test('should reject username with invalid characters', () => {
       const result = validation.validateTwitterUsername('test-user');
       expect(result.valid).toBe(false);
       expect(result.error).toContain('字母、数字和下划线');
     });
 
-    it('should reject non-string input', () => {
+    test('should reject non-string input', () => {
       const result = validation.validateTwitterUsername(123);
       expect(result.valid).toBe(false);
       expect(result.error).toContain('字符串');
@@ -50,7 +51,7 @@ describe('Validation Utils', () => {
   });
 
   describe('validateEnvCookieData', () => {
-    it('should validate correct cookie data', () => {
+    test('should validate correct cookie data', () => {
       const cookieData = {
         cookies: [
           { name: 'auth_token', value: 'token123', domain: '.twitter.com' }
@@ -63,7 +64,7 @@ describe('Validation Utils', () => {
       expect(result.cookies).toBeDefined();
     });
 
-    it('should reject missing cookies', () => {
+    test('should reject missing cookies', () => {
       const cookieData = {
         username: 'testuser'
       };
@@ -72,7 +73,7 @@ describe('Validation Utils', () => {
       expect(result.valid).toBe(false);
     });
 
-    it('should filter expired cookies', () => {
+    test('should filter expired cookies', () => {
       const expiredDate = new Date();
       expiredDate.setDate(expiredDate.getDate() - 1);
       
@@ -92,7 +93,7 @@ describe('Validation Utils', () => {
   });
 
   describe('validateScraperConfig', () => {
-    it('should validate correct config', () => {
+    test('should validate correct config', () => {
       const config = {
         type: 'profile',
         input: 'testuser',
@@ -103,7 +104,7 @@ describe('Validation Utils', () => {
       expect(result.valid).toBe(true);
     });
 
-    it('should reject missing required fields', () => {
+    test('should reject missing required fields', () => {
       const config = {
         type: 'profile'
         // missing input
@@ -115,7 +116,7 @@ describe('Validation Utils', () => {
       // If it's valid, that's also acceptable (validation might be lenient)
     });
 
-    it('should validate limit range', () => {
+    test('should validate limit range', () => {
       const config = {
         type: 'profile',
         input: 'testuser',

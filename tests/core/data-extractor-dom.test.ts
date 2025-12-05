@@ -1,3 +1,4 @@
+import { describe, test, expect, beforeEach, afterEach, mock, spyOn, beforeAll, afterAll } from 'bun:test';
 
 import * as path from 'path';
 import puppeteer, { Browser, Page } from 'puppeteer';
@@ -26,7 +27,7 @@ describe('DataExtractor (Integration with DOM)', () => {
         await page.close();
     });
 
-    it('should correctly extract tweets from mock HTML', async () => {
+    test('should correctly extract tweets from mock HTML', async () => {
         // Load the local fixture file
         const fixturePath = path.join(process.cwd(), 'tests/fixtures/twitter-mock.html');
         await page.goto(`file://${fixturePath}`);

@@ -2,28 +2,26 @@
  * ErrorSnapshotter 单元测试
  */
 
+import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test';
 import { ErrorSnapshotter } from '../../core/error-snapshotter';
 import { Page } from 'puppeteer';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 
-// Mock puppeteer
-jest.mock('puppeteer');
-
 describe('ErrorSnapshotter', () => {
   let snapshotter: ErrorSnapshotter;
   let testSnapshotDir: string;
-  let mockPage: jest.Mocked<Page>;
+  let mockPage: Partial<Page>;
 
   beforeEach(() => {
     testSnapshotDir = path.join(os.tmpdir(), 'test-snapshots-' + Date.now());
     snapshotter = new ErrorSnapshotter(testSnapshotDir);
     
     mockPage = {
-      screenshot: jest.fn().mockResolvedValue(Buffer.from('screenshot')),
-      content: jest.fn().mockResolvedValue('<html></html>')
-    } as unknown as jest.Mocked<Page>;
+      screenshot: mock(() => Promise.resolve(Buffer.from('screenshot'))),
+      content: mock(() => Promise.resolve('<html></html>'))
+    } as unknown as Partial<Page>;
   });
 
   afterEach(() => {
@@ -35,18 +33,18 @@ describe('ErrorSnapshotter', () => {
   });
 
   describe('capture', () => {
-    it('should capture screenshot and HTML', async () => {
+    test('should capture screenshot and HTML', async () => {
       const error = new Error('Test error');
-      const files = await snapshotter.capture(mockPage, error, 'test-context');
+      const files = await snapshotter.capture(mockPage as Page, error, 'test-context');
       
       expect(files.length).toBeGreaterThan(0);
       expect(mockPage.screenshot).toHaveBeenCalled();
       expect(mockPage.content).toHaveBeenCalled();
     });
 
-    it('should create error log file', async () => {
+    test('should create error log file', async () => {
       const error = new Error('Test error');
-      const files = await snapshotter.capture(mockPage, error, 'test-context');
+      const files = await snapshotter.capture(mockPage as Page, error, 'test-context');
       
       const logFile = files.find(f => f.endsWith('.log'));
       expect(logFile).toBeDefined();
@@ -58,19 +56,19 @@ describe('ErrorSnapshotter', () => {
       }
     });
 
-    it('should handle screenshot failure gracefully', async () => {
-      mockPage.screenshot = jest.fn().mockRejectedValue(new Error('Screenshot failed'));
+    test('should handle screenshot failure gracefully', async () => {
+      mockPage.screenshot = mock(() => Promise.reject(new Error('Screenshot failed')));
       
       const error = new Error('Test error');
-      const files = await snapshotter.capture(mockPage, error, 'test-context');
+      const files = await snapshotter.capture(mockPage as Page, error, 'test-context');
       
       // Should still capture HTML and log
       expect(files.length).toBeGreaterThan(0);
     });
 
-    it('should sanitize context label in filename', async () => {
+    test('should sanitize context label in filename', async () => {
       const error = new Error('Test error');
-      const files = await snapshotter.capture(mockPage, error, 'test@context#123');
+      const files = await snapshotter.capture(mockPage as Page, error, 'test@context#123');
       
       // Filename should not contain special characters
       const hasInvalidChars = files.some(f => /[@#]/.test(path.basename(f)));
@@ -78,4 +76,3 @@ describe('ErrorSnapshotter', () => {
     });
   });
 });
-

@@ -1,3 +1,4 @@
+import { describe, test, expect, beforeEach, afterEach, mock, spyOn } from 'bun:test';
 /**
  * Decorators 工具单元测试
  */
@@ -31,7 +32,7 @@ describe('Decorators', () => {
       }
     }
 
-    it('should retry on network errors', async () => {
+    test('should retry on network errors', async () => {
       const instance = new TestClass();
       
       await expect(
@@ -41,7 +42,7 @@ describe('Decorators', () => {
       expect(instance.callCount).toBe(3); // initial + 2 retries
     });
 
-    it('should succeed on first attempt', async () => {
+    test('should succeed on first attempt', async () => {
       const instance = new TestClass();
       
       const result = await instance.successMethod();
@@ -50,7 +51,7 @@ describe('Decorators', () => {
       expect(instance.callCount).toBe(1);
     });
 
-    it('should not retry non-network errors', async () => {
+    test('should not retry non-network errors', async () => {
       const instance = new TestClass();
       
       await expect(
@@ -82,7 +83,7 @@ describe('Decorators', () => {
       }
     }
 
-    it('should handle rate limit errors', async () => {
+    test('should handle rate limit errors', async () => {
       const instance = new TestClass();
       
       await expect(
@@ -90,14 +91,14 @@ describe('Decorators', () => {
       ).rejects.toThrow(); // ScraperErrors.rateLimitExceeded() is thrown
     });
 
-    it('should pass through normal errors', async () => {
+    test('should pass through normal errors', async () => {
       const instance = new TestClass();
       
       const result = await instance.normalMethod();
       expect(result).toBe('success');
     });
 
-    it('should not catch non-rate-limit errors', async () => {
+    test('should not catch non-rate-limit errors', async () => {
       const instance = new TestClass();
       
       await expect(

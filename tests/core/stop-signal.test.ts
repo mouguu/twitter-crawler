@@ -1,3 +1,4 @@
+import { describe, test, expect, afterEach } from 'bun:test';
 import { getShouldStopScraping, resetShouldStopScraping, setShouldStopScraping } from '../../core/stop-signal';
 
 describe('stop-signal', () => {

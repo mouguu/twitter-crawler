@@ -59,6 +59,7 @@ export async function submitJob(params: {
   enableProxy?: boolean;
   dateRange?: { start: string; end: string };
   strategy?: string;
+  antiDetectionLevel?: 'low' | 'medium' | 'high' | 'paranoid';
 }): Promise<JobInfo> {
   const response = await fetch('/api/scrape-v2', {
     method: 'POST',

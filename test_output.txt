@@ -1,0 +1,548 @@
+bun test v1.2.8 (adab0f64)
+
+tests/middleware/api-key.test.ts:
+(pass) api-key middleware > allows when API key is not configured [0.85ms]
+(pass) api-key middleware > rejects when key is configured and missing [0.11ms]
+(pass) api-key middleware > accepts matching x-api-key header [0.02ms]
+(pass) api-key middleware > accepts matching api_key query param
+
+tests/core/browser-manager.test.ts:
+(pass) BrowserManager > constructor > should initialize with null browser and page
+[BrowserManager] 🎭 Random fingerprint: 2560x1440
+[BrowserManager] Browser launched successfully
+(pass) BrowserManager > init > should launch browser with default options
+[BrowserManager] 🎭 Random fingerprint: 1600x900
+[BrowserManager] Browser launched successfully
+(pass) BrowserManager > init > should launch browser with custom headless option [0.47ms]
+[BrowserManager] Launching with proxy: proxy.example.com:8080
+[BrowserManager] 🎭 Random fingerprint: 1280x800
+[BrowserManager] Browser launched successfully
+(pass) BrowserManager > init > should launch browser with proxy
+(pass) BrowserManager > newPage > should throw error if browser not initialized
+[BrowserManager] 🎭 Random fingerprint: 1280x800
+[BrowserManager] Browser launched successfully
+[BrowserManager] 🎭 Random UA: Safari
+[BrowserManager] Enabled CDP resource blocking for static assets (High Performance)
+(pass) BrowserManager > newPage > should create new page after initialization [0.17ms]
+[BrowserManager] Launching with proxy: proxy.example.com:8080
+[BrowserManager] 🎭 Random fingerprint: 1366x768
+[BrowserManager] Browser launched successfully
+[BrowserManager] Proxy authentication injected for proxy.example.com:8080
+[BrowserManager] 🎭 Random UA: Chrome/120
+[BrowserManager] Enabled CDP resource blocking for static assets (High Performance)
+(pass) BrowserManager > newPage > should inject proxy authentication if provided
+[BrowserManager] 🎭 Random fingerprint: 1366x768
+[BrowserManager] Browser launched successfully
+[BrowserManager] Enabled CDP resource blocking for static assets (High Performance)
+(pass) BrowserManager > newPage > should set user agent if provided [0.10ms]
+[BrowserManager] 🎭 Random fingerprint: 1920x1080
+[BrowserManager] Browser launched successfully
+[BrowserManager] 🎭 Random UA: Safari
+[BrowserManager] Enabled CDP resource blocking for static assets (High Performance)
+(pass) BrowserManager > newPage > should configure request interception if blockResources is true [0.04ms]
+[BrowserManager] 🎭 Random fingerprint: 2560x1440
+[BrowserManager] Browser launched successfully
+Browser closed successfully
+(pass) BrowserManager > close > should close browser if initialized [0.08ms]
+(pass) BrowserManager > close > should handle close when browser not initialized [0.01ms]
+[BrowserManager] 🎭 Random fingerprint: 2560x1440
+[BrowserManager] Browser launched successfully
+[BrowserManager] 🎭 Random UA: Chrome/121
+[BrowserManager] Enabled CDP resource blocking for static assets (High Performance)
+(pass) BrowserManager > getPage > should return current page if exists [0.05ms]
+[BrowserManager] 🎭 Random fingerprint: 1280x800
+[BrowserManager] Browser launched successfully
+(pass) BrowserManager > getPage > should throw error if no page created
+[BrowserManager] 🎭 Random fingerprint: 1440x900
+[BrowserManager] Browser launched successfully
+(pass) BrowserManager > getBrowser > should return browser if initialized [0.05ms]
+(pass) BrowserManager > getBrowser > should throw error if not initialized
+
+tests/core/data-extractor-error-recovery.test.ts:
+(pass) DataExtractor Error Recovery > detectErrorPage > should detect error pages with "something went wrong"
+(pass) DataExtractor Error Recovery > detectErrorPage > should detect error pages with "rate limit"
+(pass) DataExtractor Error Recovery > detectErrorPage > should return false for normal pages
+(pass) DataExtractor Error Recovery > detectErrorPage > should handle evaluation errors gracefully [0.02ms]
+(pass) DataExtractor Error Recovery > clickTryAgainButton > should click button with "Try again" text [3001.15ms]
+(pass) DataExtractor Error Recovery > clickTryAgainButton > should click button with "Retry" text [3002.09ms]
+(pass) DataExtractor Error Recovery > clickTryAgainButton > should return false when no button found
+(pass) DataExtractor Error Recovery > clickTryAgainButton > should handle evaluation errors gracefully
+(pass) DataExtractor Error Recovery > recoverFromErrorPage > should return true immediately if no error detected [1.66ms]
+(pass) DataExtractor Error Recovery > recoverFromErrorPage > should successfully recover after clicking Try Again button [6002.09ms]
+(pass) DataExtractor Error Recovery > recoverFromErrorPage > should retry multiple times if recovery fails [14005.13ms]
+(pass) DataExtractor Error Recovery > recoverFromErrorPage > should handle case when no Try Again button is found [2000.52ms]
+(pass) DataExtractor Error Recovery > recoverFromErrorPage > should auto-recover if page recovers without button click [2002.19ms]
+(pass) DataExtractor Error Recovery > recoverFromErrorPage > should handle evaluation errors during recovery gracefully [0.57ms]
+(pass) DataExtractor Error Recovery > recoverFromErrorPage > should use default maxRetries from config when not specified [0.29ms]
+
+tests/core/errors.test.ts:
+(pass) ScraperError > constructor > should create error with code and message
+(pass) ScraperError > constructor > should accept retryable option
+(pass) ScraperError > constructor > should accept context option
+(pass) ScraperError > constructor > should accept originalError option
+(pass) ScraperError > constructor > should have timestamp [0.74ms]
+(pass) ScraperError > fromHttpResponse > should create AUTH_FAILED error for 401
+(pass) ScraperError > fromHttpResponse > should create RATE_LIMIT error for 429
+(pass) ScraperError > fromHttpResponse > should create API_ERROR for 500
+(pass) ScraperError > fromHttpResponse > should include context in error
+(pass) ScraperError > fromError > should wrap native Error
+(pass) ScraperError > isRateLimitError > should return true for RATE_LIMIT error [0.52ms]
+(pass) ScraperError > isRateLimitError > should return true for RATE_LIMIT_EXCEEDED error [0.04ms]
+(pass) ScraperError > isRateLimitError > should return false for other errors [0.02ms]
+(pass) ScraperError > isRateLimitError > should check message for non-ScraperError [0.12ms]
+(pass) ScraperError > isAuthError > should return true for AUTH_FAILED error
+(pass) ScraperError > isAuthError > should check message for non-ScraperError
+(pass) ScraperError > isNetworkError > should return true for NETWORK_ERROR
+(pass) ScraperError > isNetworkError > should check message for timeout
+(pass) ScraperError > toJSON > should serialize error to JSON [0.34ms]
+(pass) ScraperError > getUserMessage > should return user-friendly message for RATE_LIMIT [0.03ms]
+(pass) ScraperError > getUserMessage > should return user-friendly message for AUTH_FAILED
+(pass) ScraperError > getUserMessage > should return user-friendly message for NETWORK_ERROR
+(pass) ScraperError > getUserMessage > should return message for unknown errors
+(pass) ErrorClassifier > classify > should return ScraperError as-is
+(pass) ErrorClassifier > classify > should classify rate limit errors
+(pass) ErrorClassifier > classify > should classify auth errors
+(pass) ErrorClassifier > classify > should classify network errors
+(pass) ErrorClassifier > classify > should classify unknown errors
+(pass) ErrorClassifier > classify > should handle non-Error objects
+
+tests/core/browser-pool.test.ts:
+(pass) BrowserPool > constructor > should create pool with default options [0.76ms]
+(pass) BrowserPool > constructor > should create pool with custom options
+(pass) BrowserPool > acquire > should have acquire method
+(pass) BrowserPool > acquire > should have getStatus method [0.25ms]
+(pass) BrowserPool > release > should have release method
+(pass) BrowserPool > release > should handle releasing unknown browser
+(pass) BrowserPool > getStatus > should return correct status structure
+(pass) BrowserPool > close > should handle close when pool is empty
+(pass) BrowserPool > shrink > should have shrink method
+
+tests/core/session-manager.test.ts:
+[SessionManager] Loaded 2 sessions.
+(pass) SessionManager > init > should load sessions from cookie files [2.34ms]
+[SessionManager] Cookie directory not found: /non/existent/path
+(pass) SessionManager > init > should handle missing directory gracefully
+[SessionManager] Loaded 0 sessions.
+(pass) SessionManager > init > should handle empty directory [0.02ms]
+[SessionManager] Loaded 2 sessions.
+[SessionManager] Selected session: s1 (errors: 0, usage: 0)
+(pass) SessionManager > getNextSession > should return a session [0.10ms]
+[SessionManager] Loaded 2 sessions.
+(pass) SessionManager > getNextSession > should prioritize preferred session [0.04ms]
+[SessionManager] Loaded 2 sessions.
+[SessionManager] Selected session: s2 (errors: 0, usage: 0)
+(pass) SessionManager > getNextSession > should exclude specified session
+[SessionManager] Loaded 2 sessions.
+[SessionManager] Session s1 error count: 1 (unknown error)
+[SessionManager] Selected session: s2 (errors: 0, usage: 0)
+(pass) SessionManager > getNextSession > should prioritize healthy sessions (fewer errors)
+[SessionManager] Loaded 1 sessions.
+[SessionManager] Session s1 error count: 1 (unknown error)
+[SessionManager] Session s1 error count: 2 (unknown error)
+[SessionManager] Session s1 has been RETIRED due to too many errors.
+[SessionManager] Session s1 error count: 3 (unknown error)
+[SessionManager] Session s1 has been RETIRED due to too many errors.
+(pass) SessionManager > Session Health > should retire session after max errors [0.31ms]
+[SessionManager] Loaded 1 sessions.
+(pass) SessionManager > Session Health > should increment usage count on markGood [0.20ms]
+[SessionManager] Loaded 1 sessions.
+[SessionManager] Session s1 error count: 1 (unknown error)
+(pass) SessionManager > Session Health > should reset consecutive failures on markGood [0.07ms]
+
+tests/core/data-extractor-dom.test.ts:
+(pass) DataExtractor (Integration with DOM) > should correctly extract tweets from mock HTML [25.64ms]
+
+tests/core/x-api.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find module './xclid' from '/Users/wanshiwu/Downloads/XRcrawler/core/x-api.ts'
+-------------------------------
+
+
+tests/core/performance-monitor.test.ts:
+(pass) PerformanceMonitor > recordApiRequest > should record API request time
+(pass) PerformanceMonitor > recordApiRequest > should calculate average latency correctly
+(pass) PerformanceMonitor > recordTweets > should record tweets collected [0.31ms]
+(pass) PerformanceMonitor > addTweets > should add to tweets count
+(pass) PerformanceMonitor > recordScroll > should increment scroll count
+(pass) PerformanceMonitor > recordSessionSwitch > should increment session switch count
+(pass) PerformanceMonitor > recordRateLimitWait > should record rate limit hit
+(pass) PerformanceMonitor > getStats > should return all performance stats
+(pass) PerformanceMonitor > getStats > should return zero stats initially
+(pass) PerformanceMonitor > reset > should reset all stats
+(pass) PerformanceMonitor > tweetsPerSecond > should calculate tweets per second [0.11ms]
+
+tests/core/advanced-fingerprint.test.ts:
+(pass) AdvancedFingerprint > Configuration > should generate random config [0.32ms]
+(pass) AdvancedFingerprint > Configuration > should generate different configs on each call
+(pass) AdvancedFingerprint > Configuration > WINDOWS_CHROME_CONFIG should have valid structure
+(pass) AdvancedFingerprint > Configuration > MACOS_SAFARI_CONFIG should have valid structure
+(pass) AdvancedFingerprint > AdvancedFingerprint Class > should create instance with default random config
+(pass) AdvancedFingerprint > AdvancedFingerprint Class > should accept partial config override [0.12ms]
+(pass) AdvancedFingerprint > AdvancedFingerprint Class > should update config via setConfig
+(pass) AdvancedFingerprint > AdvancedFingerprint Class > should regenerate random config
+(pass) AdvancedFingerprint > AdvancedFingerprint Class > getConfig should return copy of config
+(pass) AdvancedFingerprint > Injection Script > inject method should exist
+(pass) Hardware Configuration > should have reasonable device memory values
+(pass) Hardware Configuration > should have reasonable CPU core counts
+(pass) Hardware Configuration > should have zero max touch points for desktop
+
+tests/core/stop-signal.test.ts:
+(pass) stop-signal > defaults to false and can be toggled
+(pass) stop-signal > reset clears the flag
+
+tests/core/human-behavior.test.ts:
+(pass) HumanBehavior > Configuration > should use default config by default [0.36ms]
+(pass) HumanBehavior > Configuration > should accept custom config
+(pass) HumanBehavior > Configuration > should switch to fast config
+(pass) HumanBehavior > Configuration > should switch back to default config
+(pass) HumanBehavior > Delay Functions > randomDelay should wait within range [14.63ms]
+(pass) HumanBehavior > Delay Functions > gaussianDelay should respect minimum [66.04ms]
+(pass) HumanBehavior > Delay Functions > humanWait should delay correctly [21.12ms]
+(pass) HumanBehavior > maybeRest > should return boolean
+(pass) HumanBehavior > maybeRest > should eventually rest with high probability config [3.43ms]
+(pass) HumanBehavior > maybeRest > should never rest with zero probability
+(pass) HumanBehavior > betweenActions > should accept different types [275.27ms]
+(pass) HumanBehavior > betweenActions > fast type should be quicker than slow [2069.66ms]
+(pass) HumanBehavior > simulateReading > should delay based on content length [1476.49ms]
+(pass) HumanBehavior > simulateReading > longer content should take more time [3313.75ms]
+(pass) Config Presets > DEFAULT_HUMAN_CONFIG should have all required fields
+(pass) Config Presets > FAST_HUMAN_CONFIG should have faster settings
+
+tests/core/progress-manager.test.ts:
+[Prisma Init] Checking DATABASE_URL: Present
+[Prisma Init] Starting initialization...
+[Prisma Init] Initializing pg Pool...
+[Prisma Init] Initializing PrismaPg adapter...
+[Prisma Init] Initializing PrismaClient...
+[Prisma Init] Successfully initialized.
+(pass) ProgressManager > saveProgress > should save progress to file [0.64ms]
+(pass) ProgressManager > saveProgress > should update existing progress [0.16ms]
+(pass) ProgressManager > loadProgress > should load progress from file [0.37ms]
+(pass) ProgressManager > loadProgress > should return null for non-existent progress [0.07ms]
+(pass) ProgressManager > loadProgress > should load saved progress [0.24ms]
+(pass) ProgressManager > startScraping > should start new scraping session
+(pass) ProgressManager > startScraping > should resume from progress [0.34ms]
+(pass) ProgressManager > updateProgress > should mark as completed when target reached [0.15ms]
+(pass) ProgressManager > updateProgress > should update progress with additional info [0.19ms]
+
+tests/core/rate-limit-manager.test.ts:
+(pass) RateLimitManager > should detect rate limit errors [0.03ms]
+(pass) RateLimitManager > should handle rate limit with cookie rotation [2001.02ms]
+
+tests/core/proxy-manager.test.ts:
+[ProxyManager] Proxy directory not found: /non/existent/path. Proxies will not be used.
+[ProxyManager] ProxyManager destroyed
+(pass) ProxyManager > init > should handle missing proxy directory [0.40ms]
+(pass) ProxyManager > init > should load proxies from file [0.90ms]
+(pass) ProxyManager > init > should handle invalid proxy format [0.56ms]
+(pass) ProxyManager > getProxyForSession > should return null when no proxies available
+(pass) ProxyManager > getProxyForSession > should return proxy when available [0.55ms]
+(pass) ProxyManager > getProxyForSession > should return same proxy for same session [0.23ms]
+(pass) ProxyManager > getBestProxy > should prefer proxies with higher success rate [0.29ms]
+(pass) ProxyManager > getBestProxy > should exclude specified proxies [0.27ms]
+(pass) ProxyManager > switchProxyForSession > should switch to a different proxy [0.28ms]
+(pass) ProxyManager > switchProxyForSession > should return null when no alternative proxy available [0.35ms]
+(pass) ProxyManager > cooldown mechanism > should revive proxy after cooldown period [151.36ms]
+(pass) ProxyManager > markProxySuccess > should update success rate and response time [0.63ms]
+(pass) ProxyManager > markProxySuccess > should reset consecutive failures on success [0.34ms]
+(pass) ProxyManager > getStats > should return correct statistics [0.47ms]
+(pass) ProxyManager > getHealthReport > should return formatted health report [0.37ms]
+(pass) ProxyManager > enabled/disabled state > should not return proxies when disabled [0.58ms]
+
+tests/core/error-snapshotter.test.ts:
+(pass) ErrorSnapshotter > capture > should capture screenshot and HTML [1.35ms]
+(pass) ErrorSnapshotter > capture > should create error log file [0.98ms]
+[ErrorSnapshotter] Failed to capture screenshot: Error: Screenshot failed
+(pass) ErrorSnapshotter > capture > should handle screenshot failure gracefully [0.65ms]
+(pass) ErrorSnapshotter > capture > should sanitize context label in filename [0.61ms]
+
+tests/core/data-extractor.test.ts:
+(pass) DataExtractor > parseCount > should parse simple numbers
+(pass) DataExtractor > parseCount > should parse K suffix
+(pass) DataExtractor > parseCount > should parse M suffix
+(pass) DataExtractor > parseCount > should handle invalid input
+(pass) DataExtractor > extractProfileInfo > should extract profile info successfully [0.61ms]
+(pass) DataExtractor > extractProfileInfo > should handle errors gracefully
+(pass) DataExtractor > extractTweetsFromPage > should extract tweets using correct selectors
+(pass) DataExtractor > extractTweetsFromPage > should return empty array on failure
+
+tests/core/scraper-dependencies.test.ts:
+(pass) ScraperDependencies > createDefaultDependencies > should create all required dependencies [50.39ms]
+(pass) ScraperDependencies > createDefaultDependencies > should use custom cookie directory [51.01ms]
+(pass) ScraperDependencies > createDefaultDependencies > should use custom progress directory [46.72ms]
+(pass) ScraperDependencies > createDefaultDependencies > should create independent instances [90.66ms]
+(pass) ScraperDependencies > createDefaultDependencies > should pass eventBus to services [44.73ms]
+(pass) ScraperDependencies > ScraperDependencies interface > should match expected structure [47.40ms]
+
+tests/core/cookie-manager.test.ts:
+(pass) CookieManager > scanCookieFiles > should return a list of json files in the directory [0.50ms]
+(pass) CookieManager > scanCookieFiles > should return empty list if no json files exist [0.29ms]
+(pass) CookieManager > getNextCookieFile > should rotate through cookie files [0.32ms]
+(pass) CookieManager > loadFromFile > should load cookies from valid file [0.14ms]
+(pass) CookieManager > loadFromFile > should throw error for invalid file [0.21ms]
+
+tests/core/navigation-service.test.ts:
+(pass) NavigationService > navigateToUrl > should navigate to URL [0.24ms]
+(pass) NavigationService > navigateToUrl > should emit log on navigation error [0.10ms]
+(pass) NavigationService > navigateToUrl > should handle navigation errors [0.09ms]
+(pass) NavigationService > waitForTweets > should return true when tweets are found [0.03ms]
+(pass) NavigationService > waitForTweets > should timeout if neither tweets nor empty state is found [501.63ms]
+
+tests/core/anti-detection.test.ts:
+(pass) AntiDetection > Initialization > should create instance with default config [74.29ms]
+(pass) AntiDetection > Initialization > should accept level option [48.05ms]
+(pass) AntiDetection > Initialization > should accept all levels [184.41ms]
+(pass) AntiDetection > Level Configuration > should change level dynamically [46.78ms]
+(pass) AntiDetection > Level Configuration > getSummary should include level info [44.58ms]
+(pass) AntiDetection > Level Configuration > low level should have minimal features [44.04ms]
+(pass) AntiDetection > Level Configuration > paranoid level should have all features [45.03ms]
+(pass) AntiDetection > Components Access > should expose internal components [46.11ms]
+(pass) AntiDetection > Delay Functions > delay should wait correctly [69.70ms]
+(pass) AntiDetection > Delay Functions > betweenActions should accept type parameter [164.80ms]
+(pass) AntiDetection > Delay Functions > simulateReading should delay [1948.64ms]
+(pass) AntiDetection > Delay Functions > maybeRest should return boolean [81.77ms]
+(pass) AntiDetection > Custom Configuration > should accept custom fingerprint config [51.55ms]
+(pass) AntiDetection > Custom Configuration > should accept custom behavior config [47.15ms]
+(pass) AntiDetection > Custom Configuration > should accept custom fingerprint directory [51.49ms]
+(pass) Level Feature Matrix > higher levels should have more features [180.83ms]
+
+tests/core/event-bus.test.ts:
+(pass) ScraperEventBus > should emit progress events [0.04ms]
+(pass) ScraperEventBus > should emit log messages
+
+tests/utils/path-utils.test.ts:
+(pass) path-utils > returns true for path inside base directory [0.26ms]
+(pass) path-utils > returns false for traversal outside base directory [0.01ms]
+(pass) path-utils > returns true when target equals base directory
+(pass) path-utils > returns false when inputs are empty
+
+tests/utils/convert-cookies.test.ts:
+(pass) Convert Cookies Utils > parseNetscapeCookieLine > should parse valid Netscape cookie line
+(pass) Convert Cookies Utils > parseNetscapeCookieLine > should return null for comment lines
+(pass) Convert Cookies Utils > parseNetscapeCookieLine > should return null for empty lines
+(pass) Convert Cookies Utils > parseNetscapeCookieLine > should return null for invalid format
+(pass) Convert Cookies Utils > parseNetscapeCookieLine > should handle non-secure cookies
+(pass) Convert Cookies Utils > parseNetscapeCookieLine > should handle cookies without expiration
+Converting /var/folders/3r/6gp8ctls2t9cj90gmml6_hwr0000gn/T/test-cookies-1764903045076/cookies.txt to /var/folders/3r/6gp8ctls2t9cj90gmml6_hwr0000gn/T/test-cookies-1764903045076/cookies.json...
+✅ Successfully converted 2 cookies to /var/folders/3r/6gp8ctls2t9cj90gmml6_hwr0000gn/T/test-cookies-1764903045076/cookies.json
+(pass) Convert Cookies Utils > convertCookieFile > should convert Netscape file to JSON [0.50ms]
+Converting /var/folders/3r/6gp8ctls2t9cj90gmml6_hwr0000gn/T/test-cookies-1764903045077/cookies.txt to /var/folders/3r/6gp8ctls2t9cj90gmml6_hwr0000gn/T/test-cookies-1764903045077/cookies.json...
+No valid cookies found in the input file.
+(pass) Convert Cookies Utils > convertCookieFile > should handle empty file [0.18ms]
+Converting /var/folders/3r/6gp8ctls2t9cj90gmml6_hwr0000gn/T/test-cookies-1764903045077/cookies.txt to /var/folders/3r/6gp8ctls2t9cj90gmml6_hwr0000gn/T/test-cookies-1764903045077/cookies.json...
+✅ Successfully converted 1 cookies to /var/folders/3r/6gp8ctls2t9cj90gmml6_hwr0000gn/T/test-cookies-1764903045077/cookies.json
+(pass) Convert Cookies Utils > convertCookieFile > should skip comments and invalid lines [0.25ms]
+
+tests/utils/config-manager.test.ts:
+(pass) ConfigManager > constructor > should create manager with default config [0.29ms]
+(pass) ConfigManager > constructor > should load from config file [0.18ms]
+(pass) ConfigManager > constructor > should load from environment variables [0.05ms]
+(pass) ConfigManager > constructor > should prioritize environment variables over config file [0.10ms]
+(pass) ConfigManager > getConfig > should return complete config object
+(pass) ConfigManager > getServerConfig > should return server configuration
+(pass) ConfigManager > getTwitterConfig > should return Twitter configuration
+(pass) ConfigManager > getOutputConfig > should return output configuration [0.19ms]
+(pass) ConfigManager > updateConfig > should update configuration [0.06ms]
+(pass) ConfigManager > updateConfig > should merge partial updates [0.04ms]
+(pass) ConfigManager > saveToFile > should save config to file [0.10ms]
+(pass) ConfigManager > getConfigManager (singleton) > should return the same instance
+(pass) ConfigManager > getConfigManager (singleton) > should reset singleton
+(pass) ConfigManager > validation > should validate port range [0.21ms]
+(pass) ConfigManager > validation > should validate required fields [0.12ms]
+
+tests/utils/decorators.test.ts:
+[Retry] Method networkErrorMethod failed (attempt 1/3): network timeout. Retrying in 10ms...
+[Retry] Method networkErrorMethod failed (attempt 2/3): network timeout. Retrying in 15ms...
+(pass) Decorators > RetryOnNetworkError > should retry on network errors [26.99ms]
+(pass) Decorators > RetryOnNetworkError > should succeed on first attempt
+(pass) Decorators > RetryOnNetworkError > should not retry non-network errors [0.13ms]
+[RateLimit] Method rateLimitedMethod hit rate limit.
+(pass) Decorators > HandleRateLimit > should handle rate limit errors [0.13ms]
+(pass) Decorators > HandleRateLimit > should pass through normal errors [0.01ms]
+(pass) Decorators > HandleRateLimit > should not catch non-rate-limit errors [0.05ms]
+
+tests/utils/retry.test.ts:
+(pass) Retry Utils > sleep > should delay for specified time [101.04ms]
+(pass) Retry Utils > retryWithBackoff > should succeed on first attempt
+Retrying 1/2, retrying after 1000ms...
+(pass) Retry Utils > retryWithBackoff > should retry on failure [1001.42ms]
+Retrying 1/2, retrying after 1000ms...
+Retrying 2/2, retrying after 2000ms...
+(pass) Retry Utils > retryWithBackoff > should throw after max retries [3002.52ms]
+Retrying 1/1, retrying after 1000ms...
+(pass) Retry Utils > retryWithBackoff > should call onRetry callback [1000.73ms]
+(pass) Retry Utils > retryWithBackoff > should respect shouldRetry callback [0.65ms]
+Retrying 1/2, retrying after 50ms...
+Retrying 2/2, retrying after 100ms...
+(pass) Retry Utils > retryWithBackoff > should use exponential backoff [152.69ms]
+(pass) Retry Utils > retryPageGoto > should have retryPageGoto function [0.06ms]
+(pass) Retry Utils > retryWaitForSelector > should have retryWaitForSelector function
+
+tests/utils/markdown.test.ts:
+(pass) Markdown Utils > saveTweetAsMarkdown > should save tweet as markdown file [2.31ms]
+[X] Tweet missing required data, skipping save
+(pass) Markdown Utils > saveTweetAsMarkdown > should return null for invalid tweet [0.08ms]
+(pass) Markdown Utils > saveTweetAsMarkdown > should handle missing markdownDir [0.06ms]
+[X] Markdown written to directory: /var/folders/3r/6gp8ctls2t9cj90gmml6_hwr0000gn/T/test-markdown-1764903050398/test/testuser/run-2025-12-05T02-50-50-398+00-00/markdown
+(pass) Markdown Utils > saveTweetsAsMarkdown > should save multiple tweets [2.52ms]
+[X] Markdown written to directory: /var/folders/3r/6gp8ctls2t9cj90gmml6_hwr0000gn/T/test-markdown-1764903050403/test/testuser/run-2025-12-05T02-50-50-403+00-00/markdown
+(pass) Markdown Utils > saveTweetsAsMarkdown > should create index file [1.91ms]
+[X] No tweets to save as Markdown
+(pass) Markdown Utils > saveTweetsAsMarkdown > should handle empty tweet array [0.04ms]
+
+tests/utils/output-path-manager.test.ts:
+(pass) OutputPathManager > getBaseDir > should return the configured base directory
+(pass) OutputPathManager > getPlatformDir > should return platform directory path
+(pass) OutputPathManager > getPlatformDir > should sanitize platform name [0.05ms]
+(pass) OutputPathManager > getIdentifierDir > should return identifier directory path
+(pass) OutputPathManager > getIdentifierDir > should sanitize identifier name [0.04ms]
+(pass) OutputPathManager > createRunPath > should create complete run path structure [0.34ms]
+(pass) OutputPathManager > createRunPath > should create directories if they do not exist [0.35ms]
+(pass) OutputPathManager > createRunPath > should generate correct file paths [0.32ms]
+(pass) OutputPathManager > isPathSafe > should return true for paths within base directory [0.05ms]
+(pass) OutputPathManager > isPathSafe > should return false for paths outside base directory [0.04ms]
+(pass) OutputPathManager > resolvePath > should resolve relative paths correctly [0.03ms]
+(pass) OutputPathManager > resolvePath > should throw error for path traversal attempts
+(pass) OutputPathManager > getOutputPathManager (singleton) > should return the same instance on multiple calls
+(pass) OutputPathManager > getOutputPathManager (singleton) > should allow reset for testing
+
+tests/utils/date-utils.test.ts:
+(pass) DateUtils > parseDate > should parse relative date string like "1 year" [1.25ms]
+(pass) DateUtils > parseDate > should parse relative date string like "3 months"
+(pass) DateUtils > parseDate > should return absolute date string as-is
+(pass) DateUtils > generateDateRanges > should generate daily date ranges [0.53ms]
+(pass) DateUtils > generateDateRanges > should generate monthly date ranges [0.13ms]
+(pass) DateUtils > generateDateRanges > should generate yearly date ranges [0.12ms]
+
+tests/utils/fileutils.test.ts:
+(pass) FileUtils > sanitizeSegment > should sanitize special characters
+(pass) FileUtils > sanitizeSegment > should handle empty string
+(pass) FileUtils > sanitizeSegment > should convert to lowercase
+(pass) FileUtils > sanitizeSegment > should remove leading/trailing dashes
+(pass) FileUtils > sanitizeSegment > should collapse multiple dashes
+(pass) FileUtils > ensureDirExists > should create directory if not exists [0.16ms]
+(pass) FileUtils > ensureDirExists > should return true if directory exists [0.16ms]
+(pass) FileUtils > ensureDirExists > should create nested directories [0.20ms]
+(pass) FileUtils > getDefaultOutputRoot > should return default output root
+(pass) FileUtils > getDefaultOutputRoot > should respect OUTPUT_DIR environment variable [0.20ms]
+(pass) FileUtils > createRunContext > should create run context with default options [0.97ms]
+(pass) FileUtils > createRunContext > should create run context with custom options [0.84ms]
+(pass) FileUtils > createRunContext > should create all required directories [0.83ms]
+(pass) FileUtils > createRunContext > should sanitize platform and identifier [0.94ms]
+(pass) FileUtils > getTodayString > should return date in YYYY-MM-DD format [0.03ms]
+(pass) FileUtils > getTodayString > should return current date
+(pass) FileUtils > getMarkdownFiles > should return markdown files in directory [0.51ms]
+(pass) FileUtils > getMarkdownFiles > should exclude merged files [0.38ms]
+(pass) FileUtils > getMarkdownFiles > should return empty array for non-existent directory [0.04ms]
+(pass) FileUtils > getMarkdownFiles > should return empty array for empty directory [0.15ms]
+(pass) FileUtils > ensureBaseStructure > should create base output structure [0.08ms]
+
+tests/utils/error-classifier.test.ts:
+(pass) ErrorClassifier > classifyError > should classify rate limit errors [0.01ms]
+(pass) ErrorClassifier > classifyError > should classify authentication errors
+(pass) ErrorClassifier > classifyError > should classify network errors
+(pass) ErrorClassifier > classifyError > should default to unknown for unrecognized errors
+(pass) ErrorClassifier > classifyError > should include suggestion message [0.12ms]
+(pass) ErrorClassifier > formatErrorMessage > should format error message with suggestion [0.03ms]
+(pass) ErrorClassifier > isRetryableError > should identify retryable errors
+(pass) ErrorClassifier > isRetryableError > should identify non-retryable errors
+
+tests/utils/result.test.ts:
+(pass) Result Utils > ok > should create success result
+(pass) Result Utils > ok > should include metadata
+(pass) Result Utils > fail > should create failure result
+(pass) Result Utils > fail > should include metadata
+(pass) Result Utils > isOk > should return true for success result
+(pass) Result Utils > isOk > should return false for failure result
+(pass) Result Utils > isFail > should return true for failure result
+(pass) Result Utils > isFail > should return false for success result
+(pass) Result Utils > unwrapOr > should return data for success result
+(pass) Result Utils > unwrapOr > should return default for failure result
+(pass) Result Utils > fromPromise > should convert successful promise to ok result
+(pass) Result Utils > fromPromise > should convert failed promise to fail result
+(pass) Result Utils > wrap > should wrap sync function
+(pass) Result Utils > wrap > should wrap async function
+(pass) Result Utils > wrap > should handle errors in wrapped function [0.36ms]
+(pass) Result Utils > wrap > should handle errors in async wrapped function [0.03ms]
+
+tests/utils/export.test.ts:
+✅ CSV exported successfully: /var/folders/3r/6gp8ctls2t9cj90gmml6_hwr0000gn/T/test-export-1764903050429/test/testuser/run-2025-12-05T02-50-50-429+00-00/tweets.csv
+(pass) Export Utils > exportToCsv > should export tweets to CSV [0.30ms]
+No tweet data to export as CSV
+(pass) Export Utils > exportToCsv > should handle empty tweet array
+✅ CSV exported successfully: /var/folders/3r/6gp8ctls2t9cj90gmml6_hwr0000gn/T/test-export-1764903050432/test/testuser/run-2025-12-05T02-50-50-432+00-00/tweets.csv
+(pass) Export Utils > exportToCsv > should escape quotes in CSV [0.14ms]
+✅ CSV exported successfully: /var/folders/3r/6gp8ctls2t9cj90gmml6_hwr0000gn/T/test-export-1764903050433/test/testuser/run-2025-12-05T02-50-50-433+00-00/custom.csv
+(pass) Export Utils > exportToCsv > should use custom filename [0.11ms]
+(pass) Export Utils > exportToCsv > should throw error for invalid runContext [0.02ms]
+✅ JSON exported successfully: /var/folders/3r/6gp8ctls2t9cj90gmml6_hwr0000gn/T/test-export-1764903050435/test/testuser/run-2025-12-05T02-50-50-435+00-00/tweets.json
+(pass) Export Utils > exportToJson > should export tweets to JSON [0.22ms]
+No tweet data to export as JSON
+(pass) Export Utils > exportToJson > should handle empty tweet array [0.02ms]
+✅ JSON exported successfully: /var/folders/3r/6gp8ctls2t9cj90gmml6_hwr0000gn/T/test-export-1764903050437/test/testuser/run-2025-12-05T02-50-50-437+00-00/tweets.json
+(pass) Export Utils > exportToJson > should format JSON with indentation [0.16ms]
+✅ JSON exported successfully: /var/folders/3r/6gp8ctls2t9cj90gmml6_hwr0000gn/T/test-export-1764903050439/test/testuser/run-2025-12-05T02-50-50-439+00-00/custom.json
+(pass) Export Utils > exportToJson > should use custom filename [0.11ms]
+(pass) Export Utils > exportToJson > should throw error for invalid runContext [0.02ms]
+
+tests/utils/time.test.ts:
+(pass) Time Utils > getDefaultTimezone > should return timezone string [0.01ms]
+(pass) Time Utils > resolveTimezone > should return provided timezone [0.10ms]
+(pass) Time Utils > resolveTimezone > should return default if not provided
+(pass) Time Utils > formatZonedTimestamp > should format timestamp with timezone [0.44ms]
+(pass) Time Utils > formatZonedTimestamp > should include milliseconds when requested [0.06ms]
+(pass) Time Utils > formatZonedTimestamp > should create file-safe format [0.51ms]
+(pass) Time Utils > formatReadableLocal > should format readable local time [0.77ms]
+
+tests/utils/date-chunker.test.ts:
+(pass) DateChunker > generateDateChunks > should generate date chunks by year [0.23ms]
+(pass) DateChunker > generateDateChunks > should generate date chunks by month [0.11ms]
+(pass) DateChunker > generateDateChunks > should generate chunks from newest to oldest [0.03ms]
+(pass) DateChunker > generateDateChunks > should use default dates when not provided [0.22ms]
+(pass) DateChunker > generateDateChunks > should format dates correctly [0.14ms]
+
+tests/utils/validation.test.ts:
+(pass) Validation Utils > validateTwitterUsername > should validate correct username [0.15ms]
+(pass) Validation Utils > validateTwitterUsername > should remove @ prefix
+(pass) Validation Utils > validateTwitterUsername > should trim whitespace
+(pass) Validation Utils > validateTwitterUsername > should reject empty username
+(pass) Validation Utils > validateTwitterUsername > should reject username longer than 15 characters
+(pass) Validation Utils > validateTwitterUsername > should reject username with invalid characters
+(pass) Validation Utils > validateTwitterUsername > should reject non-string input
+(pass) Validation Utils > validateEnvCookieData > should validate correct cookie data
+(pass) Validation Utils > validateEnvCookieData > should reject missing cookies
+[Cookie Validation] Found 1 expired cookie(s), automatically filtering them out:
+  - expired (expired at 2025-12-04T02:50:50.446Z)
+(pass) Validation Utils > validateEnvCookieData > should filter expired cookies
+(pass) Validation Utils > validateScraperConfig > should validate correct config
+(pass) Validation Utils > validateScraperConfig > should reject missing required fields
+(pass) Validation Utils > validateScraperConfig > should validate limit range
+
+tests/utils/logger.test.ts:
+(pass) Logger > logger > should be defined
+(pass) Logger > logger > should have log methods
+(pass) Logger > createModuleLogger > should create module logger
+02:50:50 [[32minfo[39m]: Test message {"service":"xrcrawler","module":"TestModule"}
+(pass) Logger > createModuleLogger > should include module name in logs [1.30ms]
+(pass) Logger > createEnhancedLogger > should create enhanced logger
+02:50:50 [[32minfo[39m]: Test message {"service":"xrcrawler","module":"TestModule","userId":"123"}
+(pass) Logger > createEnhancedLogger > should support context [0.17ms]
+02:50:50 [[32minfo[39m]: [PERF] test-op {"service":"xrcrawler","module":"TestModule","duration":0,"operation":"test-op","type":"performance"}
+(pass) Logger > createEnhancedLogger > should support performance tracking [0.20ms]
+02:50:50 [[32minfo[39m]: [PERF] async-op {"service":"xrcrawler","module":"TestModule","duration":0,"operation":"async-op","type":"performance"}
+(pass) Logger > createEnhancedLogger > should track async operations [0.20ms]
+02:50:50 [[32minfo[39m]: [PERF] sync-op {"service":"xrcrawler","module":"TestModule","duration":0,"operation":"sync-op","type":"performance"}
+(pass) Logger > createEnhancedLogger > should track sync operations [0.21ms]
+(pass) Logger > setLogLevel > should set log level [0.02ms]
+(pass) Logger > setLogLevel > should accept LOG_LEVELS constants
+(pass) Logger > LOG_LEVELS > should have all log levels [0.01ms]
+
+1 tests failed:
+
+ 359 pass
+ 1 fail
+ 1 error
+ 723 expect() calls
+Ran 360 tests across 38 files. [49.97s]

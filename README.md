@@ -33,6 +33,62 @@
 - **Modern Web UI**: Real-time SSE streaming, live progress/logs, one-click **Download .md**, with custom session naming.
 - **Queue-first architecture**: BullMQ on Redis; workers publish progress/logs via Pub/Sub, server streams to `/api/job/:id/stream`.
 - **Multi-platform**: Twitter/X + Reddit, all in TypeScript with plugin-style adapters.
+- **Advanced Anti-Detection**: Multi-layer protection with fingerprint spoofing, human behavior simulation, and smart proxy rotation.
+
+---
+
+## 🛡️ Anti-Detection System
+
+XRCrawler features a **comprehensive anti-detection system** with three layers of protection:
+
+### Layer 1: Fingerprint Spoofing 🎭
+
+| Feature                 | Description                                       |
+| ----------------------- | ------------------------------------------------- |
+| **Canvas Fingerprint**  | Noise injection to randomize canvas rendering     |
+| **WebGL Fingerprint**   | GPU vendor/renderer spoofing (NVIDIA, AMD, Intel) |
+| **Audio Fingerprint**   | Subtle noise added to AudioContext processing     |
+| **Hardware Spoofing**   | Device memory, CPU cores, touch points            |
+| **Timezone & Language** | Customizable timezone and language settings       |
+| **Webdriver Detection** | Hidden automation traces                          |
+
+### Layer 2: Human Behavior Simulation 🤖→🧑
+
+| Feature                   | Description                                          |
+| ------------------------- | ---------------------------------------------------- |
+| **Bezier Mouse Movement** | Natural curved mouse paths, not straight lines       |
+| **Typing Patterns**       | Variable speed, occasional typos, punctuation pauses |
+| **Scrolling Behavior**    | Gradual scrolling with random pauses (like reading)  |
+| **Random Delays**         | Gaussian-distributed delays between actions          |
+| **Rest Periods**          | Probability-based breaks during long sessions        |
+
+### Layer 3: Smart Proxy Management 🔄
+
+| Feature                   | Description                                         |
+| ------------------------- | --------------------------------------------------- |
+| **Intelligent Selection** | Prioritizes proxies by success rate + response time |
+| **Auto-Rotation**         | Switches on rate limits or consecutive failures     |
+| **Cooldown Mechanism**    | Failed proxies recover after cooling period         |
+| **Health Monitoring**     | Real-time stats and health reports                  |
+| **Session Affinity**      | Consistent proxy per session (preserves cookies)    |
+
+### Detection Levels
+
+Configure protection intensity based on your needs:
+
+```typescript
+import { AntiDetection } from "./core/anti-detection";
+
+const ad = new AntiDetection({ level: "high" }); // 'low' | 'medium' | 'high' | 'paranoid'
+await ad.prepare(page, "sessionId");
+```
+
+| Level      | Basic FP | Advanced FP | Human Behavior      | Use Case                 |
+| ---------- | -------- | ----------- | ------------------- | ------------------------ |
+| `low`      | ✓        | ✗           | ✗                   | Testing, trusted targets |
+| `medium`   | ✓        | ✓           | ✗                   | Normal scraping          |
+| `high`     | ✓        | ✓           | ✓ (fast)            | **Recommended**          |
+| `paranoid` | ✓        | ✓           | ✓ (slow, realistic) | High-security targets    |
 
 ---
 
@@ -210,8 +266,18 @@ output/
 ### Run Tests
 
 ```bash
-bun test
+# Backend tests (bun:test)
+bun test                              # 389 tests across 39 files (~50s)
+
+# Frontend tests (vitest)
+cd frontend && bun run test           # 16 tests across 4 files
 ```
+
+| Suite                | Tests   | Coverage                               |
+| -------------------- | ------- | -------------------------------------- |
+| Backend (`bun:test`) | 389     | Core, utils, platforms, anti-detection |
+| Frontend (`vitest`)  | 16      | Components, integration                |
+| **Total**            | **405** | ✅ All passing                         |
 
 ### Lint & Type Check
 

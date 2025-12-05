@@ -163,6 +163,39 @@ export function ActiveJobsPanel({ onJobComplete }: ActiveJobsPanelProps) {
     }
   };
 
+  // Fetch active jobs on mount
+  useEffect(() => {
+    const fetchActiveJobs = async () => {
+      try {
+        // Fetch jobs in active, waiting, or delayed states
+        const states = ['active', 'waiting', 'delayed'];
+        const jobPromises = states.map(state =>
+          fetch(`/api/jobs?state=${state}&count=50`)
+            .then(res => res.json())
+            .catch(() => ({ jobs: [] }))
+        );
+
+        const results = await Promise.all(jobPromises);
+        const allJobs = results.flatMap(r => r.jobs || []);
+
+        // Add each job to the panel and reconnect to its stream
+        allJobs.forEach(job => {
+          if (job.id && job.type) {
+            addJob(job.id, job.type);
+          }
+        });
+
+        if (allJobs.length > 0) {
+          console.log(`Restored ${allJobs.length} active jobs from server`);
+        }
+      } catch (error) {
+        console.error('Failed to fetch active jobs:', error);
+      }
+    };
+
+    fetchActiveJobs();
+  }, []);
+
   // Cleanup all connections on unmount
   useEffect(() => {
     return () => {

@@ -1,8 +1,8 @@
+import { describe, test, expect, beforeEach, afterEach, mock, spyOn } from 'bun:test';
 /**
  * XApiClient 单元测试
  */
 
-import { describe, it, expect, beforeEach, mock, spyOn } from "bun:test";
 import { XApiClient } from "../../core/x-api";
 import { Protocol } from "puppeteer";
 
@@ -38,18 +38,18 @@ describe("XApiClient", () => {
   });
 
   describe("constructor", () => {
-    it("should initialize with cookies", () => {
+    test("should initialize with cookies", () => {
       expect(client).toBeDefined();
     });
 
-    it("should build headers from cookies", () => {
+    test("should build headers from cookies", () => {
       const client = new XApiClient(mockCookies);
       expect(client).toBeDefined();
     });
   });
 
   describe("getUserByScreenName", () => {
-    it("should return user ID for valid screen name", async () => {
+    test("should return user ID for valid screen name", async () => {
       const mockResponse = {
         data: {
           user: {
@@ -71,7 +71,7 @@ describe("XApiClient", () => {
       expect(mockFetch).toHaveBeenCalled();
     });
 
-    it("should throw error for invalid screen name", async () => {
+    test("should throw error for invalid screen name", async () => {
       const mockResponse = {
         data: {
           user: {
@@ -88,7 +88,7 @@ describe("XApiClient", () => {
       await expect(client.getUserByScreenName("invaliduser")).rejects.toThrow();
     });
 
-    it("should handle API errors", async () => {
+    test("should handle API errors", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 401,
@@ -97,7 +97,7 @@ describe("XApiClient", () => {
       await expect(client.getUserByScreenName("testuser")).rejects.toThrow();
     });
 
-    it("should handle network errors", async () => {
+    test("should handle network errors", async () => {
       mockFetch.mockRejectedValueOnce(new Error("Network error"));
 
       await expect(client.getUserByScreenName("testuser")).rejects.toThrow();
@@ -105,7 +105,7 @@ describe("XApiClient", () => {
   });
 
   describe("getUserTweets", () => {
-    it("should fetch user tweets", async () => {
+    test("should fetch user tweets", async () => {
       const mockResponse = {
         data: {
           user: {
@@ -131,7 +131,7 @@ describe("XApiClient", () => {
       expect(mockFetch).toHaveBeenCalled();
     });
 
-    it("should include cursor for pagination", async () => {
+    test("should include cursor for pagination", async () => {
       const mockResponse = { data: {} };
 
       mockFetch.mockResolvedValueOnce({
@@ -148,7 +148,7 @@ describe("XApiClient", () => {
   });
 
   describe("searchTweets", () => {
-    it("should search tweets with query", async () => {
+    test("should search tweets with query", async () => {
       const mockResponse = {
         data: {
           search_by_raw_query: {
@@ -172,7 +172,7 @@ describe("XApiClient", () => {
       expect(mockFetch).toHaveBeenCalled();
     });
 
-    it("should include cursor for pagination", async () => {
+    test("should include cursor for pagination", async () => {
       const mockResponse = { data: {} };
 
       mockFetch.mockResolvedValueOnce({
@@ -187,7 +187,7 @@ describe("XApiClient", () => {
   });
 
   describe("getTweetDetail", () => {
-    it("should fetch tweet detail", async () => {
+    test("should fetch tweet detail", async () => {
       const mockResponse = {
         data: {
           threaded_conversation_with_injections_v2: {
@@ -207,7 +207,7 @@ describe("XApiClient", () => {
       expect(mockFetch).toHaveBeenCalled();
     });
 
-    it("should include cursor for pagination", async () => {
+    test("should include cursor for pagination", async () => {
       const mockResponse = { data: {} };
 
       mockFetch.mockResolvedValueOnce({
@@ -222,7 +222,7 @@ describe("XApiClient", () => {
   });
 
   describe("rate limit handling", () => {
-    it("should throw rate limit error on 429", async () => {
+    test("should throw rate limit error on 429", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 429,
@@ -233,7 +233,7 @@ describe("XApiClient", () => {
   });
 
   describe("authentication handling", () => {
-    it("should throw auth error on 401", async () => {
+    test("should throw auth error on 401", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 401,
@@ -242,7 +242,7 @@ describe("XApiClient", () => {
       await expect(client.getUserTweets("123456789")).rejects.toThrow();
     });
 
-    it("should throw auth error on 403", async () => {
+    test("should throw auth error on 403", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 403,

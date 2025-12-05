@@ -1,3 +1,4 @@
+import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test';
 /**
  * Convert Cookies 工具单元测试
  */
@@ -9,7 +10,7 @@ import * as os from 'os';
 
 describe('Convert Cookies Utils', () => {
   describe('parseNetscapeCookieLine', () => {
-    it('should parse valid Netscape cookie line', () => {
+    test('should parse valid Netscape cookie line', () => {
       const line = '.twitter.com\tTRUE\t/\tTRUE\t1735689600\tname\tvalue';
       const cookie = parseNetscapeCookieLine(line);
       
@@ -21,33 +22,33 @@ describe('Convert Cookies Utils', () => {
       expect(cookie?.secure).toBe(true);
     });
 
-    it('should return null for comment lines', () => {
+    test('should return null for comment lines', () => {
       const line = '# This is a comment';
       const cookie = parseNetscapeCookieLine(line);
       
       expect(cookie).toBeNull();
     });
 
-    it('should return null for empty lines', () => {
+    test('should return null for empty lines', () => {
       const cookie = parseNetscapeCookieLine('');
       expect(cookie).toBeNull();
     });
 
-    it('should return null for invalid format', () => {
+    test('should return null for invalid format', () => {
       const line = 'invalid format';
       const cookie = parseNetscapeCookieLine(line);
       
       expect(cookie).toBeNull();
     });
 
-    it('should handle non-secure cookies', () => {
+    test('should handle non-secure cookies', () => {
       const line = '.example.com\tTRUE\t/\tFALSE\t1735689600\tname\tvalue';
       const cookie = parseNetscapeCookieLine(line);
       
       expect(cookie?.secure).toBe(false);
     });
 
-    it('should handle cookies without expiration', () => {
+    test('should handle cookies without expiration', () => {
       const line = '.example.com\tTRUE\t/\tFALSE\t0\tname\tvalue';
       const cookie = parseNetscapeCookieLine(line);
       
@@ -76,7 +77,7 @@ describe('Convert Cookies Utils', () => {
       }
     });
 
-    it('should convert Netscape file to JSON', async () => {
+    test('should convert Netscape file to JSON', async () => {
       const netscapeContent = `# Netscape HTTP Cookie File
 .example.com\tTRUE\t/\tFALSE\t1735689600\tname1\tvalue1
 .twitter.com\tTRUE\t/\tTRUE\t1735689600\tname2\tvalue2
@@ -96,7 +97,7 @@ describe('Convert Cookies Utils', () => {
       expect(jsonContent.cookies[1].name).toBe('name2');
     });
 
-    it('should handle empty file', async () => {
+    test('should handle empty file', async () => {
       await fs.promises.writeFile(testCookieFile, '');
       
       await convertCookieFile(testCookieFile, testOutputFile);
@@ -109,7 +110,7 @@ describe('Convert Cookies Utils', () => {
       expect(true).toBe(true);
     });
 
-    it('should skip comments and invalid lines', async () => {
+    test('should skip comments and invalid lines', async () => {
       const netscapeContent = `# Comment line
 .example.com\tTRUE\t/\tFALSE\t1735689600\tname\tvalue
 invalid line

@@ -379,11 +379,10 @@ export async function runTimelineDom(engine: ScraperEngine, config: ScrapeTimeli
                                         if (engine.shouldStop()) {
                                             break;
                                         }
-                                        // 使用快速滚动（不等待太久）
-                                        await engine.getPageInstance()!.evaluate(() => {
-                                            window.scrollTo(0, document.body.scrollHeight);
-                                        });
-                                        await throttle(500 + Math.random() * 300); // 0.5-0.8秒，更快速滚动
+                                        // 使用人性化滚动（antiDetection.humanScroll）
+                                        const page = engine.getPageInstance()!;
+                                        await engine.antiDetection.humanScroll(page, 800, 'down');
+                                        await engine.antiDetection.betweenActions('fast');
                                         scrollCount++;
 
                                         // 在等待后再次检查

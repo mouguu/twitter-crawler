@@ -1,3 +1,4 @@
+import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test';
 /**
  * ConfigManager 单元测试
  */
@@ -28,7 +29,7 @@ describe('ConfigManager', () => {
   });
 
   describe('constructor', () => {
-    it('should create manager with default config', () => {
+    test('should create manager with default config', () => {
       const manager = new ConfigManager();
       const config = manager.getConfig();
       
@@ -37,7 +38,7 @@ describe('ConfigManager', () => {
       expect(config.server.host).toBe('0.0.0.0'); // Default is 0.0.0.0
     });
 
-    it('should load from config file', () => {
+    test('should load from config file', () => {
       const customConfig = {
         server: { port: 8080, host: '0.0.0.0' },
         twitter: { defaultMode: 'graphql', defaultLimit: 100 }
@@ -51,7 +52,7 @@ describe('ConfigManager', () => {
       expect(config.server.host).toBe('0.0.0.0');
     });
 
-    it('should load from environment variables', () => {
+    test('should load from environment variables', () => {
       const tempDir = require('os').tmpdir();
       process.env.PORT = '9000';
       process.env.OUTPUT_DIR = tempDir;
@@ -67,7 +68,7 @@ describe('ConfigManager', () => {
       resetConfigManager();
     });
 
-    it('should prioritize environment variables over config file', () => {
+    test('should prioritize environment variables over config file', () => {
       const tempDir = require('os').tmpdir();
       const fileConfig = { server: { port: 8080, host: '0.0.0.0' }, output: { baseDir: tempDir } };
       fs.writeFileSync(testConfigFile, JSON.stringify(fileConfig, null, 2));
@@ -85,7 +86,7 @@ describe('ConfigManager', () => {
   });
 
   describe('getConfig', () => {
-    it('should return complete config object', () => {
+    test('should return complete config object', () => {
       const manager = new ConfigManager();
       const config = manager.getConfig();
       
@@ -100,7 +101,7 @@ describe('ConfigManager', () => {
   });
 
   describe('getServerConfig', () => {
-    it('should return server configuration', () => {
+    test('should return server configuration', () => {
       const manager = new ConfigManager();
       const serverConfig = manager.getServerConfig();
       
@@ -112,7 +113,7 @@ describe('ConfigManager', () => {
   });
 
   describe('getTwitterConfig', () => {
-    it('should return Twitter configuration', () => {
+    test('should return Twitter configuration', () => {
       const manager = new ConfigManager();
       const twitterConfig = manager.getTwitterConfig();
       
@@ -124,7 +125,7 @@ describe('ConfigManager', () => {
   });
 
   describe('getOutputConfig', () => {
-    it('should return output configuration', () => {
+    test('should return output configuration', () => {
       const manager = new ConfigManager();
       const outputConfig = manager.getOutputConfig();
       
@@ -136,7 +137,7 @@ describe('ConfigManager', () => {
   });
 
   describe('updateConfig', () => {
-    it('should update configuration', () => {
+    test('should update configuration', () => {
       const manager = new ConfigManager();
       
       manager.updateConfig({
@@ -148,7 +149,7 @@ describe('ConfigManager', () => {
       expect(config.server.host).toBe('127.0.0.1');
     });
 
-    it('should merge partial updates', () => {
+    test('should merge partial updates', () => {
       const manager = new ConfigManager();
       const originalPort = manager.getConfig().server.port;
       
@@ -168,7 +169,7 @@ describe('ConfigManager', () => {
   });
 
   describe('saveToFile', () => {
-    it('should save config to file', () => {
+    test('should save config to file', () => {
       const manager = new ConfigManager();
       manager.updateConfig({ server: { port: 7777, host: '0.0.0.0' } });
       
@@ -181,14 +182,14 @@ describe('ConfigManager', () => {
   });
 
   describe('getConfigManager (singleton)', () => {
-    it('should return the same instance', () => {
+    test('should return the same instance', () => {
       const instance1 = getConfigManager();
       const instance2 = getConfigManager();
       
       expect(instance1).toBe(instance2);
     });
 
-    it('should reset singleton', () => {
+    test('should reset singleton', () => {
       const instance1 = getConfigManager();
       resetConfigManager();
       const instance2 = getConfigManager();
@@ -198,14 +199,14 @@ describe('ConfigManager', () => {
   });
 
   describe('validation', () => {
-    it('should validate port range', () => {
+    test('should validate port range', () => {
       expect(() => {
         const manager = new ConfigManager();
         manager.updateConfig({ server: { port: -1, host: 'localhost' } });
       }).toThrow();
     });
 
-    it('should validate required fields', () => {
+    test('should validate required fields', () => {
       const invalidConfig = { server: {} };
       fs.writeFileSync(testConfigFile, JSON.stringify(invalidConfig));
       

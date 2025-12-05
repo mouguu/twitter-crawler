@@ -1,3 +1,4 @@
+import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test';
 /**
  * Logger 单元测试
  */
@@ -25,11 +26,11 @@ describe('Logger', () => {
   });
 
   describe('logger', () => {
-    it('should be defined', () => {
+    test('should be defined', () => {
       expect(logger).toBeDefined();
     });
 
-    it('should have log methods', () => {
+    test('should have log methods', () => {
       expect(typeof logger.info).toBe('function');
       expect(typeof logger.warn).toBe('function');
       expect(typeof logger.error).toBe('function');
@@ -38,7 +39,7 @@ describe('Logger', () => {
   });
 
   describe('createModuleLogger', () => {
-    it('should create module logger', () => {
+    test('should create module logger', () => {
       const moduleLogger = createModuleLogger('TestModule');
       
       expect(moduleLogger).toBeDefined();
@@ -47,7 +48,7 @@ describe('Logger', () => {
       expect(typeof moduleLogger.error).toBe('function');
     });
 
-    it('should include module name in logs', () => {
+    test('should include module name in logs', () => {
       const moduleLogger = createModuleLogger('TestModule');
       
       // Just verify it doesn't throw
@@ -58,7 +59,7 @@ describe('Logger', () => {
   });
 
   describe('createEnhancedLogger', () => {
-    it('should create enhanced logger', () => {
+    test('should create enhanced logger', () => {
       const enhancedLogger = createEnhancedLogger('TestModule');
       
       expect(enhancedLogger).toBeInstanceOf(EnhancedLogger);
@@ -66,7 +67,7 @@ describe('Logger', () => {
       expect(typeof enhancedLogger.setContext).toBe('function');
     });
 
-    it('should support context', () => {
+    test('should support context', () => {
       const enhancedLogger = createEnhancedLogger('TestModule');
       
       enhancedLogger.setContext({ userId: '123' });
@@ -75,7 +76,7 @@ describe('Logger', () => {
       }).not.toThrow();
     });
 
-    it('should support performance tracking', () => {
+    test('should support performance tracking', () => {
       const enhancedLogger = createEnhancedLogger('TestModule');
       
       const endOperation = enhancedLogger.startOperation('test-op');
@@ -84,7 +85,7 @@ describe('Logger', () => {
       endOperation();
     });
 
-    it('should track async operations', async () => {
+    test('should track async operations', async () => {
       const enhancedLogger = createEnhancedLogger('TestModule');
       
       const result = await enhancedLogger.trackAsync('async-op', async () => {
@@ -94,7 +95,7 @@ describe('Logger', () => {
       expect(result).toBe('result');
     });
 
-    it('should track sync operations', () => {
+    test('should track sync operations', () => {
       const enhancedLogger = createEnhancedLogger('TestModule');
       
       const result = enhancedLogger.trackSync('sync-op', () => {
@@ -106,19 +107,19 @@ describe('Logger', () => {
   });
 
   describe('setLogLevel', () => {
-    it('should set log level', () => {
+    test('should set log level', () => {
       setLogLevel('debug');
       expect(logger.level).toBe('debug');
     });
 
-    it('should accept LOG_LEVELS constants', () => {
+    test('should accept LOG_LEVELS constants', () => {
       setLogLevel(LOG_LEVELS.INFO);
       expect(logger.level).toBe('info');
     });
   });
 
   describe('LOG_LEVELS', () => {
-    it('should have all log levels', () => {
+    test('should have all log levels', () => {
       expect(LOG_LEVELS.ERROR).toBe('error');
       expect(LOG_LEVELS.WARN).toBe('warn');
       expect(LOG_LEVELS.INFO).toBe('info');

@@ -40,14 +40,16 @@ export { ProxyManager } from './proxy-manager';
 export { RateLimitManager } from './rate-limit-manager';
 export { ProgressManager } from './progress-manager';
 export { PerformanceMonitor, type PerformanceStats } from './performance-monitor';
-export { MetricsCollector } from './metrics-collector';
+
 
 // Services
 export { NavigationService } from './navigation-service';
 export * from './data-extractor';
 export { ErrorSnapshotter } from './error-snapshotter';
 export { FingerprintManager } from './fingerprint-manager';
-export { MonitorService } from './monitor-service';
+export { AntiDetection } from './anti-detection';
+export { HumanBehavior } from './human-behavior';
+export { AdvancedFingerprint } from './advanced-fingerprint';
 
 export { XApiClient } from './x-api';
 

@@ -34,10 +34,81 @@ export const BROWSER_VIEWPORT = {
 };
 
 /**
- * 浏览器 User Agent
+ * 浏览器 User Agent (默认)
  */
 export const BROWSER_USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36";
+
+/**
+ * 🆕 User-Agent 池用于指纹随机化
+ * 包含最新的真实浏览器 UA（2024年末更新）
+ */
+export const USER_AGENT_POOL = [
+  // Chrome on macOS
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  // Chrome on Windows
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 11.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  // Edge on Windows
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0",
+  // Safari on macOS
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
+  // Firefox on Windows/macOS
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:121.0) Gecko/20100101 Firefox/121.0",
+] as const;
+
+/**
+ * 🆕 Viewport 池用于指纹随机化
+ * 包含常见的桌面分辨率
+ */
+export const VIEWPORT_POOL = [
+  { width: 1920, height: 1080 },  // 1080p (最常见)
+  { width: 1366, height: 768 },   // 笔记本常见
+  { width: 1440, height: 900 },   // MacBook Air
+  { width: 1536, height: 864 },   // 低端笔记本
+  { width: 1680, height: 1050 },  // MacBook Pro 15"
+  { width: 2560, height: 1440 },  // 2K
+  { width: 1280, height: 800 },   // MacBook 13"
+  { width: 1600, height: 900 },   // 16:9 变体
+] as const;
+
+/**
+ * 🆕 获取随机 User-Agent
+ */
+export function getRandomUserAgent(): string {
+  return USER_AGENT_POOL[Math.floor(Math.random() * USER_AGENT_POOL.length)];
+}
+
+/**
+ * 🆕 获取随机 Viewport
+ */
+export function getRandomViewport(): { width: number; height: number } {
+  const vp = VIEWPORT_POOL[Math.floor(Math.random() * VIEWPORT_POOL.length)];
+  return { width: vp.width, height: vp.height };
+}
+
+/**
+ * 🆕 生成完整的随机浏览器指纹
+ */
+export function getRandomFingerprint(): {
+  userAgent: string;
+  viewport: { width: number; height: number };
+  windowSize: string;
+} {
+  const ua = getRandomUserAgent();
+  const vp = getRandomViewport();
+  return {
+    userAgent: ua,
+    viewport: vp,
+    windowSize: `--window-size=${vp.width},${vp.height}`,
+  };
+}
 
 /**
  * 需要屏蔽的资源类型（加快加载速度）

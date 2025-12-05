@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { vi } from 'vitest';
+import { vi, describe, it, beforeEach, afterEach, expect } from 'vitest';
 import App from '../App';
 
 describe('App form submission', () => {
@@ -26,11 +26,12 @@ describe('App form submission', () => {
         vi.clearAllMocks();
     });
 
-    it('submits profile requests with GraphQL mode by default', async () => {
+    it('submits profile requests with puppeteer mode by default', async () => {
         render(<App />);
         const user = userEvent.setup();
 
-        const input = screen.getByPlaceholderText(/e\.g\. elonmusk/i);
+        // Updated placeholder to match the current UI
+        const input = screen.getByPlaceholderText(/elonmusk or https:\/\/x\.com\/elonmusk/i);
         await user.type(input, 'elonmusk');
 
         await user.click(screen.getByRole('button', { name: /begin extraction/i }));
@@ -56,7 +57,8 @@ describe('App form submission', () => {
 
         await user.click(screen.getByRole('button', { name: /search/i }));
 
-        const input = screen.getByPlaceholderText(/e\.g\. #ai/i);
+        // Updated placeholder for search tab
+        const input = screen.getByPlaceholderText(/#AI from:elonmusk -is:retweet/i);
         await user.type(input, '#AI');
 
         await user.click(screen.getByRole('button', { name: /begin extraction/i }));
@@ -76,4 +78,3 @@ describe('App form submission', () => {
         });
     });
 });
-

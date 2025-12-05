@@ -7,8 +7,7 @@ import { createRunContext } from '../utils/fileutils';
 import * as markdownUtils from '../utils/markdown';
 import * as exportUtils from '../utils/export';
 import { CHUNK_RETRY_CONFIG } from '../config/constants';
-import { JobRepository } from './db/job-repo';
-import { Task } from '../generated/prisma/client';
+// Task tracking removed - simplified to Job-level only
 
 interface FailedChunk {
     index: number;
@@ -232,7 +231,7 @@ export async function runTimelineDateChunks(
     if (isParallel && engine.browserPool) {
         // 使用并发控制队列并行处理chunks
         const processChunksInParallel = async () => {
-            const chunkTasks: Array<{ index: number; promise: Promise<{ success: boolean; tweets: Tweet[]; error?: string; taskId?: string }> }> = [];
+            const chunkTasks: Array<{ index: number; promise: Promise<{ success: boolean; tweets: Tweet[]; error?: string }> }> = [];
             let currentIndex = 0;
 
             // 分批处理：每次启动parallelChunks个chunks
@@ -264,25 +263,7 @@ export async function runTimelineDateChunks(
 
                     engine.eventBus.emitLog(`[Parallel] Processing chunk ${i + 1}/${ranges.length}: ${range.start} to ${range.end}`);
 
-                    // Smart Resume: Check/Create Task in DB
-                    let task: Task | null = null;
-                    if (config.jobId) {
-                        try {
-                            // We don't have findTaskByConfig yet, but we can create one and if it exists we might want to check status?
-                            // For now, let's just create a task record to track it.
-                            // Ideally we should check if it exists and is completed.
-                            // Since we don't have a unique constraint on task config/type/jobId easily accessible here without query,
-                            // we will just log it for now. 
-                            // TODO: Implement findTask to skip completed chunks.
-                            task = await JobRepository.createTask({
-                                jobId: config.jobId,
-                                type: 'date-chunk',
-                                config: { start: range.start, end: range.end, query: config.searchQuery }
-                            });
-                        } catch (e) {
-                            // Ignore DB errors for tasks to avoid stopping scraping
-                        }
-                    }
+                    // Task tracking removed - date chunking continues without DB overhead
 
                     // 记录chunk开始时的全局累计量（用于进度计算）
                     const chunkStartCount = sharedProgress.get();
@@ -384,13 +365,12 @@ export async function runTimelineDateChunks(
 
                         const result = await scrapeChunkWithRetry(chunkEngine, chunkConfig, i, ranges.length, range);
                         await chunkEngine.close();
-                        return { index: i, result, taskId: task?.id };
+                        return { index: i, result };
                     } catch (error: any) {
                         await chunkEngine.close();
                         return { 
                             index: i, 
-                            result: { success: false, tweets: [], error: error.message || String(error) },
-                            taskId: task?.id
+                            result: { success: false, tweets: [], error: error.message || String(error) }
                         };
                     }
                 });
@@ -399,17 +379,10 @@ export async function runTimelineDateChunks(
                 const batchResults = await Promise.all(batchPromises);
 
                 // 处理结果
-                for (const { index, result, taskId } of batchResults) {
+                for (const { index, result } of batchResults) {
                     const range = ranges[index];
 
                     if (result.success) {
-                        if (taskId) {
-                            try {
-                                await JobRepository.updateTaskStatus(taskId, 'completed', { count: result.tweets?.length });
-                            } catch (e) {
-                                // Ignore DB error
-                            }
-                        }
 
                         if (result.tweets && result.tweets.length > 0) {
                             const newTweets = result.tweets;
@@ -427,13 +400,6 @@ export async function runTimelineDateChunks(
                             engine.eventBus.emitLog(`✅ [Parallel] Chunk ${index + 1}/${ranges.length} complete: No tweets found (empty).`, 'info');
                         }
                     } else {
-                        if (taskId) {
-                            try {
-                                await JobRepository.updateTaskStatus(taskId, 'failed', undefined, result.error);
-                            } catch (e) {
-                                // Ignore DB error
-                            }
-                        }
 
                         failedChunks.push({
                             index,

@@ -2,11 +2,12 @@
  * ScraperError 单元测试
  */
 
+import { describe, it, expect, test } from 'bun:test';
 import { ScraperError, ErrorCode, ErrorClassifier } from '../../core/errors';
 
 describe('ScraperError', () => {
   describe('constructor', () => {
-    it('should create error with code and message', () => {
+    test('should create error with code and message', () => {
       const error = new ScraperError(ErrorCode.RATE_LIMIT, 'Rate limit exceeded');
       
       expect(error.code).toBe(ErrorCode.RATE_LIMIT);
@@ -15,7 +16,7 @@ describe('ScraperError', () => {
       expect(error.retryable).toBe(false); // 默认值
     });
 
-    it('should accept retryable option', () => {
+    test('should accept retryable option', () => {
       const error = new ScraperError(ErrorCode.RATE_LIMIT, 'Rate limit exceeded', {
         retryable: true
       });
@@ -23,7 +24,7 @@ describe('ScraperError', () => {
       expect(error.retryable).toBe(true);
     });
 
-    it('should accept context option', () => {
+    test('should accept context option', () => {
       const context = { waitTime: 60000, attempt: 3 };
       const error = new ScraperError(ErrorCode.RATE_LIMIT, 'Rate limit exceeded', {
         context
@@ -32,7 +33,7 @@ describe('ScraperError', () => {
       expect(error.context).toEqual(context);
     });
 
-    it('should accept originalError option', () => {
+    test('should accept originalError option', () => {
       const originalError = new Error('Original error');
       const error = new ScraperError(ErrorCode.NETWORK_ERROR, 'Network failed', {
         originalError
@@ -41,7 +42,7 @@ describe('ScraperError', () => {
       expect(error.originalError).toBe(originalError);
     });
 
-    it('should have timestamp', () => {
+    test('should have timestamp', () => {
       const before = new Date();
       const error = new ScraperError(ErrorCode.UNKNOWN_ERROR, 'Test');
       const after = new Date();
@@ -52,7 +53,7 @@ describe('ScraperError', () => {
   });
 
   describe('fromHttpResponse', () => {
-    it('should create AUTH_FAILED error for 401', async () => {
+    test('should create AUTH_FAILED error for 401', async () => {
       const response = new Response('Unauthorized', { status: 401 });
       const error = ScraperError.fromHttpResponse(response);
       
@@ -61,7 +62,7 @@ describe('ScraperError', () => {
       expect(error.context.statusCode).toBe(401);
     });
 
-    it('should create RATE_LIMIT error for 429', async () => {
+    test('should create RATE_LIMIT error for 429', async () => {
       const response = new Response('Too Many Requests', { status: 429 });
       const error = ScraperError.fromHttpResponse(response);
       
@@ -70,7 +71,7 @@ describe('ScraperError', () => {
       expect(error.context.statusCode).toBe(429);
     });
 
-    it('should create API_ERROR for 500', async () => {
+    test('should create API_ERROR for 500', async () => {
       const response = new Response('Internal Server Error', { status: 500 });
       const error = ScraperError.fromHttpResponse(response);
       
@@ -78,7 +79,7 @@ describe('ScraperError', () => {
       expect(error.retryable).toBe(true);
     });
 
-    it('should include context in error', async () => {
+    test('should include context in error', async () => {
       const context = { userId: '123', endpoint: '/api/tweets' };
       const response = new Response('Not Found', { status: 404 });
       const error = ScraperError.fromHttpResponse(response, context);
@@ -90,7 +91,7 @@ describe('ScraperError', () => {
   });
 
   describe('fromError', () => {
-    it('should wrap native Error', () => {
+    test('should wrap native Error', () => {
       const nativeError = new Error('Native error');
       const error = ScraperError.fromError(nativeError, ErrorCode.NETWORK_ERROR, true);
       
@@ -102,53 +103,53 @@ describe('ScraperError', () => {
   });
 
   describe('isRateLimitError', () => {
-    it('should return true for RATE_LIMIT error', () => {
+    test('should return true for RATE_LIMIT error', () => {
       const error = new ScraperError(ErrorCode.RATE_LIMIT, 'Rate limit');
       expect(ScraperError.isRateLimitError(error)).toBe(true);
     });
 
-    it('should return true for RATE_LIMIT_EXCEEDED error', () => {
+    test('should return true for RATE_LIMIT_EXCEEDED error', () => {
       const error = new ScraperError(ErrorCode.RATE_LIMIT_EXCEEDED, 'Rate limit exceeded');
       expect(ScraperError.isRateLimitError(error)).toBe(true);
     });
 
-    it('should return false for other errors', () => {
+    test('should return false for other errors', () => {
       const error = new ScraperError(ErrorCode.NETWORK_ERROR, 'Network error');
       expect(ScraperError.isRateLimitError(error)).toBe(false);
     });
 
-    it('should check message for non-ScraperError', () => {
+    test('should check message for non-ScraperError', () => {
       const error = new Error('Rate limit exceeded');
       expect(ScraperError.isRateLimitError(error)).toBe(true);
     });
   });
 
   describe('isAuthError', () => {
-    it('should return true for AUTH_FAILED error', () => {
+    test('should return true for AUTH_FAILED error', () => {
       const error = new ScraperError(ErrorCode.AUTH_FAILED, 'Auth failed');
       expect(ScraperError.isAuthError(error)).toBe(true);
     });
 
-    it('should check message for non-ScraperError', () => {
+    test('should check message for non-ScraperError', () => {
       const error = new Error('Authentication failed');
       expect(ScraperError.isAuthError(error)).toBe(true);
     });
   });
 
   describe('isNetworkError', () => {
-    it('should return true for NETWORK_ERROR', () => {
+    test('should return true for NETWORK_ERROR', () => {
       const error = new ScraperError(ErrorCode.NETWORK_ERROR, 'Network error');
       expect(ScraperError.isNetworkError(error)).toBe(true);
     });
 
-    it('should check message for timeout', () => {
+    test('should check message for timeout', () => {
       const error = new Error('Request timeout');
       expect(ScraperError.isNetworkError(error)).toBe(true);
     });
   });
 
   describe('toJSON', () => {
-    it('should serialize error to JSON', () => {
+    test('should serialize error to JSON', () => {
       const originalError = new Error('Original');
       const error = new ScraperError(ErrorCode.RATE_LIMIT, 'Rate limit', {
         retryable: true,
@@ -168,22 +169,22 @@ describe('ScraperError', () => {
   });
 
   describe('getUserMessage', () => {
-    it('should return user-friendly message for RATE_LIMIT', () => {
+    test('should return user-friendly message for RATE_LIMIT', () => {
       const error = new ScraperError(ErrorCode.RATE_LIMIT, 'Rate limit');
       expect(error.getUserMessage()).toContain('速率限制');
     });
 
-    it('should return user-friendly message for AUTH_FAILED', () => {
+    test('should return user-friendly message for AUTH_FAILED', () => {
       const error = new ScraperError(ErrorCode.AUTH_FAILED, 'Auth failed');
       expect(error.getUserMessage()).toContain('认证失败');
     });
 
-    it('should return user-friendly message for NETWORK_ERROR', () => {
+    test('should return user-friendly message for NETWORK_ERROR', () => {
       const error = new ScraperError(ErrorCode.NETWORK_ERROR, 'Network error');
       expect(error.getUserMessage()).toContain('网络连接失败');
     });
 
-    it('should return message for unknown errors', () => {
+    test('should return message for unknown errors', () => {
       const error = new ScraperError(ErrorCode.UNKNOWN_ERROR, 'Custom error');
       expect(error.getUserMessage()).toBe('Custom error');
     });
@@ -192,14 +193,14 @@ describe('ScraperError', () => {
 
 describe('ErrorClassifier', () => {
   describe('classify', () => {
-    it('should return ScraperError as-is', () => {
+    test('should return ScraperError as-is', () => {
       const error = new ScraperError(ErrorCode.RATE_LIMIT, 'Rate limit');
       const classified = ErrorClassifier.classify(error);
       
       expect(classified).toBe(error);
     });
 
-    it('should classify rate limit errors', () => {
+    test('should classify rate limit errors', () => {
       const error = new Error('Rate limit exceeded');
       const classified = ErrorClassifier.classify(error);
       
@@ -207,7 +208,7 @@ describe('ErrorClassifier', () => {
       expect(classified.retryable).toBe(true);
     });
 
-    it('should classify auth errors', () => {
+    test('should classify auth errors', () => {
       const error = new Error('Authentication failed');
       const classified = ErrorClassifier.classify(error);
       
@@ -215,7 +216,7 @@ describe('ErrorClassifier', () => {
       expect(classified.retryable).toBe(false);
     });
 
-    it('should classify network errors', () => {
+    test('should classify network errors', () => {
       const error = new Error('Network timeout');
       const classified = ErrorClassifier.classify(error);
       
@@ -223,14 +224,14 @@ describe('ErrorClassifier', () => {
       expect(classified.retryable).toBe(true);
     });
 
-    it('should classify unknown errors', () => {
+    test('should classify unknown errors', () => {
       const error = new Error('Something went wrong');
       const classified = ErrorClassifier.classify(error);
       
       expect(classified.code).toBe(ErrorCode.UNKNOWN_ERROR);
     });
 
-    it('should handle non-Error objects', () => {
+    test('should handle non-Error objects', () => {
       const classified = ErrorClassifier.classify('String error');
       
       expect(classified.code).toBe(ErrorCode.UNKNOWN_ERROR);

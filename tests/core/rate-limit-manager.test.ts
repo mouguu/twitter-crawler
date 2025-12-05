@@ -1,3 +1,4 @@
+import { describe, test, expect, beforeEach } from 'bun:test';
 import { RateLimitManager } from '../../core/rate-limit-manager';
 import { ScraperEventBus } from '../../core/event-bus';
 import { Page, Protocol } from 'puppeteer';

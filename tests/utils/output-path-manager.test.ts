@@ -1,3 +1,4 @@
+import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test';
 /**
  * OutputPathManager 单元测试
  */
@@ -28,37 +29,37 @@ describe('OutputPathManager', () => {
   });
 
   describe('getBaseDir', () => {
-    it('should return the configured base directory', () => {
+    test('should return the configured base directory', () => {
       expect(manager.getBaseDir()).toBe(testBaseDir);
     });
   });
 
   describe('getPlatformDir', () => {
-    it('should return platform directory path', () => {
+    test('should return platform directory path', () => {
       const platformDir = manager.getPlatformDir('twitter');
       expect(platformDir).toBe(path.join(testBaseDir, 'twitter'));
     });
 
-    it('should sanitize platform name', () => {
+    test('should sanitize platform name', () => {
       const platformDir = manager.getPlatformDir('Twitter/X');
       expect(platformDir).toBe(path.join(testBaseDir, 'twitter-x'));
     });
   });
 
   describe('getIdentifierDir', () => {
-    it('should return identifier directory path', () => {
+    test('should return identifier directory path', () => {
       const identifierDir = manager.getIdentifierDir('twitter', 'elonmusk');
       expect(identifierDir).toBe(path.join(testBaseDir, 'twitter', 'elonmusk'));
     });
 
-    it('should sanitize identifier name', () => {
+    test('should sanitize identifier name', () => {
       const identifierDir = manager.getIdentifierDir('twitter', 'Elon Musk');
       expect(identifierDir).toBe(path.join(testBaseDir, 'twitter', 'elon-musk'));
     });
   });
 
   describe('createRunPath', () => {
-    it('should create complete run path structure', async () => {
+    test('should create complete run path structure', async () => {
       const runPath = await manager.createRunPath('twitter', 'elonmusk', 'run-2024-01-01');
 
       expect(runPath.platform).toBe('twitter');
@@ -69,7 +70,7 @@ describe('OutputPathManager', () => {
       expect(runPath.screenshotDir).toBe(path.join(testBaseDir, 'twitter', 'elonmusk', 'run-2024-01-01', 'screenshots'));
     });
 
-    it('should create directories if they do not exist', async () => {
+    test('should create directories if they do not exist', async () => {
       const runPath = await manager.createRunPath('reddit', 'UofT', 'run-2024-01-01');
 
       // 检查目录是否存在
@@ -80,7 +81,7 @@ describe('OutputPathManager', () => {
       expect(markdownStats.isDirectory()).toBe(true);
     });
 
-    it('should generate correct file paths', async () => {
+    test('should generate correct file paths', async () => {
       const runPath = await manager.createRunPath('twitter', 'test', 'run-123');
 
       expect(runPath.jsonPath).toBe(path.join(runPath.runDir, 'tweets.json'));
@@ -91,24 +92,24 @@ describe('OutputPathManager', () => {
   });
 
   describe('isPathSafe', () => {
-    it('should return true for paths within base directory', () => {
+    test('should return true for paths within base directory', () => {
       const safePath = path.join(testBaseDir, 'twitter', 'test.json');
       expect(manager.isPathSafe(safePath)).toBe(true);
     });
 
-    it('should return false for paths outside base directory', () => {
+    test('should return false for paths outside base directory', () => {
       const unsafePath = path.join(process.cwd(), '..', 'sensitive-file.json');
       expect(manager.isPathSafe(unsafePath)).toBe(false);
     });
   });
 
   describe('resolvePath', () => {
-    it('should resolve relative paths correctly', () => {
+    test('should resolve relative paths correctly', () => {
       const resolved = manager.resolvePath('twitter/test.json');
       expect(resolved).toBe(path.join(testBaseDir, 'twitter', 'test.json'));
     });
 
-    it('should throw error for path traversal attempts', () => {
+    test('should throw error for path traversal attempts', () => {
       expect(() => {
         manager.resolvePath('../../etc/passwd');
       }).toThrow('Path traversal detected');
@@ -116,13 +117,13 @@ describe('OutputPathManager', () => {
   });
 
   describe('getOutputPathManager (singleton)', () => {
-    it('should return the same instance on multiple calls', () => {
+    test('should return the same instance on multiple calls', () => {
       const instance1 = getOutputPathManager();
       const instance2 = getOutputPathManager();
       expect(instance1).toBe(instance2);
     });
 
-    it('should allow reset for testing', () => {
+    test('should allow reset for testing', () => {
       const instance1 = getOutputPathManager();
       resetOutputPathManager();
       const instance2 = getOutputPathManager();

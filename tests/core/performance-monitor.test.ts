@@ -2,6 +2,7 @@
  * PerformanceMonitor 单元测试
  */
 
+import { describe, it, expect, beforeEach, test } from 'bun:test';
 import { PerformanceMonitor, PerformanceStats } from '../../core/performance-monitor';
 
 describe('PerformanceMonitor', () => {
@@ -12,7 +13,7 @@ describe('PerformanceMonitor', () => {
   });
 
   describe('recordApiRequest', () => {
-    it('should record API request time', () => {
+    test('should record API request time', () => {
       monitor.recordApiRequest(100);
       monitor.recordApiRequest(200);
       
@@ -21,7 +22,7 @@ describe('PerformanceMonitor', () => {
       expect(stats.apiAverageLatency).toBeGreaterThan(0);
     });
 
-    it('should calculate average latency correctly', () => {
+    test('should calculate average latency correctly', () => {
       monitor.recordApiRequest(100);
       monitor.recordApiRequest(200);
       monitor.recordApiRequest(300);
@@ -32,7 +33,7 @@ describe('PerformanceMonitor', () => {
   });
 
   describe('recordTweets', () => {
-    it('should record tweets collected', () => {
+    test('should record tweets collected', () => {
       monitor.recordTweets(10);
       monitor.recordTweets(20);
       
@@ -42,7 +43,7 @@ describe('PerformanceMonitor', () => {
   });
 
   describe('addTweets', () => {
-    it('should add to tweets count', () => {
+    test('should add to tweets count', () => {
       monitor.addTweets(10);
       monitor.addTweets(20);
       
@@ -52,7 +53,7 @@ describe('PerformanceMonitor', () => {
   });
 
   describe('recordScroll', () => {
-    it('should increment scroll count', () => {
+    test('should increment scroll count', () => {
       monitor.recordScroll();
       monitor.recordScroll();
       
@@ -62,7 +63,7 @@ describe('PerformanceMonitor', () => {
   });
 
   describe('recordSessionSwitch', () => {
-    it('should increment session switch count', () => {
+    test('should increment session switch count', () => {
       monitor.recordSessionSwitch();
       
       const stats = monitor.getStats();
@@ -71,7 +72,7 @@ describe('PerformanceMonitor', () => {
   });
 
   describe('recordRateLimitWait', () => {
-    it('should record rate limit hit', () => {
+    test('should record rate limit hit', () => {
       monitor.recordRateLimitWait(5000);
       
       const stats = monitor.getStats();
@@ -81,7 +82,7 @@ describe('PerformanceMonitor', () => {
   });
 
   describe('getStats', () => {
-    it('should return all performance stats', () => {
+    test('should return all performance stats', () => {
       monitor.start();
       monitor.recordApiRequest(100);
       monitor.addTweets(10);
@@ -98,7 +99,7 @@ describe('PerformanceMonitor', () => {
       expect(stats).toHaveProperty('totalDuration');
     });
 
-    it('should return zero stats initially', () => {
+    test('should return zero stats initially', () => {
       const stats = monitor.getStats();
       
       expect(stats.apiRequestCount).toBe(0);
@@ -108,7 +109,7 @@ describe('PerformanceMonitor', () => {
   });
 
   describe('reset', () => {
-    it('should reset all stats', () => {
+    test('should reset all stats', () => {
       monitor.start();
       monitor.recordApiRequest(100);
       monitor.addTweets(10);
@@ -124,7 +125,7 @@ describe('PerformanceMonitor', () => {
   });
 
   describe('tweetsPerSecond', () => {
-    it('should calculate tweets per second', () => {
+    test('should calculate tweets per second', () => {
       monitor.start();
       monitor.recordTweets(100);
       monitor.stop();

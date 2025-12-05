@@ -31,6 +31,14 @@ export interface ScraperEngineOptions {
   browserPool?: BrowserPool;
   /** Linked BullMQ Job ID (for DB persistence) */
   jobId?: string;
+  /** 
+   * 反检测级别 (默认: 'high')
+   * - 'low': 仅基础指纹 (UA/Viewport)
+   * - 'medium': 基础 + 高级指纹 (Canvas/WebGL/Audio)
+   * - 'high': 基础 + 高级指纹 + 快速人性化行为 (推荐)
+   * - 'paranoid': 完整反检测，模拟真人行为 (较慢但最安全)
+   */
+  antiDetectionLevel?: 'low' | 'medium' | 'high' | 'paranoid';
 }
 
 export interface ScrapeTimelineConfig {

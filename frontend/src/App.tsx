@@ -125,6 +125,7 @@ function App() {
   const [enableDeepSearch, setEnableDeepSearch] = useState(false);
   const [parallelChunks, setParallelChunks] = useState(1); // 并行处理chunks数量（1=串行，2-3=并行）
   const [enableProxy, setEnableProxy] = useState(false);
+  const [antiDetectionLevel, setAntiDetectionLevel] = useState<'low' | 'medium' | 'high' | 'paranoid'>('high');
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
@@ -216,16 +217,7 @@ function App() {
     return withBase(finalUrl);
   };
 
-  const buildHeaders = (hasBody: boolean = false) => {
-    const headers: Record<string, string> = {};
-    if (hasBody) {
-      headers["Content-Type"] = "application/json";
-    }
-    if (apiKey) {
-      headers["x-api-key"] = apiKey;
-    }
-    return headers;
-  };
+
 
   // On mount, if server 还有在跑的任务，让 UI 显示停止按钮
   const applyApiKey = () => {
@@ -254,6 +246,7 @@ function App() {
         enableProxy,
         dateRange: startDate && endDate ? { start: startDate, end: endDate } : undefined,
         strategy: activeTab === "reddit" ? redditStrategy : undefined,
+        antiDetectionLevel,
       });
 
       setLatestJobId(jobInfo.jobId);
@@ -323,6 +316,8 @@ function App() {
           endDate={endDate}
           lookbackHours={lookbackHours}
           keywords={keywords}
+          onLookbackHoursChange={setLookbackHours}
+          onKeywordsChange={setKeywords}
           redditStrategy={redditStrategy}
           isScraping={isScraping}
           canSubmit={canSubmit}
@@ -335,10 +330,10 @@ function App() {
           onToggleDeepSearch={setEnableDeepSearch}
           onParallelChunksChange={setParallelChunks}
           onToggleProxy={setEnableProxy}
+          antiDetectionLevel={antiDetectionLevel}
+          onAntiDetectionLevelChange={setAntiDetectionLevel}
           onStartDateChange={setStartDate}
           onEndDateChange={setEndDate}
-          onLookbackHoursChange={setLookbackHours}
-          onKeywordsChange={setKeywords}
           onRedditStrategyChange={setRedditStrategy}
           onSubmit={handleScrape}
           onStop={handleStop}

@@ -6,7 +6,7 @@
 import { NavigationService } from './navigation-service';
 import { RateLimitManager } from './rate-limit-manager';
 import { ErrorSnapshotter } from './error-snapshotter';
-import { FingerprintManager } from './fingerprint-manager';
+import { AntiDetection, type AntiDetectionLevel } from './anti-detection';
 import { PerformanceMonitor } from './performance-monitor';
 import { ProgressManager } from './progress-manager';
 import { SessionManager } from './session-manager';
@@ -17,7 +17,7 @@ export interface ScraperDependencies {
     navigationService: NavigationService;
     rateLimitManager: RateLimitManager;
     errorSnapshotter: ErrorSnapshotter;
-    fingerprintManager: FingerprintManager;
+    antiDetection: AntiDetection;
     performanceMonitor: PerformanceMonitor;
     progressManager: ProgressManager;
     sessionManager: SessionManager;
@@ -30,7 +30,8 @@ export interface ScraperDependencies {
 export function createDefaultDependencies(
     eventBus: ScraperEventBus,
     cookieDir: string = './cookies',
-    progressDir: string = './data/progress'
+    progressDir: string = './data/progress',
+    antiDetectionLevel: AntiDetectionLevel = 'high'
 ): ScraperDependencies {
     const sessionManager = new SessionManager(cookieDir, eventBus);
     
@@ -38,7 +39,7 @@ export function createDefaultDependencies(
         navigationService: new NavigationService(eventBus),
         rateLimitManager: new RateLimitManager(sessionManager, eventBus),
         errorSnapshotter: new ErrorSnapshotter(),
-        fingerprintManager: new FingerprintManager(),
+        antiDetection: new AntiDetection({ level: antiDetectionLevel }),
         performanceMonitor: new PerformanceMonitor(),
         progressManager: new ProgressManager(progressDir, eventBus),
         sessionManager,
@@ -47,4 +48,3 @@ export function createDefaultDependencies(
         proxyManager: new ProxyManager()
     };
 }
-

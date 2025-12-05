@@ -26,6 +26,7 @@ export interface ScrapeJobData {
     enableRotation?: boolean;
     enableProxy?: boolean;
     dateRange?: { start: string; end: string };
+    antiDetectionLevel?: 'low' | 'medium' | 'high' | 'paranoid';
   };
 }
 

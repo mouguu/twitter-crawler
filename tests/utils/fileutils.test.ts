@@ -1,3 +1,4 @@
+import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test';
 /**
  * FileUtils 单元测试
  */
@@ -26,32 +27,32 @@ describe('FileUtils', () => {
   });
 
   describe('sanitizeSegment', () => {
-    it('should sanitize special characters', () => {
+    test('should sanitize special characters', () => {
       expect(fileUtils.sanitizeSegment('test@user#123')).toBe('test-user-123');
       expect(fileUtils.sanitizeSegment('user name')).toBe('user-name');
       expect(fileUtils.sanitizeSegment('user/name')).toBe('user-name');
     });
 
-    it('should handle empty string', () => {
+    test('should handle empty string', () => {
       const result = fileUtils.sanitizeSegment('');
       expect(result).toBeTruthy();
     });
 
-    it('should convert to lowercase', () => {
+    test('should convert to lowercase', () => {
       expect(fileUtils.sanitizeSegment('USERNAME')).toBe('username');
     });
 
-    it('should remove leading/trailing dashes', () => {
+    test('should remove leading/trailing dashes', () => {
       expect(fileUtils.sanitizeSegment('-username-')).toBe('username');
     });
 
-    it('should collapse multiple dashes', () => {
+    test('should collapse multiple dashes', () => {
       expect(fileUtils.sanitizeSegment('user---name')).toBe('user-name');
     });
   });
 
   describe('ensureDirExists', () => {
-    it('should create directory if not exists', async () => {
+    test('should create directory if not exists', async () => {
       const dir = path.join(testOutputDir, 'new-dir');
       const result = await fileUtils.ensureDirExists(dir);
       
@@ -59,7 +60,7 @@ describe('FileUtils', () => {
       expect(fs.existsSync(dir)).toBe(true);
     });
 
-    it('should return true if directory exists', async () => {
+    test('should return true if directory exists', async () => {
       const dir = path.join(testOutputDir, 'existing-dir');
       await fsPromises.mkdir(dir, { recursive: true });
       
@@ -67,7 +68,7 @@ describe('FileUtils', () => {
       expect(result).toBe(true);
     });
 
-    it('should create nested directories', async () => {
+    test('should create nested directories', async () => {
       const dir = path.join(testOutputDir, 'nested', 'deep', 'path');
       await fileUtils.ensureDirExists(dir);
       
@@ -76,13 +77,13 @@ describe('FileUtils', () => {
   });
 
   describe('getDefaultOutputRoot', () => {
-    it('should return default output root', () => {
+    test('should return default output root', () => {
       const root = fileUtils.getDefaultOutputRoot();
       expect(root).toBeTruthy();
       expect(typeof root).toBe('string');
     });
 
-    it('should respect OUTPUT_DIR environment variable', () => {
+    test('should respect OUTPUT_DIR environment variable', () => {
       const tempDir = require('os').tmpdir();
       const customDir = path.join(tempDir, 'custom-output-' + Date.now());
       const originalEnv = process.env.OUTPUT_DIR;
@@ -120,7 +121,7 @@ describe('FileUtils', () => {
   });
 
   describe('createRunContext', () => {
-    it('should create run context with default options', async () => {
+    test('should create run context with default options', async () => {
       const context = await fileUtils.createRunContext();
       
       expect(context).toHaveProperty('platform');
@@ -132,7 +133,7 @@ describe('FileUtils', () => {
       expect(context).toHaveProperty('csvPath');
     });
 
-    it('should create run context with custom options', async () => {
+    test('should create run context with custom options', async () => {
       const context = await fileUtils.createRunContext({
         platform: 'twitter',
         identifier: 'testuser',
@@ -144,7 +145,7 @@ describe('FileUtils', () => {
       expect(context.runId).toContain('run-');
     });
 
-    it('should create all required directories', async () => {
+    test('should create all required directories', async () => {
       const context = await fileUtils.createRunContext({
         platform: 'test',
         identifier: 'test'
@@ -155,7 +156,7 @@ describe('FileUtils', () => {
       expect(fs.existsSync(context.screenshotDir)).toBe(true);
     });
 
-    it('should sanitize platform and identifier', async () => {
+    test('should sanitize platform and identifier', async () => {
       const context = await fileUtils.createRunContext({
         platform: 'Test@Platform',
         identifier: 'User#123'
@@ -167,12 +168,12 @@ describe('FileUtils', () => {
   });
 
   describe('getTodayString', () => {
-    it('should return date in YYYY-MM-DD format', () => {
+    test('should return date in YYYY-MM-DD format', () => {
       const today = fileUtils.getTodayString();
       expect(today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     });
 
-    it('should return current date', () => {
+    test('should return current date', () => {
       const today = fileUtils.getTodayString();
       const expected = new Date().toISOString().split('T')[0];
       expect(today).toBe(expected);
@@ -180,7 +181,7 @@ describe('FileUtils', () => {
   });
 
   describe('getMarkdownFiles', () => {
-    it('should return markdown files in directory', async () => {
+    test('should return markdown files in directory', async () => {
       const dir = path.join(testOutputDir, 'markdown-test');
       await fsPromises.mkdir(dir, { recursive: true });
       
@@ -194,7 +195,7 @@ describe('FileUtils', () => {
       expect(files.every(f => f.endsWith('.md'))).toBe(true);
     });
 
-    it('should exclude merged files', async () => {
+    test('should exclude merged files', async () => {
       const dir = path.join(testOutputDir, 'markdown-test2');
       await fsPromises.mkdir(dir, { recursive: true });
       
@@ -208,12 +209,12 @@ describe('FileUtils', () => {
       expect(files[0]).toContain('normal.md');
     });
 
-    it('should return empty array for non-existent directory', async () => {
+    test('should return empty array for non-existent directory', async () => {
       const files = await fileUtils.getMarkdownFiles('/non/existent/path');
       expect(files).toEqual([]);
     });
 
-    it('should return empty array for empty directory', async () => {
+    test('should return empty array for empty directory', async () => {
       const dir = path.join(testOutputDir, 'empty-dir');
       await fsPromises.mkdir(dir, { recursive: true });
       
@@ -223,7 +224,7 @@ describe('FileUtils', () => {
   });
 
   describe('ensureBaseStructure', () => {
-    it('should create base output structure', async () => {
+    test('should create base output structure', async () => {
       const result = await fileUtils.ensureBaseStructure();
       expect(result).toBe(true);
     });

@@ -203,7 +203,7 @@ app.post(
     if (rejectIfShuttingDown(res)) return;
 
     try {
-      const { type, input, limit, likes, mode, dateRange, enableRotation, enableProxy, strategy } = req.body;
+      const { type, input, limit, likes, mode, dateRange, enableRotation, enableProxy, strategy, antiDetectionLevel } = req.body;
 
       serverLogger.info('收到队列爬取请求', { type, input, limit });
 
@@ -233,6 +233,7 @@ app.post(
           enableRotation: enableRotation !== false,
           enableProxy: enableProxy || false,
           dateRange,
+          antiDetectionLevel,
         };
       } else if (isReddit) {
         const parsed = parseRedditInput(input);
@@ -292,30 +293,11 @@ app.post(
 
 // Legacy manual stop/status/progress endpoints removed in favor of BullMQ job APIs
 
-// API: Get metrics (简单 JSON 格式)
-app.get("/api/metrics", (req: Request, res: Response) => {
-  try {
-    const { getMetricsCollector } = require("../core/metrics-collector");
-    const collector = getMetricsCollector();
-    res.json(collector.getMetrics());
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
+// API: Get metrics (简单 JSON 格式) - DEPRECATED/REMOVED
+// app.get("/api/metrics", ...);
 
-// API: Get metrics summary
-app.get("/api/metrics/summary", (req: Request, res: Response) => {
-  try {
-    const { getMetricsCollector } = require("../core/metrics-collector");
-    const collector = getMetricsCollector();
-    res.json({
-      summary: collector.getSummary(),
-      metrics: collector.getMetrics(),
-    });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
+// API: Get metrics summary - DEPRECATED/REMOVED
+// app.get("/api/metrics/summary", ...);
 
 // API: Public config for frontend
 app.get("/api/config", (req: Request, res: Response) => {
@@ -331,7 +313,7 @@ app.get("/api/download", (req: Request, res: Response) => {
     return res.status(400).send("Invalid file path");
   }
 
-  const resolvedPath = path.resolve(filePathParam);
+  let resolvedPath = path.resolve(filePathParam);
 
   // 检查路径是否安全（在 output 目录内）
   if (!outputPathManager.isPathSafe(resolvedPath)) {
@@ -346,6 +328,25 @@ app.get("/api/download", (req: Request, res: Response) => {
   if (!fs.existsSync(resolvedPath)) {
     serverLogger.warn("文件不存在", { path: resolvedPath });
     return res.status(404).send("File not found");
+  }
+
+  // Handle directory paths: try to find index.md
+  if (fs.statSync(resolvedPath).isDirectory()) {
+    let candidate = path.join(resolvedPath, 'index.md');
+    if (fs.existsSync(candidate)) {
+      resolvedPath = candidate;
+    } else if (path.basename(resolvedPath) === 'markdown') {
+      // If requesting 'markdown' folder, try parent's index.md
+      candidate = path.join(path.dirname(resolvedPath), 'index.md');
+      if (fs.existsSync(candidate)) {
+        resolvedPath = candidate;
+      }
+    }
+    
+    // Re-check safety for the new path
+    if (!outputPathManager.isPathSafe(resolvedPath)) {
+       return res.status(400).send("Invalid file path");
+    }
   }
 
   // Generate a better filename
