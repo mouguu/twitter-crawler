@@ -446,7 +446,12 @@ export function TaskForm(props: TaskFormProps) {
                           onValueChange={(v: any) => onAntiDetectionLevelChange(v)}
                         >
                           <SelectTrigger>
-                            <SelectValue />
+                            <SelectValue>
+                              {antiDetectionLevel === 'low' && 'Low'}
+                              {antiDetectionLevel === 'medium' && 'Medium'}
+                              {antiDetectionLevel === 'high' && 'High (Recommended)'}
+                              {antiDetectionLevel === 'paranoid' && 'Paranoid'}
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="low">

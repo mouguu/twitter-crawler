@@ -1,47 +1,47 @@
 /**
- * Job Management API Routes
+ * Job Management API Routes - Hono
  * 
  * Endpoints for querying job status, streaming progress, and cancelling jobs
  */
 
-import express, { Request, Response } from 'express';
+import { Hono } from 'hono';
+import { streamSSE } from 'hono/streaming';
 import { scrapeQueue } from '../../core/queue/scrape-queue';
 import { redisSubscriber } from '../../core/queue/connection';
 import { markJobAsCancelled } from '../../core/queue/worker';
 import { createEnhancedLogger } from '../../utils/logger';
 
-const router = express.Router();
+const jobRoutes = new Hono();
 const logger = createEnhancedLogger('JobRoutes');
 
 /**
- * GET /api/jobs
+ * GET /
  * List all jobs (with pagination and filtering)
- * IMPORTANT: This must come BEFORE /:jobId routes to avoid matching conflicts
  */
-router.get('/', async (req: Request, res: Response) => {
+jobRoutes.get('/', async (c) => {
   console.log('DEBUG: GET / handler called!');
-  console.log('DEBUG: Query params:', req.query);
+  console.log('DEBUG: Query params:', c.req.query());
   try {
-    const { state, type, start = '0', count = '10' } = req.query;
-
-    const startIdx = parseInt(start as string, 10);
-    const countNum = Math.min(parseInt(count as string, 10), 100); // Max 100
+    const state = c.req.query('state');
+    const type = c.req.query('type');
+    const start = parseInt(c.req.query('start') || '0', 10);
+    const count = Math.min(parseInt(c.req.query('count') || '10', 10), 100);
 
     let jobs;
 
     // Filter by state
     if (state === 'completed') {
-      jobs = await scrapeQueue.getCompleted(startIdx, startIdx + countNum - 1);
+      jobs = await scrapeQueue.getCompleted(start, start + count - 1);
     } else if (state === 'failed') {
-      jobs = await scrapeQueue.getFailed(startIdx, startIdx + countNum - 1);
+      jobs = await scrapeQueue.getFailed(start, start + count - 1);
     } else if (state === 'active') {
-      jobs = await scrapeQueue.getActive(startIdx, startIdx + countNum - 1);
+      jobs = await scrapeQueue.getActive(start, start + count - 1);
     } else if (state === 'waiting') {
-      jobs = await scrapeQueue.getWaiting(startIdx, startIdx + countNum - 1);
+      jobs = await scrapeQueue.getWaiting(start, start + count - 1);
     } else if (state === 'delayed') {
-      jobs = await scrapeQueue.getDelayed(startIdx, startIdx + countNum - 1);
+      jobs = await scrapeQueue.getDelayed(start, start + count - 1);
     } else {
-      // Get all jobs (this can be expensive, use with caution)
+      // Get all jobs
       const [waiting, active, completed, failed] = await Promise.all([
         scrapeQueue.getWaiting(0, 9),
         scrapeQueue.getActive(0, 9),
@@ -69,38 +69,43 @@ router.get('/', async (req: Request, res: Response) => {
       }))
     );
 
-    res.json({
+    return c.json({
       jobs: jobList,
       total: jobList.length,
     });
   } catch (error: any) {
     logger.error('Failed to list jobs', error);
-    res.status(500).json({ error: error.message });
+    return c.json({ error: error.message }, 500);
   }
 });
 
 /**
- * GET /api/jobs/:jobId
+ * GET /:jobId
  * Get job status and result
  */
-router.get('/:jobId', async (req: Request, res: Response) => {
-  const { jobId } = req.params;
+jobRoutes.get('/:jobId', async (c) => {
+  const jobId = c.req.param('jobId');
+
+  // Skip if this is the stream endpoint
+  if (jobId === 'stream') {
+    return c.notFound();
+  }
 
   try {
     const job = await scrapeQueue.getJob(jobId);
 
     if (!job) {
-      return res.status(404).json({ error: 'Job not found' });
+      return c.json({ error: 'Job not found' }, 404);
     }
 
     const state = await job.getState();
     const progress = job.progress;
     const returnvalue = job.returnvalue;
 
-    res.json({
+    return c.json({
       id: job.id,
       type: job.data.type,
-      state, // 'waiting', 'active', 'completed', 'failed', 'delayed'
+      state,
       progress,
       result: returnvalue,
       createdAt: job.timestamp,
@@ -111,178 +116,192 @@ router.get('/:jobId', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     logger.error('Failed to get job status', error);
-    res.status(500).json({ error: error.message });
+    return c.json({ error: error.message }, 500);
   }
 });
 
 /**
- * GET /api/jobs/:jobId/stream
+ * GET /:jobId/stream
  * Server-Sent Events stream for job progress and logs
  */
-router.get('/:jobId/stream', async (req: Request, res: Response) => {
-  const { jobId } = req.params;
+jobRoutes.get('/:jobId/stream', async (c) => {
+  const jobId = c.req.param('jobId');
 
   try {
     // Verify job exists
     const job = await scrapeQueue.getJob(jobId);
     if (!job) {
-      return res.status(404).json({ error: 'Job not found' });
+      return c.json({ error: 'Job not found' }, 404);
     }
 
-    // SSE headers
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+    return streamSSE(c, async (stream) => {
+      // Send initial connection event with job state
+      const initialState = await job.getState();
+      await stream.writeSSE({
+        event: 'connected',
+        data: JSON.stringify({
+          jobId,
+          type: job.data.type,
+          state: initialState,
+          progress: job.progress,
+          createdAt: job.timestamp,
+        }),
+      });
 
-    const sendEvent = (event: string, data: any) => {
-      res.write(`event: ${event}\n`);
-      res.write(`data: ${JSON.stringify(data)}\n\n`);
-    };
+      // Subscribe to job-specific Redis channels
+      const progressChannel = `job:${jobId}:progress`;
+      const logChannel = `job:${jobId}:log`;
 
-    // Send initial connection event with job state
-    const initialState = await job.getState();
-    sendEvent('connected', {
-      jobId,
-      type: job.data.type,
-      state: initialState,
-      progress: job.progress,
-      createdAt: job.timestamp,
-    });
+      await redisSubscriber.subscribe(progressChannel, logChannel);
 
-    // Subscribe to job-specific Redis channels
-    const progressChannel = `job:${jobId}:progress`;
-    const logChannel = `job:${jobId}:log`;
+      // Message handler for Redis Pub/Sub
+      const messageHandler = (channel: string, message: string) => {
+        try {
+          const data = JSON.parse(message);
 
-    await redisSubscriber.subscribe(progressChannel, logChannel);
-
-    // Message handler for Redis Pub/Sub
-    const messageHandler = (channel: string, message: string) => {
-      try {
-        const data = JSON.parse(message);
-
-        if (channel === progressChannel) {
-          sendEvent('progress', data);
-        } else if (channel === logChannel) {
-          sendEvent('log', data);
+          if (channel === progressChannel) {
+            stream.writeSSE({ event: 'progress', data: JSON.stringify(data) });
+          } else if (channel === logChannel) {
+            stream.writeSSE({ event: 'log', data: JSON.stringify(data) });
+          }
+        } catch (error) {
+          logger.error('Failed to parse Redis message', error as Error);
         }
-      } catch (error) {
-        logger.error('Failed to parse Redis message', error as Error);
-      }
-    };
+      };
 
-    redisSubscriber.on('message', messageHandler);
+      redisSubscriber.on('message', messageHandler);
 
-    // Poll job state for completion/failure
-    const pollInterval = setInterval(async () => {
-      try {
-        const currentState = await job.getState();
+      // Poll job state for completion/failure
+      let isEnded = false;
+      const pollInterval = setInterval(async () => {
+        if (isEnded) return;
+        
+        try {
+          const currentState = await job.getState();
 
-        if (currentState === 'completed') {
-          sendEvent('completed', {
-            result: job.returnvalue,
-            finishedAt: job.finishedOn,
-          });
-          clearInterval(pollInterval);
-        } else if (currentState === 'failed') {
-          sendEvent('failed', {
-            error: job.failedReason,
-            finishedAt: job.finishedOn,
-          });
-          clearInterval(pollInterval);
+          if (currentState === 'completed') {
+            await stream.writeSSE({
+              event: 'completed',
+              data: JSON.stringify({
+                result: job.returnvalue,
+                finishedAt: job.finishedOn,
+              }),
+            });
+            isEnded = true;
+            clearInterval(pollInterval);
+          } else if (currentState === 'failed') {
+            await stream.writeSSE({
+              event: 'failed',
+              data: JSON.stringify({
+                error: job.failedReason,
+                finishedAt: job.finishedOn,
+              }),
+            });
+            isEnded = true;
+            clearInterval(pollInterval);
+          }
+        } catch (error) {
+          logger.error('Failed to poll job state', error as Error);
         }
-      } catch (error) {
-        logger.error('Failed to poll job state', error as Error);
-      }
-    }, 1000);
+      }, 1000);
 
-    // Cleanup on client disconnect
-    req.on('close', () => {
-      clearInterval(pollInterval);
-      redisSubscriber.off('message', messageHandler);
-      redisSubscriber.unsubscribe(progressChannel, logChannel);
-      logger.debug('SSE client disconnected', { jobId });
+      // Keep connection alive and handle cleanup
+      try {
+        // Keep stream open until client disconnects or job ends
+        while (!isEnded) {
+          await stream.sleep(1000);
+          
+          // Check if job has ended
+          const state = await job.getState();
+          if (state === 'completed' || state === 'failed') {
+            isEnded = true;
+          }
+        }
+      } finally {
+        clearInterval(pollInterval);
+        redisSubscriber.off('message', messageHandler);
+        await redisSubscriber.unsubscribe(progressChannel, logChannel);
+        logger.debug('SSE client disconnected', { jobId });
+      }
     });
   } catch (error: any) {
     logger.error('Failed to create SSE stream', error);
-    res.status(500).json({ error: error.message });
+    return c.json({ error: error.message }, 500);
   }
 });
 
 /**
- * POST /api/jobs/:jobId/cancel
+ * POST /:jobId/cancel
  * Cancel a job
  */
-router.post('/:jobId/cancel', async (req: Request, res: Response) => {
-  const { jobId } = req.params;
+jobRoutes.post('/:jobId/cancel', async (c) => {
+  const jobId = c.req.param('jobId');
 
   try {
     const job = await scrapeQueue.getJob(jobId);
 
     if (!job) {
-      return res.status(404).json({ error: 'Job not found' });
+      return c.json({ error: 'Job not found' }, 404);
     }
 
     const state = await job.getState();
 
     if (state === 'completed' || state === 'failed') {
-      return res.status(400).json({
+      return c.json({
         error: `Cannot cancel job in ${state} state`,
-      });
+      }, 400);
     }
 
     // For active jobs, mark them for cancellation
-    // The worker will check this flag and stop gracefully
     if (state === 'active') {
       markJobAsCancelled(jobId);
       logger.info('Active job marked for cancellation', { jobId });
       
-      res.json({
+      return c.json({
         success: true,
         message: 'Job cancellation requested. The job will stop shortly.',
         note: 'Active jobs are stopped gracefully and may take a few seconds to complete cancellation.',
       });
-      return;
     }
 
     // For waiting/delayed jobs, remove directly from queue
     await job.remove();
     logger.info('Job cancelled', { jobId, state });
 
-    res.json({
+    return c.json({
       success: true,
       message: 'Job cancelled successfully',
     });
   } catch (error: any) {
     logger.error('Failed to cancel job', error);
-    res.status(500).json({ error: error.message });
+    return c.json({ error: error.message }, 500);
   }
 });
 
 /**
- * DELETE /api/jobs/:jobId
+ * DELETE /:jobId
  * Delete a completed/failed job
  */
-router.delete('/:jobId', async (req: Request, res: Response) => {
-  const { jobId } = req.params;
+jobRoutes.delete('/:jobId', async (c) => {
+  const jobId = c.req.param('jobId');
 
   try {
     const job = await scrapeQueue.getJob(jobId);
 
     if (!job) {
-      return res.status(404).json({ error: 'Job not found' });
+      return c.json({ error: 'Job not found' }, 404);
     }
 
     await job.remove();
 
-    res.json({
+    return c.json({
       success: true,
       message: 'Job deleted successfully',
     });
   } catch (error: any) {
     logger.error('Failed to delete job', error);
-    res.status(500).json({ error: error.message });
+    return c.json({ error: error.message }, 500);
   }
 });
 
-export default router;
+export default jobRoutes;

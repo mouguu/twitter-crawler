@@ -12,11 +12,22 @@ export default defineConfig({
   },
   build: {
     outDir: '../public',
-    emptyOutDir: true
+    emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, 'index.html'),
+        'queue-monitor': path.resolve(__dirname, 'queue-monitor.html'),
+      },
+    },
   },
   server: {
     proxy: {
       '/api': {
+        target: 'http://localhost:5001',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/admin': {
         target: 'http://localhost:5001',
         changeOrigin: true,
         secure: false,

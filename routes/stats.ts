@@ -1,13 +1,14 @@
 /**
- * Dashboard API - Stats and Overview
+ * Dashboard API - Stats and Overview - Hono
  */
 
-import { Router, Request, Response } from 'express';
+import { Hono } from 'hono';
 import { prisma } from '../core/db/prisma';
 import { createEnhancedLogger } from '../utils/logger';
 
 const logger = createEnhancedLogger('StatsAPI');
-const router = Router();
+
+const statsRoutes = new Hono();
 
 // Simple in-memory cache (10 seconds TTL)
 let cachedStats: any = null;
@@ -15,15 +16,15 @@ let cacheTimestamp = 0;
 const CACHE_TTL = 10000;
 
 /**
- * GET /api/stats
+ * GET /stats
  * Returns overall statistics
  */
-router.get('/stats', async (req: Request, res: Response) => {
+statsRoutes.get('/stats', async (c) => {
   try {
     // Check cache
     const now = Date.now();
     if (cachedStats && (now - cacheTimestamp) < CACHE_TTL) {
-      return res.json(cachedStats);
+      return c.json(cachedStats);
     }
 
     // Query database
@@ -128,14 +129,14 @@ router.get('/stats', async (req: Request, res: Response) => {
     cachedStats = stats;
     cacheTimestamp = now;
 
-    res.json(stats);
+    return c.json(stats);
   } catch (error: any) {
     logger.error('Stats API failed', error);
-    res.status(500).json({
+    return c.json({
       error: 'Failed to fetch stats',
       message: error.message
-    });
+    }, 500);
   }
 });
 
-export default router;
+export default statsRoutes;

@@ -1,19 +1,20 @@
 /**
- * Health Check API Routes
+ * Health Check API Routes - Hono
  */
 
-import { Router, Request, Response } from 'express';
+import { Hono } from 'hono';
 import { healthChecker } from '../core/health/health-checker';
 import { createEnhancedLogger } from '../utils/logger';
 
 const logger = createEnhancedLogger('HealthAPI');
-const router = Router();
+
+const healthRoutes = new Hono();
 
 /**
- * GET /api/health
+ * GET /health
  * Returns health status of all services
  */
-router.get('/health', async (req: Request, res: Response) => {
+healthRoutes.get('/health', async (c) => {
   try {
     const health = await healthChecker.checkAll();
     
@@ -23,58 +24,58 @@ router.get('/health', async (req: Request, res: Response) => {
       health.status === 'degraded' ? 200 :
       200;
 
-    res.status(statusCode).json(health);
+    return c.json(health, statusCode);
   } catch (error: any) {
     logger.error('Health check endpoint failed', error);
-    res.status(500).json({
+    return c.json({
       status: 'down',
       timestamp: new Date(),
       message: 'Health check failed',
       error: error.message
-    });
+    }, 500);
   }
 });
 
 /**
- * GET /api/health/database
+ * GET /health/database
  * Check only database health
  */
-router.get('/health/database', async (req: Request, res: Response) => {
+healthRoutes.get('/health/database', async (c) => {
   try {
     const health = await healthChecker.checkDatabase();
-    res.status(health.status === 'down' ? 503 : 200).json(health);
+    return c.json(health, health.status === 'down' ? 503 : 200);
   } catch (error: any) {
     logger.error('Database health check failed', error);
-    res.status(500).json({ status: 'down', message: error.message });
+    return c.json({ status: 'down', message: error.message }, 500);
   }
 });
 
 /**
- * GET /api/health/redis
+ * GET /health/redis
  * Check only Redis health
  */
-router.get('/health/redis', async (req: Request, res: Response) => {
+healthRoutes.get('/health/redis', async (c) => {
   try {
     const health = await healthChecker.checkRedis();
-    res.status(health.status === 'down' ? 503 : 200).json(health);
+    return c.json(health, health.status === 'down' ? 503 : 200);
   } catch (error: any) {
     logger.error('Redis health check failed', error);
-    res.status(500).json({ status: 'down', message: error.message });
+    return c.json({ status: 'down', message: error.message }, 500);
   }
 });
 
 /**
- * GET /api/health/proxy
+ * GET /health/proxy
  * Check only Proxy health
  */
-router.get('/health/proxy', async (req: Request, res: Response) => {
+healthRoutes.get('/health/proxy', async (c) => {
   try {
     const health = await healthChecker.checkProxy();
-    res.status(health.status === 'down' ? 503 : 200).json(health);
+    return c.json(health, health.status === 'down' ? 503 : 200);
   } catch (error: any) {
     logger.error('Proxy health check failed', error);
-    res.status(500).json({ status: 'down', message: error.message });
+    return c.json({ status: 'down', message: error.message }, 500);
   }
 });
 
-export default router;
+export default healthRoutes;

@@ -15,6 +15,7 @@ interface HeaderBarProps {
 const navLinks = [
   { label: "Scrape", href: "#scrape" },
   { label: "Dashboard", href: "#dashboard" },
+  { label: "Queue", href: "/queue-monitor.html" },
   { label: "Sessions", href: "#sessions" },
 ];
 
@@ -110,16 +111,6 @@ export function HeaderBar({ apiKey, apiKeyInput, onApiKeyInputChange, onApply }:
                 )}
               </AnimatePresence>
             </div>
-
-            {/* Queue Link */}
-            <a
-              href="/admin/queues"
-              target="_blank"
-              className="hidden md:flex items-center gap-2 px-4 py-2 text-sm font-medium bg-foreground text-background rounded-lg hover:bg-foreground/90 transition-colors"
-            >
-              Queue
-              <span className="text-xs opacity-60">↗</span>
-            </a>
 
             {/* Mobile Menu Button */}
             <button

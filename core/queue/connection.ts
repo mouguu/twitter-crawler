@@ -20,8 +20,14 @@ const connectionOptions = {
   password: redisConfig.password,
   maxRetriesPerRequest: null, // Required for BullMQ
   enableReadyCheck: false,
+  connectTimeout: 10000, // 10 second timeout
+  lazyConnect: true, // Don't connect immediately
   retryStrategy(times: number) {
-    const delay = Math.min(times * 50, 2000);
+    if (times > 10) {
+      logger.error('Redis connection failed after 10 retries, giving up');
+      return null; // Stop retrying
+    }
+    const delay = Math.min(times * 500, 5000);
     logger.warn(`Redis connection retry attempt ${times}, delay: ${delay}ms`);
     return delay;
   },
@@ -41,6 +47,24 @@ export const redisPublisher = new Redis(connectionOptions);
  * Subscriber connection for Pub/Sub (SSE streams)
  */
 export const redisSubscriber = new Redis(connectionOptions);
+
+// Connect with error handling
+async function connectRedis() {
+  try {
+    await Promise.all([
+      redisConnection.connect(),
+      redisPublisher.connect(),
+      redisSubscriber.connect(),
+    ]);
+    logger.info('All Redis connections established');
+  } catch (error) {
+    logger.error('Failed to connect to Redis', error as Error);
+    // Don't throw - let the app continue and handle Redis errors gracefully
+  }
+}
+
+// Start connection in background (non-blocking)
+connectRedis();
 
 // Connection event handlers
 redisConnection.on('connect', () => {

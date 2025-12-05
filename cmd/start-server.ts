@@ -1,178 +1,87 @@
-console.log('DEBUG: Process starting...');
-import express, { Request, Response } from "express";
-console.log('DEBUG: Express imported');
-import * as path from "path";
-import * as fs from "fs";
-// 注意: scrapeProfileGraphql 已废弃，统一使用 ScraperEngine
-import { createCookieManager, scrapeQueue } from "../core";
+/**
+ * XRCrawler Hono Server
+ * 
+ * Modern Bun-native HTTP server with type-safe routing
+ */
+
+console.log('DEBUG: Hono server starting...');
+
+import { Hono } from 'hono';
+import { serveStatic } from 'hono/bun';
+import { logger } from 'hono/logger';
+import * as path from 'path';
+import * as fs from 'fs';
+
+// Core imports
+import { createCookieManager, scrapeQueue } from '../core';
 import {
   createEnhancedLogger,
   getOutputPathManager,
   getConfigManager,
   setLogLevel,
-} from "../utils";
-import * as fileUtils from "../utils/fileutils";
-import { apiKeyMiddleware } from "../middleware/api-key";
-import { ScrapeRequest } from "../types/api";
-import multer from "multer";
-import { createBullBoard } from '@bull-board/api';
-import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
-import { ExpressAdapter } from '@bull-board/express';
+} from '../utils';
+import { apiKeyMiddleware } from '../middleware/api-key';
+import { JobRepository } from '../core/db/job-repo';
+
+// Route imports
 import jobRoutes from '../server/routes/jobs';
 import healthRoutes from '../routes/health';
 import statsRoutes from '../routes/stats';
-import { JobRepository } from '../core/db/job-repo';
+import queueMonitor from '../routes/queue-monitor';
 
-// 创建服务器日志器
-const serverLogger = createEnhancedLogger("Server");
+const serverLogger = createEnhancedLogger('HonoServer');
 
-// Normalize profile input to username (strip https://x.com/... and @)
-function normalizeUsername(input: string | undefined): string | undefined {
-  if (!input) return undefined;
-  const trimmed = input.trim();
-  // Remove protocol and domain if present
-  const withoutDomain = trimmed.replace(/^https?:\/\/(?:www\.)?(?:x\.com|twitter\.com)\//i, "");
-  // Remove leading @ and trailing paths
-  const cleaned = withoutDomain.replace(/^@/, "").split(/[/?#]/)[0];
-  return cleaned || undefined;
-}
-
-/**
- * Parse Reddit input to extract subreddit name or post URL
- * Supports:
- * - Subreddit name: "HomeofChonglang" → "HomeofChonglang"
- * - Subreddit URL: "https://www.reddit.com/r/HomeofChonglang/" → "HomeofChonglang"
- * - Post URL: "https://www.reddit.com/r/HomeofChonglang/comments/xxx" → full URL
- */
-function parseRedditInput(input: string): { subreddit?: string; postUrl?: string } {
-  if (!input) return {};
-  
-  const trimmed = input.trim();
-  
-  // Check if it's a post URL (contains /comments/)
-  if (trimmed.includes('/comments/') || trimmed.includes('redd.it/')) {
-    return { postUrl: trimmed };
-  }
-  
-  // Try to extract subreddit from URL
-  const subredditMatch = trimmed.match(/reddit\.com\/r\/([^\/\?#]+)/i);
-  if (subredditMatch) {
-    return { subreddit: subredditMatch[1] };
-  }
-  
-  // Assume it's a plain subreddit name
-  return { subreddit: trimmed };
-}
-
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const cookiesDir = path.join(process.cwd(), "cookies");
-    if (!fs.existsSync(cookiesDir)) {
-      fs.mkdirSync(cookiesDir, { recursive: true });
-    }
-    cb(null, cookiesDir);
-  },
-  filename: (req, file, cb) => {
-    // Ensure .json extension
-    const name = file.originalname.endsWith(".json")
-      ? file.originalname
-      : `${file.originalname}.json`;
-    cb(null, name);
-  },
-});
-const upload = multer({
-  storage,
-  fileFilter: (req, file, cb) => {
-    if (
-      file.mimetype === "application/json" ||
-      file.originalname.endsWith(".json")
-    ) {
-      cb(null, true);
-    } else {
-      cb(new Error("Only JSON files are allowed"));
-    }
-  },
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
-  },
-});
-
-const app = express();
-
+// ============ Configuration ============
 const configManager = getConfigManager();
 const serverConfig = configManager.getServerConfig();
 const outputConfig = configManager.getOutputConfig();
-const twitterConfig = configManager.getTwitterConfig();
-const redditConfig = configManager.getRedditConfig();
 const LOG_CONFIG = configManager.getLoggingConfig();
 
 setLogLevel(LOG_CONFIG.level);
 
 const PORT = serverConfig.port;
 
-// 统一使用 OutputPathManager，删除 legacy 路径
 const outputPathManager = getOutputPathManager({
   baseDir: outputConfig.baseDir,
 });
 const OUTPUT_ROOT = outputPathManager.getBaseDir();
-const STATIC_DIR = path.resolve(process.cwd(), "public");
+const STATIC_DIR = path.resolve(process.cwd(), 'public');
 
-// Global state for manual stop
-// Legacy state removed; BullMQ handles job lifecycle
-let isShuttingDown = false;
-function rejectIfShuttingDown(res: Response): boolean {
-  if (isShuttingDown) {
-    res.status(503).json({ error: "Server is shutting down" });
-    return true;
-  }
-  return false;
+// ============ Helper Functions ============
+
+function normalizeUsername(input: string | undefined): string | undefined {
+  if (!input) return undefined;
+  const trimmed = input.trim();
+  const withoutDomain = trimmed.replace(/^https?:\/\/(?:www\.)?(?:x\.com|twitter\.com)\//i, '');
+  const cleaned = withoutDomain.replace(/^@/, '').split(/[/?#]/)[0];
+  return cleaned || undefined;
 }
 
-// Middleware
-app.use((req, res, next) => {
-  console.log(`DEBUG: Incoming request: ${req.method} ${req.url}`);
-  next();
-});
-app.use(express.json());
-app.use(express.static(STATIC_DIR));
-app.use("/api", apiKeyMiddleware);
-
-// Bull Board - Queue Monitoring Dashboard
-const serverAdapter = new ExpressAdapter();
-serverAdapter.setBasePath('/admin/queues');
-
-createBullBoard({
-  queues: [new BullMQAdapter(scrapeQueue)],
-  serverAdapter,
-});
-
-app.use('/admin/queues', serverAdapter.getRouter());
-
-// Job Management Routes
-console.log('DEBUG: Registering job routes...');
-console.log('DEBUG: jobRoutes type:', typeof jobRoutes);
-console.log('DEBUG: jobRoutes:', jobRoutes);
-app.use('/api/jobs', jobRoutes);
-console.log('DEBUG: Job routes registered at /api/jobs');
-
-// Health Check Routes
-app.use('/api', healthRoutes);
-
-// Stats Dashboard Routes
-app.use('/api', statsRoutes);
+function parseRedditInput(input: string): { subreddit?: string; postUrl?: string } {
+  if (!input) return {};
+  const trimmed = input.trim();
+  
+  if (trimmed.includes('/comments/') || trimmed.includes('redd.it/')) {
+    return { postUrl: trimmed };
+  }
+  
+  const subredditMatch = trimmed.match(/reddit\.com\/r\/([^\/\?#]+)/i);
+  if (subredditMatch) {
+    return { subreddit: subredditMatch[1] };
+  }
+  
+  return { subreddit: trimmed };
+}
 
 function getSafePathInfo(resolvedPath: string): {
   identifier?: string;
   runTimestamp?: string;
   tweetCount?: number;
 } {
-  // 使用统一的 OUTPUT_ROOT，删除 legacy 支持
   const relPath = path.relative(OUTPUT_ROOT, resolvedPath);
-  if (relPath.startsWith("..")) return {};
+  if (relPath.startsWith('..')) return {};
 
   const parts = relPath.split(path.sep).filter(Boolean);
-  // expected: platform / identifier / run-xxxx / file
   if (parts.length < 3) return {};
 
   const identifier = parts[1];
@@ -184,12 +93,11 @@ function getSafePathInfo(resolvedPath: string): {
     runTimestamp = match[1];
   }
 
-  // Try to read tweet count from sibling tweets.json
   try {
     const dir = path.dirname(resolvedPath);
-    const tweetsJsonPath = path.join(dir, "tweets.json");
+    const tweetsJsonPath = path.join(dir, 'tweets.json');
     if (fs.existsSync(tweetsJsonPath)) {
-      const data = JSON.parse(fs.readFileSync(tweetsJsonPath, "utf-8"));
+      const data = JSON.parse(fs.readFileSync(tweetsJsonPath, 'utf-8'));
       if (Array.isArray(data)) {
         return { identifier, runTimestamp, tweetCount: data.length };
       }
@@ -201,258 +109,288 @@ function getSafePathInfo(resolvedPath: string): {
   return { identifier, runTimestamp };
 }
 
-// API: Scrape V2 (Queue-based - Supports Multiple Concurrent Tasks)
-app.post(
-  "/api/scrape-v2",
-  async (
-    req: Request<{}, {}, ScrapeRequest>,
-    res: Response
-  ) => {
-    if (rejectIfShuttingDown(res)) return;
+// ============ Hono App ============
 
-    try {
-      const { type, input, limit, likes, mode, dateRange, enableRotation, enableProxy, strategy, antiDetectionLevel } = req.body;
+const app = new Hono();
 
-      serverLogger.info('收到队列爬取请求', { type, input, limit });
+// Global state
+let isShuttingDown = false;
 
-      // Prepare job data based on type
-      const isTwitter = type === 'profile' || type === 'thread' || type === 'search';
-      const isReddit = type === 'reddit';
+// Middleware
+app.use('*', logger());
 
-      if (!isTwitter && !isReddit) {
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid scrape type. Must be profile, thread, search, or reddit'
-        });
-      }
+// API Key middleware for /api routes
+app.use('/api/*', apiKeyMiddleware);
 
-      // Build config first
-      let config: any = {};
-      
-      if (isTwitter) {
-        const normalizedUsername = type === 'profile' ? normalizeUsername(input) : undefined;
-        config = {
-          username: normalizedUsername,
-          tweetUrl: type === 'thread' ? input : undefined,
-          searchQuery: type === 'search' ? input : undefined,
-          limit: limit || 50,
-          mode: mode || 'puppeteer',
-          likes: likes || false,
-          enableRotation: enableRotation !== false,
-          enableProxy: enableProxy || false,
-          dateRange,
-          antiDetectionLevel,
-        };
-      } else if (isReddit) {
-        const parsed = parseRedditInput(input);
-        config = {
-          subreddit: parsed.subreddit,
-          postUrl: parsed.postUrl,
-          limit: limit || 500,
-          strategy: strategy || 'auto',
-        };
-      }
+// ============ API Routes ============
 
-      // Create PostgreSQL Job record first (gives us a UUID)
-      const dbJob = await JobRepository.createJob({
-        type: isTwitter ? `twitter-${type}` : 'reddit',
-        config,
-        priority: type === 'thread' ? 10 : 5,
-      });
+// Job Management Routes
+app.route('/api/jobs', jobRoutes);
 
-      serverLogger.info('PostgreSQL Job created', { dbJobId: dbJob.id, type });
+// Health Check Routes
+app.route('/api', healthRoutes);
 
-      // Prepare BullMQ job data using the PostgreSQL Job UUID
-      const jobData: any = {
-        jobId: dbJob.id,  // <- PostgreSQL UUID
-        type: isTwitter ? 'twitter' : 'reddit',
-        config
-      };
+// Stats Routes
+app.route('/api', statsRoutes);
 
-      // Add job to BullMQ queue
-      const bullJob = await scrapeQueue.add(dbJob.id, jobData, {
-        priority: type === 'thread' ? 10 : 5,
-      });
+// Queue Monitor (replaces Bull Board)
+app.route('/admin/queues', queueMonitor);
 
-      // Store BullMQ job ID in PostgreSQL for reference
-      await JobRepository.updateBullJobId(dbJob.id, bullJob.id!);
-
-      serverLogger.info('任务已加入队列', { dbJobId: dbJob.id, bullJobId: bullJob.id, type });
-
-      // Return immediately with job info
-      res.json({
-        success: true,
-        jobId: bullJob.id,
-        dbJobId: dbJob.id,  // Also return DB job ID for reference
-        message: 'Task queued successfully',
-        statusUrl: `/api/jobs/${bullJob.id}`,
-        progressUrl: `/api/jobs/${bullJob.id}/stream`,
-      });
-
-    } catch (error: any) {
-      serverLogger.error('队列添加失败', error);
-      res.status(500).json({
-        success: false,
-        error: error.message || 'Failed to queue task'
-      });
-    }
+// Scrape V2 Endpoint
+app.post('/api/scrape-v2', async (c) => {
+  if (isShuttingDown) {
+    return c.json({ error: 'Server is shutting down' }, 503);
   }
-);
 
-// Legacy manual stop/status/progress endpoints removed in favor of BullMQ job APIs
+  try {
+    const body = await c.req.json();
+    const { type, input, limit, likes, mode, dateRange, enableRotation, enableProxy, strategy, antiDetectionLevel } = body;
 
-// API: Get metrics (简单 JSON 格式) - DEPRECATED/REMOVED
-// app.get("/api/metrics", ...);
+    serverLogger.info('收到队列爬取请求', { type, input, limit });
 
-// API: Get metrics summary - DEPRECATED/REMOVED
-// app.get("/api/metrics/summary", ...);
+    const isTwitter = type === 'profile' || type === 'thread' || type === 'search';
+    const isReddit = type === 'reddit';
 
-// API: Public config for frontend
-app.get("/api/config", (req: Request, res: Response) => {
-  res.json(configManager.getPublicConfig());
+    if (!isTwitter && !isReddit) {
+      return c.json({
+        success: false,
+        error: 'Invalid scrape type. Must be profile, thread, search, or reddit'
+      }, 400);
+    }
+
+    // Build config
+    let config: any = {};
+    
+    if (isTwitter) {
+      const normalizedUsername = type === 'profile' ? normalizeUsername(input) : undefined;
+      config = {
+        username: normalizedUsername,
+        tweetUrl: type === 'thread' ? input : undefined,
+        searchQuery: type === 'search' ? input : undefined,
+        limit: limit || 50,
+        mode: mode || 'puppeteer',
+        likes: likes || false,
+        enableRotation: enableRotation !== false,
+        enableProxy: enableProxy || false,
+        dateRange,
+        antiDetectionLevel,
+      };
+    } else if (isReddit) {
+      const parsed = parseRedditInput(input);
+      config = {
+        subreddit: parsed.subreddit,
+        postUrl: parsed.postUrl,
+        limit: limit || 500,
+        strategy: strategy || 'auto',
+      };
+    }
+
+    // Create PostgreSQL Job record
+    const dbJob = await JobRepository.createJob({
+      type: isTwitter ? `twitter-${type}` : 'reddit',
+      config,
+      priority: type === 'thread' ? 10 : 5,
+    });
+
+    serverLogger.info('PostgreSQL Job created', { dbJobId: dbJob.id, type });
+
+    // Add to BullMQ queue
+    const jobData: any = {
+      jobId: dbJob.id,
+      type: isTwitter ? 'twitter' : 'reddit',
+      config
+    };
+
+    const bullJob = await scrapeQueue.add(dbJob.id, jobData, {
+      priority: type === 'thread' ? 10 : 5,
+    });
+
+    await JobRepository.updateBullJobId(dbJob.id, bullJob.id!);
+
+    serverLogger.info('任务已加入队列', { dbJobId: dbJob.id, bullJobId: bullJob.id, type });
+
+    return c.json({
+      success: true,
+      jobId: bullJob.id,
+      dbJobId: dbJob.id,
+      message: 'Task queued successfully',
+      statusUrl: `/api/jobs/${bullJob.id}`,
+      progressUrl: `/api/jobs/${bullJob.id}/stream`,
+    });
+
+  } catch (error: any) {
+    serverLogger.error('队列添加失败', error);
+    return c.json({
+      success: false,
+      error: error.message || 'Failed to queue task'
+    }, 500);
+  }
 });
 
-// API: Download
-app.get("/api/download", (req: Request, res: Response) => {
-  const filePathParam =
-    typeof req.query.path === "string" ? req.query.path : "";
+// Config endpoint
+app.get('/api/config', (c) => {
+  return c.json(configManager.getPublicConfig());
+});
+
+// Download endpoint
+app.get('/api/download', (c) => {
+  const filePathParam = c.req.query('path') || '';
 
   if (!filePathParam) {
-    return res.status(400).send("Invalid file path");
+    return c.text('Invalid file path', 400);
   }
 
   let resolvedPath = path.resolve(filePathParam);
 
-  // 检查路径是否安全（在 output 目录内）
   if (!outputPathManager.isPathSafe(resolvedPath)) {
-    serverLogger.warn("下载路径不安全", {
+    serverLogger.warn('下载路径不安全', {
       path: filePathParam,
       resolved: resolvedPath,
       baseDir: outputPathManager.getBaseDir(),
     });
-    return res.status(400).send("Invalid file path");
+    return c.text('Invalid file path', 400);
   }
 
   if (!fs.existsSync(resolvedPath)) {
-    serverLogger.warn("文件不存在", { path: resolvedPath });
-    return res.status(404).send("File not found");
+    serverLogger.warn('文件不存在', { path: resolvedPath });
+    return c.text('File not found', 404);
   }
 
-  // Handle directory paths: try to find index.md
+  // Handle directory paths
   if (fs.statSync(resolvedPath).isDirectory()) {
     let candidate = path.join(resolvedPath, 'index.md');
     if (fs.existsSync(candidate)) {
       resolvedPath = candidate;
     } else if (path.basename(resolvedPath) === 'markdown') {
-      // If requesting 'markdown' folder, try parent's index.md
       candidate = path.join(path.dirname(resolvedPath), 'index.md');
       if (fs.existsSync(candidate)) {
         resolvedPath = candidate;
       }
     }
     
-    // Re-check safety for the new path
     if (!outputPathManager.isPathSafe(resolvedPath)) {
-       return res.status(400).send("Invalid file path");
+      return c.text('Invalid file path', 400);
     }
   }
 
-  // Generate a better filename
   const basename = path.basename(resolvedPath);
-
   let downloadName = basename;
-  if (basename === "tweets.md" || basename === "index.md") {
-    const { identifier, runTimestamp, tweetCount } =
-      getSafePathInfo(resolvedPath);
-    const timestamp = runTimestamp || new Date().toISOString().split("T")[0];
-    const countSegment =
-      typeof tweetCount === "number" ? `-${tweetCount}tweets` : "";
-    const idSegment = identifier || "twitter";
+  
+  if (basename === 'tweets.md' || basename === 'index.md') {
+    const { identifier, runTimestamp, tweetCount } = getSafePathInfo(resolvedPath);
+    const timestamp = runTimestamp || new Date().toISOString().split('T')[0];
+    const countSegment = typeof tweetCount === 'number' ? `-${tweetCount}tweets` : '';
+    const idSegment = identifier || 'twitter';
     downloadName = `${idSegment}-timeline-${timestamp}${countSegment}.md`;
   }
 
-  res.download(resolvedPath, downloadName);
+  const fileContent = fs.readFileSync(resolvedPath);
+  return new Response(fileContent, {
+    headers: {
+      'Content-Type': 'application/octet-stream',
+      'Content-Disposition': `attachment; filename="${downloadName}"`,
+    },
+  });
 });
 
-// Frontend entry (allows visiting "/" directly). Exclude /api routes.
-app.get(/^(?!\/api).*/, (req: Request, res: Response) => {
-  const indexPath = path.join(STATIC_DIR, "index.html");
-  if (fs.existsSync(indexPath)) {
-    return res.sendFile(indexPath);
-  }
-  res.status(404).send("Not found");
-});
-
-// Session Management API
-app.get("/api/sessions", async (req, res) => {
+// Sessions endpoint
+app.get('/api/sessions', async (c) => {
   try {
     const cookieManager = await createCookieManager();
     const sessions = await cookieManager.listSessions();
-    res.json({ success: true, sessions });
+    return c.json({ success: true, sessions });
   } catch (error: any) {
-    if (
-      error.code === "COOKIE_LOAD_FAILED" ||
-      error.message?.includes("No cookie files found")
-    ) {
-      serverLogger.warn("/api/sessions: 未找到 cookies（首次运行正常）");
-      res.json({ success: true, sessions: [] }); // Return empty list instead of error
+    if (error.code === 'COOKIE_LOAD_FAILED' || error.message?.includes('No cookie files found')) {
+      serverLogger.warn('/api/sessions: 未找到 cookies（首次运行正常）');
+      return c.json({ success: true, sessions: [] });
     } else {
-      serverLogger.error("获取会话列表失败", error);
-      res.status(500).json({ success: false, error: error.message });
+      serverLogger.error('获取会话列表失败', error);
+      return c.json({ success: false, error: error.message }, 500);
     }
   }
 });
 
-app.post("/api/cookies", upload.single("file"), async (req, res) => {
+// Cookie upload endpoint (requires native FormData handling)
+app.post('/api/cookies', async (c) => {
   try {
-    if (!req.file) {
-      return res
-        .status(400)
-        .json({ success: false, error: "No file uploaded" });
+    const formData = await c.req.formData();
+    const file = formData.get('file') as File | null;
+
+    if (!file) {
+      return c.json({ success: false, error: 'No file uploaded' }, 400);
     }
+
+    // Ensure cookies directory exists
+    const cookiesDir = path.join(process.cwd(), 'cookies');
+    if (!fs.existsSync(cookiesDir)) {
+      fs.mkdirSync(cookiesDir, { recursive: true });
+    }
+
+    // Save file
+    const filename = file.name.endsWith('.json') ? file.name : `${file.name}.json`;
+    const filePath = path.join(cookiesDir, filename);
+    const fileBuffer = await file.arrayBuffer();
+    fs.writeFileSync(filePath, Buffer.from(fileBuffer));
 
     // Validate the uploaded file
     const cookieManager = await createCookieManager();
     try {
-      // Attempt to load/validate the file we just saved
-      await cookieManager.loadFromFile(req.file.path);
-      res.json({
+      await cookieManager.loadFromFile(filePath);
+      return c.json({
         success: true,
-        message: "Cookies uploaded and validated successfully",
-        filename: req.file.filename,
+        message: 'Cookies uploaded and validated successfully',
+        filename,
       });
     } catch (validationError: any) {
       // If invalid, delete the file
-      fs.unlinkSync(req.file.path);
-      res.status(400).json({
+      fs.unlinkSync(filePath);
+      return c.json({
         success: false,
         error: `Invalid cookie file: ${validationError.message}`,
-      });
+      }, 400);
     }
   } catch (error: any) {
-    serverLogger.error("上传 cookies 失败", error);
-    res.status(500).json({ success: false, error: error.message });
+    serverLogger.error('上传 cookies 失败', error);
+    return c.json({ success: false, error: error.message }, 500);
   }
 });
 
-// Start Server
-const serverInstance = app.listen(PORT, () => {
-  serverLogger.info(`服务器启动`, { port: PORT, host: "localhost" });
+// ============ Static Files & SPA ============
+
+// Serve static files from public directory
+app.use('/assets/*', serveStatic({ root: './public' }));
+app.use('/enso.svg', serveStatic({ path: './public/enso.svg' }));
+app.use('/icon.png', serveStatic({ path: './public/icon.png' }));
+
+// SPA fallback - serve requested HTML file or index.html
+app.get('*', (c) => {
+  const requestPath = c.req.path;
+  
+  // Try to serve the exact file if it's an HTML request
+  if (requestPath.endsWith('.html')) {
+    const filePath = path.join(STATIC_DIR, requestPath);
+    if (fs.existsSync(filePath)) {
+      return c.html(fs.readFileSync(filePath, 'utf-8'));
+    }
+  }
+  
+  // Fallback to index.html for SPA
+  const indexPath = path.join(STATIC_DIR, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    return c.html(fs.readFileSync(indexPath, 'utf-8'));
+  }
+  return c.text('Not found', 404);
 });
 
-const SHUTDOWN_TIMEOUT_MS = 12000;
-async function gracefulShutdown(signal: string) {
-  if (isShuttingDown) return;
-  isShuttingDown = true;
+// ============ Server Configuration ============
 
-  serverLogger.info(`收到关闭信号: ${signal}，正在关闭 HTTP 服务器`);
-  serverInstance.close(() => {
-    serverLogger.info("HTTP 服务器已关闭");
-    process.exit(0);
-  });
-  setTimeout(() => process.exit(0), SHUTDOWN_TIMEOUT_MS + 2000).unref();
-}
+console.log(`Server configured for port ${PORT}`);
+console.log(`📊 Queue monitor at http://localhost:${PORT}/queue-monitor.html`);
 
-["SIGINT", "SIGTERM"].forEach((signal) => {
-  process.on(signal as NodeJS.Signals, () => gracefulShutdown(signal));
-});
+// Bun will automatically serve this when running with `bun run`
+// The port is configured via export default { port, fetch }
+export default {
+  port: PORT,
+  fetch: app.fetch,
+};
+
