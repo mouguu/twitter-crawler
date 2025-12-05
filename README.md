@@ -138,8 +138,8 @@ Open **http://localhost:5001** — everything included (PostgreSQL, Redis, Serve
 **Access Points**:
 
 - 🌐 **Web UI**: http://localhost:5001
-- 📊 **Prisma Studio**: http://localhost:5555 (Database GUI)
-- 📈 **Queue Dashboard**: http://localhost:5001/admin/queues
+- 📊 **Queue Monitor**: http://localhost:5001/queue-monitor.html
+- 🗄️ **Prisma Studio**: http://localhost:5555 (Database GUI)
 
 ```bash
 docker compose logs -f app worker  # View logs
@@ -380,7 +380,7 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for:
 | ----------------------------------------------------- | --------------------------------------------------------------------- |
 | **[Bun](https://bun.sh/) 1.2**                        | Ultra-fast JavaScript runtime with native TypeScript support          |
 | **[TypeScript](https://www.typescriptlang.org/) 5.x** | Type-safe JavaScript                                                  |
-| **[Express](https://expressjs.com/)**                 | HTTP server framework                                                 |
+| **[Hono](https://hono.dev/)**                         | Ultrafast web framework for the Edge (Express replacement)            |
 | **[BullMQ](https://docs.bullmq.io/)**                 | Redis-backed job queue with retries, backoff, and concurrency control |
 | **[Prisma](https://www.prisma.io/)**                  | Type-safe ORM for PostgreSQL                                          |
 | **[Puppeteer](https://pptr.dev/)**                    | Headless Chrome for dynamic content scraping                          |
@@ -415,12 +415,12 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
 ### DevOps
 
-| Technology                                                | Purpose                       |
-| --------------------------------------------------------- | ----------------------------- |
-| **[Docker](https://www.docker.com/)**                     | Containerization              |
-| **[Docker Compose](https://docs.docker.com/compose/)**    | Multi-container orchestration |
-| **[Bull Board](https://github.com/felixmosh/bull-board)** | Queue monitoring dashboard    |
-| **[Prisma Studio](https://www.prisma.io/studio)**         | Database GUI                  |
+| Technology                                             | Purpose                       |
+| ------------------------------------------------------ | ----------------------------- |
+| **[Docker](https://www.docker.com/)**                  | Containerization              |
+| **[Docker Compose](https://docs.docker.com/compose/)** | Multi-container orchestration |
+| **Custom Queue Monitor**                               | Built-in queue monitoring UI  |
+| **[Prisma Studio](https://www.prisma.io/studio)**      | Database GUI                  |
 
 ### Architecture Patterns
 
