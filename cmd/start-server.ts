@@ -330,6 +330,25 @@ app.get("/api/download", (req: Request, res: Response) => {
     return res.status(404).send("File not found");
   }
 
+  // Handle directory paths: try to find index.md
+  if (fs.statSync(resolvedPath).isDirectory()) {
+    let candidate = path.join(resolvedPath, 'index.md');
+    if (fs.existsSync(candidate)) {
+      resolvedPath = candidate;
+    } else if (path.basename(resolvedPath) === 'markdown') {
+      // If requesting 'markdown' folder, try parent's index.md
+      candidate = path.join(path.dirname(resolvedPath), 'index.md');
+      if (fs.existsSync(candidate)) {
+        resolvedPath = candidate;
+      }
+    }
+    
+    // Re-check safety for the new path
+    if (!outputPathManager.isPathSafe(resolvedPath)) {
+       return res.status(400).send("Invalid file path");
+    }
+  }
+
   // Generate a better filename
   const basename = path.basename(resolvedPath);
 
