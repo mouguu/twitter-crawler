@@ -7,6 +7,7 @@ import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { Browser, Page, HTTPRequest } from 'puppeteer';
 import * as constants from '../config/constants';
+import { getRandomFingerprint, getRandomUserAgent } from '../config/constants';
 import { ScraperErrors } from './errors';
 
 puppeteer.use(StealthPlugin());
@@ -25,6 +26,8 @@ export interface BrowserLaunchOptions {
     blockedResourceTypes?: string[];
     puppeteerOptions?: any;
     proxy?: ProxyConfig;
+    /** 🆕 是否启用指纹随机化（默认 true） */
+    randomizeFingerprint?: boolean;
 }
 
 /**
@@ -65,10 +68,30 @@ export class BrowserManager {
             || process.env.CHROME_BIN
             || undefined; // Let puppeteer auto-detect if not specified
 
+        // 🆕 指纹随机化（默认启用）
+        const useRandomFingerprint = options.randomizeFingerprint !== false;
+        const fingerprint = useRandomFingerprint ? getRandomFingerprint() : null;
+        
+        // 确定使用的 viewport
+        const viewport = fingerprint?.viewport || constants.BROWSER_VIEWPORT;
+        
+        // 构建浏览器启动参数
+        const browserArgs = [...constants.BROWSER_ARGS];
+        
+        // 🆕 使用随机窗口大小替换默认值
+        if (fingerprint) {
+            const windowSizeIndex = browserArgs.findIndex(arg => arg.startsWith('--window-size='));
+            if (windowSizeIndex >= 0) {
+                browserArgs[windowSizeIndex] = fingerprint.windowSize;
+            } else {
+                browserArgs.push(fingerprint.windowSize);
+            }
+        }
+
         const launchOptions: any = {
             headless: options.headless !== false,
-            args: [...constants.BROWSER_ARGS], // 确保参数被正确传递
-            defaultViewport: constants.BROWSER_VIEWPORT,
+            args: browserArgs,
+            defaultViewport: viewport,
             ...options.puppeteerOptions,
             // Ensure executablePath is set if provided
             ...(executablePath ? { executablePath } : {})
@@ -84,7 +107,11 @@ export class BrowserManager {
         if (executablePath) {
             console.log(`[BrowserManager] Using Chrome at: ${executablePath}`);
         }
-        console.log('[BrowserManager] Launching with args:', launchOptions.args);
+        
+        // 🆕 输出指纹信息
+        if (fingerprint) {
+            console.log(`[BrowserManager] 🎭 Random fingerprint: ${viewport.width}x${viewport.height}`);
+        }
 
         try {
             this.browser = await puppeteer.launch(launchOptions);
@@ -117,8 +144,23 @@ export class BrowserManager {
             console.log(`[BrowserManager] Proxy authentication injected for ${options.proxy.host}:${options.proxy.port}`);
         }
 
-        // 设置 User Agent
-        await this.page.setUserAgent(options.userAgent || constants.BROWSER_USER_AGENT);
+        // 🆕 设置 User Agent（支持随机化）
+        const useRandomFingerprint = options.randomizeFingerprint !== false;
+        const userAgent = options.userAgent 
+            || (useRandomFingerprint ? getRandomUserAgent() : constants.BROWSER_USER_AGENT);
+        await this.page.setUserAgent(userAgent);
+        
+        if (useRandomFingerprint && !options.userAgent) {
+            // 只显示 UA 的简短版本
+            const uaShort = userAgent.includes('Chrome') 
+                ? `Chrome/${userAgent.match(/Chrome\/(\d+)/)?.[1] || '?'}`
+                : userAgent.includes('Firefox')
+                    ? `Firefox/${userAgent.match(/Firefox\/(\d+)/)?.[1] || '?'}`
+                    : userAgent.includes('Safari')
+                        ? 'Safari'
+                        : 'Unknown';
+            console.log(`[BrowserManager] 🎭 Random UA: ${uaShort}`);
+        }
 
         // 配置请求拦截
         if (options.blockResources !== false) {
