@@ -6,22 +6,20 @@
 # ==========================================
 # 阶段 1: 构建阶段 (Builder)
 # ==========================================
-FROM oven/bun:1.2.24 as builder
+FROM oven/bun:1-debian AS builder
 WORKDIR /app
 
-# 1. 缓存层：只复制依赖文件，利用 Docker Layer Caching
-COPY package.json bun.lockb ./
+# 1. 复制 Prisma schema（供生成 Client 使用）
 COPY prisma ./prisma
 
-# 2. 安装所有依赖 (包括 devDependencies，因为构建前端需要)
-RUN bun install --frozen-lockfile
-
-# 3. 生成 Prisma Client
-COPY prisma.config.ts ./
-RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" bunx prisma generate
-
-# 4. 复制源码
+# 2. 复制所有源码（包括 WASM 源码，供 postinstall 脚本构建）
 COPY . .
+
+# 3. 安装依赖（跳过 postinstall 脚本，使用预构建的 WASM 文件）
+RUN bun install --ignore-scripts
+
+# 4. 生成 Prisma Client
+RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" bunx prisma generate
 
 # 5. 构建前端 (产出到 frontend/dist)
 RUN cd frontend && bun install && bun run build
@@ -29,7 +27,7 @@ RUN cd frontend && bun install && bun run build
 # ==========================================
 # 阶段 2: 运行阶段 (Runner)
 # ==========================================
-FROM oven/bun:1.2.24-slim as runner
+FROM oven/bun:1-slim AS runner
 WORKDIR /app
 
 # 1. 安装 Chromium (Puppeteer 运行环境)
@@ -71,8 +69,7 @@ COPY --from=builder /app/wasm/tweet-cleaner/pkg ./wasm/tweet-cleaner/pkg
 COPY --from=builder /app/wasm/reddit-cleaner/pkg ./wasm/reddit-cleaner/pkg
 COPY --from=builder /app/wasm/url-normalizer/pkg ./wasm/url-normalizer/pkg
 
-# 6. 复制前端构建产物
-COPY --from=builder /app/frontend/dist ./frontend/dist
+# 6. 复制前端构建产物 (Vite outputs to ../public)
 COPY --from=builder /app/public ./public
 
 # 7. 复制 Prisma 生成的 Client
