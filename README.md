@@ -281,15 +281,17 @@ cd frontend && bun run test           # 16 tests across 4 files
 
 ### Lint & Type Check
 
+### Lint & Check
+
 ```bash
-bun run lint
+bun run check         # Run Biome check (Lint + Format)
+bun run lint          # Run Biome lint
 ```
 
 ### Format Code
 
 ```bash
-bun run format        # Auto-format all code
-bun run format:check  # Check formatting
+bun run format        # Auto-format all code with Biome
 ```
 
 ### Build WASM (if editing Rust)
@@ -366,7 +368,7 @@ XRcrawler/
 
 We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
-- Code style guidelines (EditorConfig, Prettier)
+- Code style guidelines (EditorConfig, Biome)
 - Testing requirements
 - Pull request process
 
@@ -427,8 +429,19 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for:
 - **Queue-first design**: All scraping jobs go through BullMQ for reliability
 - **Event-driven**: Redis Pub/Sub for real-time progress streaming via SSE
 - **Platform adapters**: Plugin architecture for multi-platform support
-- **Resume-capable**: Checkpoints saved to PostgreSQL for crash recovery
+- **Rescue-capable**: Checkpoints saved to PostgreSQL for crash recovery
 - **Error classification**: Smart retry strategies based on error types
+
+### 🧑‍💻 Best-in-Class DX
+
+We prioritize developer happiness with a modern, fast toolchain:
+
+| Tool                                                     | Benefit                                                                   |
+| :------------------------------------------------------- | :------------------------------------------------------------------------ |
+| **[Biome](https://biomejs.dev/)**                        | Instant linting & formatting (replaced Prettier/ESLint)                   |
+| **[Lefthook](https://github.com/evilmartians/lefthook)** | Fast, parallel Git hooks ensuring code quality on commit                  |
+| **Typed Env**                                            | `core/env.ts` with **Zod** validation for type-safe environment variables |
+| **Path Aliases**                                         | Clean imports via `@/core/*` and `@/utils/*`                              |
 
 ---
 
