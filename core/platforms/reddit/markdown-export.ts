@@ -147,8 +147,10 @@ export function exportRedditToMarkdown(
  * Sanitize filename (remove special characters)
  */
 function sanitizeFilename(name: string): string {
+  // Use 50 chars max to be safe with multi-byte characters (e.g. Chinese = 3 bytes)
+  // Filesystems typically have 255 byte limit. 50 * 4 + extension < 255
   return name
     .replace(/[/\\?%*:|"<>]/g, '-')
     .replace(/\s+/g, '_')
-    .slice(0, 100); // Limit length
+    .slice(0, 50);
 }

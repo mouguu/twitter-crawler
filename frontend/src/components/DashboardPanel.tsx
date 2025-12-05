@@ -32,6 +32,7 @@ export function DashboardPanel({
   fetchJobStatus: fetchJobStatusProp,
 }: DashboardPanelProps) {
   const [activeJobs, setActiveJobs] = useState<Map<string, ActiveJob>>(new Map());
+  const [isLoading, setIsLoading] = useState(true);
 
   const updateJob = (jobId: string, updates: Partial<ActiveJob>) => {
     setActiveJobs((prev) => {
@@ -200,6 +201,8 @@ export function DashboardPanel({
         }
       } catch (error) {
         console.error('❌ [DashboardPanel] Failed to fetch active jobs:', error);
+      } finally {
+        setIsLoading(false);
       }
     };
 
@@ -256,37 +259,44 @@ export function DashboardPanel({
         </div>
 
         {/* Jobs List */}
-        {jobsArray.length === 0 ? (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="border border-dashed border-border rounded-2xl p-12 text-center"
-          >
-            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-muted flex items-center justify-center">
-              <Zap className="w-8 h-8 text-muted-foreground" />
+        <div className="min-h-[300px]">
+          {isLoading ? (
+            <div className="h-[300px] border border-dashed border-border/50 rounded-2xl bg-muted/10 flex flex-col items-center justify-center text-muted-foreground animate-pulse">
+              <Loader2 className="w-8 h-8 mb-4 animate-spin text-primary/50" />
+              <p>Loading active tasks...</p>
             </div>
-            <h3 className="text-lg font-medium mb-2">No active jobs</h3>
-            <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-              Start an extraction task above to see your jobs here. Jobs will appear in real-time as
-              they process.
-            </p>
-          </motion.div>
-        ) : (
-          <div className="space-y-4">
-            <AnimatePresence mode="popLayout">
-              {jobsArray.map((job) => (
-                <JobCard
-                  key={job.jobId}
-                  job={job}
-                  appendApiKey={appendApiKey}
-                  fetchJobStatus={fetchJobStatus}
-                  onCancel={() => handleCancel(job.jobId)}
-                  onRemove={() => removeJob(job.jobId)}
-                />
-              ))}
-            </AnimatePresence>
-          </div>
-        )}
+          ) : jobsArray.length === 0 ? (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="h-[300px] border border-dashed border-border rounded-2xl p-12 text-center flex flex-col items-center justify-center"
+            >
+              <div className="w-16 h-16 mb-4 rounded-2xl bg-muted flex items-center justify-center">
+                <Zap className="w-8 h-8 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-medium mb-2">No active jobs</h3>
+              <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+                Start an extraction task above to see your jobs here. Jobs will appear in real-time
+                as they process.
+              </p>
+            </motion.div>
+          ) : (
+            <div className="space-y-4">
+              <AnimatePresence mode="popLayout">
+                {jobsArray.map((job) => (
+                  <JobCard
+                    key={job.jobId}
+                    job={job}
+                    appendApiKey={appendApiKey}
+                    fetchJobStatus={fetchJobStatus}
+                    onCancel={() => handleCancel(job.jobId)}
+                    onRemove={() => removeJob(job.jobId)}
+                  />
+                ))}
+              </AnimatePresence>
+            </div>
+          )}
+        </div>
       </div>
     </section>
   );
