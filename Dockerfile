@@ -78,5 +78,8 @@ COPY --from=builder /app/generated ./generated
 
 EXPOSE 5001
 
+# 重置 ENTRYPOINT 让 CMD 直接执行
+ENTRYPOINT []
+
 # 直接运行 TS，Bun 不需要编译成 JS 也能跑生产环境
-CMD ["bun", "run", "cmd/start-server.ts"]
+CMD ["/usr/local/bin/bun", "run", "cmd/start-server.ts"]

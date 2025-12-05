@@ -37,6 +37,7 @@ services:
     ports:
       - "5001:5001"
     restart: unless-stopped
+    command: ["/usr/local/bin/bun", "run", "cmd/start-server.ts"]
 
   worker:
     build: .
@@ -52,7 +53,7 @@ services:
       - ./data:/app/data
       - ./data/output:/app/output
       - ./data/cookies:/app/cookies
-    command: [ "bun", "run", "cmd/start-worker.ts" ]
+    command: ["/usr/local/bin/bun", "run", "cmd/start-worker.ts"]
     restart: unless-stopped
 
   studio:
@@ -62,7 +63,7 @@ services:
       - "5555:5555"
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/xrcrawler
-    command: ["bunx", "prisma", "studio", "--port", "5555", "--browser", "none"]
+    command: ["/usr/local/bin/bunx", "prisma", "studio", "--port", "5555", "--browser", "none"]
     depends_on:
       - postgres
 
