@@ -79,32 +79,44 @@ export function ActiveJobsPanel({ onJobComplete }: ActiveJobsPanelProps) {
       },
 
       onProgress: (progress) => {
-        const job = activeJobs.get(jobId);
-        updateJob(jobId, {
-          progress,
-          logs: [
-            ...(job?.logs || []),
-            `Progress: ${progress.current}/${progress.target} - ${progress.action}`,
-          ].slice(-10),
+        setActiveJobs(prev => {
+          const updated = new Map(prev);
+          const job = updated.get(jobId);
+          if (job) {
+            job.progress = progress;
+            job.logs = [
+              ...(job.logs || []),
+              `Progress: ${progress.current}/${progress.target} - ${progress.action}`,
+            ].slice(-10);
+          }
+          return updated;
         });
       },
 
       onLog: (log) => {
-        const job = activeJobs.get(jobId);
-        updateJob(jobId, {
-          logs: [
-            ...(job?.logs || []),
-            `[${log.level}] ${log.message}`,
-          ].slice(-10),
+        setActiveJobs(prev => {
+          const updated = new Map(prev);
+          const job = updated.get(jobId);
+          if (job) {
+            job.logs = [
+              ...(job.logs || []),
+              `[${log.level}] ${log.message}`,
+            ].slice(-10);
+          }
+          return updated;
         });
       },
 
       onCompleted: (result) => {
-        const job = activeJobs.get(jobId);
-        updateJob(jobId, {
-          state: 'completed',
-          result: result.result,
-          logs: [...(job?.logs || []), '✅ Job completed!'],
+        setActiveJobs(prev => {
+          const updated = new Map(prev);
+          const job = updated.get(jobId);
+          if (job) {
+            job.state = 'completed';
+            job.result = result.result;
+            job.logs = [...(job.logs || []), '✅ Job completed!'];
+          }
+          return updated;
         });
 
         // Notify parent
@@ -117,10 +129,14 @@ export function ActiveJobsPanel({ onJobComplete }: ActiveJobsPanelProps) {
       },
 
       onFailed: (error) => {
-        const job = activeJobs.get(jobId);
-        updateJob(jobId, {
-          state: 'failed',
-          logs: [...(job?.logs || []), `❌ Job failed: ${error}`],
+        setActiveJobs(prev => {
+          const updated = new Map(prev);
+          const job = updated.get(jobId);
+          if (job) {
+            job.state = 'failed';
+            job.logs = [...(job.logs || []), `❌ Job failed: ${error}`];
+          }
+          return updated;
         });
       },
     });
