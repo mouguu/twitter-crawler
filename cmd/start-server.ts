@@ -313,7 +313,7 @@ app.get("/api/download", (req: Request, res: Response) => {
     return res.status(400).send("Invalid file path");
   }
 
-  const resolvedPath = path.resolve(filePathParam);
+  let resolvedPath = path.resolve(filePathParam);
 
   // 检查路径是否安全（在 output 目录内）
   if (!outputPathManager.isPathSafe(resolvedPath)) {

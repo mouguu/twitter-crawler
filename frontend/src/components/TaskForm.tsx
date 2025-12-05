@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { DatePicker } from "@/components/ui/date-picker";
 
 type ScrapeMode = "graphql" | "puppeteer" | "mixed";
 
@@ -310,18 +311,36 @@ export function TaskForm(props: TaskFormProps) {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label className="text-sm font-medium">Start Date</Label>
-                        <Input
-                          type="date"
-                          value={startDate}
-                          onChange={(e) => onStartDateChange(e.target.value)}
+                        <DatePicker
+                          date={startDate ? new Date(startDate) : undefined}
+                          setDate={(date: Date | undefined) => {
+                            if (date) {
+                              // Format as YYYY-MM-DD
+                              const offset = date.getTimezoneOffset();
+                              const localDate = new Date(date.getTime() - (offset * 60 * 1000));
+                              onStartDateChange(localDate.toISOString().split('T')[0]);
+                            } else {
+                              onStartDateChange("");
+                            }
+                          }}
+                          placeholder="Select start date"
                         />
                       </div>
                       <div className="space-y-2">
                         <Label className="text-sm font-medium">End Date</Label>
-                        <Input
-                          type="date"
-                          value={endDate}
-                          onChange={(e) => onEndDateChange(e.target.value)}
+                        <DatePicker
+                          date={endDate ? new Date(endDate) : undefined}
+                          setDate={(date: Date | undefined) => {
+                            if (date) {
+                                // Format as YYYY-MM-DD
+                                const offset = date.getTimezoneOffset();
+                                const localDate = new Date(date.getTime() - (offset * 60 * 1000));
+                                onEndDateChange(localDate.toISOString().split('T')[0]);
+                            } else {
+                              onEndDateChange("");
+                            }
+                          }}
+                          placeholder="Select end date"
                         />
                       </div>
                     </div>
@@ -375,9 +394,48 @@ export function TaskForm(props: TaskFormProps) {
                       </>
                     )}
 
+
+
+                    {activeTab === "search" && (
+                      <>
+                        <label className="flex items-center gap-3 cursor-pointer group">
+                          <Checkbox
+                            checked={enableDeepSearch}
+                            onCheckedChange={(c) => onToggleDeepSearch(c as boolean)}
+                          />
+                          <div>
+                            <span className="text-sm group-hover:text-foreground transition-colors block">
+                              Date chunking
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              Split into monthly chunks for deeper results
+                            </span>
+                          </div>
+                        </label>
+
+                        {enableDeepSearch && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            className="pl-7 space-y-2"
+                          >
+                            <Label className="text-sm">Parallel chunks</Label>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={3}
+                              value={parallelChunks}
+                              onChange={(e) => onParallelChunksChange(parseInt(e.target.value))}
+                              className="w-20 font-mono"
+                            />
+                          </motion.div>
+                        )}
+                      </>
+                    )}
+
                     {/* Anti-Detection Level */}
                     {activeTab !== "reddit" && onAntiDetectionLevelChange && (
-                      <div className="space-y-2 pt-2 border-t border-border/50">
+                      <div className="space-y-2">
                         <Label className="text-sm font-medium">
                           Anti-Detection Level
                         </Label>
@@ -416,43 +474,6 @@ export function TaskForm(props: TaskFormProps) {
                           </SelectContent>
                         </Select>
                       </div>
-                    )}
-
-                    {activeTab === "search" && (
-                      <>
-                        <label className="flex items-center gap-3 cursor-pointer group">
-                          <Checkbox
-                            checked={enableDeepSearch}
-                            onCheckedChange={(c) => onToggleDeepSearch(c as boolean)}
-                          />
-                          <div>
-                            <span className="text-sm group-hover:text-foreground transition-colors block">
-                              Date chunking
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              Split into monthly chunks for deeper results
-                            </span>
-                          </div>
-                        </label>
-
-                        {enableDeepSearch && (
-                          <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: "auto" }}
-                            className="pl-7 space-y-2"
-                          >
-                            <Label className="text-sm">Parallel chunks</Label>
-                            <Input
-                              type="number"
-                              min={1}
-                              max={3}
-                              value={parallelChunks}
-                              onChange={(e) => onParallelChunksChange(parseInt(e.target.value))}
-                              className="w-20 font-mono"
-                            />
-                          </motion.div>
-                        )}
-                      </>
                     )}
                   </div>
 
