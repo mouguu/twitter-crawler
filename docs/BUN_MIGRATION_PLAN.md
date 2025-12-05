@@ -44,20 +44,19 @@
 
 ### 第二阶段：Puppeteer 适配（关键）
 
-- [ ] **2.1 切换到 puppeteer-core**
+> ✅ **验证结果**: `puppeteer-extra` + stealth 插件在 Bun 下正常工作，无需切换到 `puppeteer-core`
 
-  ```json
-  {
-    "dependencies": {
-      "puppeteer-core": "^23.0.0" // 替换 puppeteer
-    }
-  }
-  ```
+- [x] **2.1 验证 puppeteer-extra 兼容性** ✅
+  - `puppeteer-extra` 和 `puppeteer-extra-plugin-stealth` 在 Bun 环境下工作正常
+  - 无需切换到 `puppeteer-core`
 
-- [ ] **2.2 更新爬虫代码**
-  - 修改 `core/platforms/twitter-adapter.ts`
-  - 添加 `executablePath` 配置指向系统 Chromium
-  - 添加 Bun 优化参数 `--disable-dev-shm-usage`
+- [x] **2.2 添加 executablePath 配置** ✅
+  - 修改 `core/browser-manager.ts`
+  - 支持 Chrome 路径优先级检测：
+    1. `options.puppeteerOptions.executablePath`
+    2. `PUPPETEER_EXECUTABLE_PATH` 环境变量
+    3. `CHROME_BIN` 环境变量
+    4. puppeteer 自动检测
 
 ### 第三阶段：依赖兼容性修复
 
