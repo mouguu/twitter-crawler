@@ -312,13 +312,14 @@ export function TaskForm(props: TaskFormProps) {
                       <div className="space-y-2">
                         <Label className="text-sm font-medium">Start Date</Label>
                         <DatePicker
-                          date={startDate ? new Date(startDate) : undefined}
+                          date={startDate ? new Date(startDate + 'T00:00:00') : undefined}
                           setDate={(date: Date | undefined) => {
                             if (date) {
-                              // Format as YYYY-MM-DD
-                              const offset = date.getTimezoneOffset();
-                              const localDate = new Date(date.getTime() - (offset * 60 * 1000));
-                              onStartDateChange(localDate.toISOString().split('T')[0]);
+                              // Format as YYYY-MM-DD (date is already in local time)
+                              const year = date.getFullYear();
+                              const month = String(date.getMonth() + 1).padStart(2, '0');
+                              const day = String(date.getDate()).padStart(2, '0');
+                              onStartDateChange(`${year}-${month}-${day}`);
                             } else {
                               onStartDateChange("");
                             }
@@ -329,13 +330,14 @@ export function TaskForm(props: TaskFormProps) {
                       <div className="space-y-2">
                         <Label className="text-sm font-medium">End Date</Label>
                         <DatePicker
-                          date={endDate ? new Date(endDate) : undefined}
+                          date={endDate ? new Date(endDate + 'T00:00:00') : undefined}
                           setDate={(date: Date | undefined) => {
                             if (date) {
-                                // Format as YYYY-MM-DD
-                                const offset = date.getTimezoneOffset();
-                                const localDate = new Date(date.getTime() - (offset * 60 * 1000));
-                                onEndDateChange(localDate.toISOString().split('T')[0]);
+                              // Format as YYYY-MM-DD (date is already in local time)
+                              const year = date.getFullYear();
+                              const month = String(date.getMonth() + 1).padStart(2, '0');
+                              const day = String(date.getDate()).padStart(2, '0');
+                              onEndDateChange(`${year}-${month}-${day}`);
                             } else {
                               onEndDateChange("");
                             }
