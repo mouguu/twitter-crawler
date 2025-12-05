@@ -1,3 +1,4 @@
+import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test';
 import * as path from 'path';
 import { isPathInsideBase } from '../../utils/path-utils';
 

@@ -2,7 +2,7 @@
  * MetricsCollector 单元测试
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, test, expect, beforeEach } from 'bun:test';
 import { MetricsCollector, getMetricsCollector, resetMetricsCollector } from '../../core/metrics-collector';
 
 describe('MetricsCollector', () => {
@@ -14,7 +14,7 @@ describe('MetricsCollector', () => {
   });
 
   describe('recordScrape', () => {
-    it('should record successful scrape', () => {
+    test('should record successful scrape', () => {
       collector.recordScrape('twitter', true);
       
       const metrics = collector.getMetrics();
@@ -25,7 +25,7 @@ describe('MetricsCollector', () => {
       expect(metrics.scrapes.byPlatform.twitter.successful).toBe(1);
     });
 
-    it('should record failed scrape', () => {
+    test('should record failed scrape', () => {
       collector.recordScrape('reddit', false);
       
       const metrics = collector.getMetrics();
@@ -36,7 +36,7 @@ describe('MetricsCollector', () => {
       expect(metrics.scrapes.byPlatform.reddit.failed).toBe(1);
     });
 
-    it('should track multiple platforms', () => {
+    test('should track multiple platforms', () => {
       collector.recordScrape('twitter', true);
       collector.recordScrape('reddit', true);
       collector.recordScrape('twitter', false);
@@ -49,7 +49,7 @@ describe('MetricsCollector', () => {
   });
 
   describe('recordPerformance', () => {
-    it('should record performance metrics', () => {
+    test('should record performance metrics', () => {
       // Need to record a scrape first for average calculation
       collector.recordScrape('twitter', true);
       // Wait a bit to ensure elapsed time > 0
@@ -67,7 +67,7 @@ describe('MetricsCollector', () => {
       expect(metrics.performance.tweetsPerSecond).toBeGreaterThanOrEqual(0);
     });
 
-    it('should calculate tweets per second correctly', () => {
+    test('should calculate tweets per second correctly', () => {
       collector.recordScrape('twitter', true);
       // Wait a bit to ensure elapsed time > 0
       const startTime = Date.now();
@@ -84,7 +84,7 @@ describe('MetricsCollector', () => {
   });
 
   describe('recordError', () => {
-    it('should record error by type', () => {
+    test('should record error by type', () => {
       collector.recordError('RATE_LIMIT', true, false);
       collector.recordError('AUTH_FAILED', false, true);
       
@@ -97,7 +97,7 @@ describe('MetricsCollector', () => {
       expect(metrics.errors.authFailures).toBeGreaterThanOrEqual(1);
     });
 
-    it('should track retryable errors', () => {
+    test('should track retryable errors', () => {
       collector.recordError('RATE_LIMIT', true, false);
       collector.recordError('NETWORK_ERROR', true, false);
       
@@ -108,7 +108,7 @@ describe('MetricsCollector', () => {
   });
 
   describe('updateResources', () => {
-    it('should update resource metrics', () => {
+    test('should update resource metrics', () => {
       collector.updateResources({
         browserPoolSize: 5,
         browserPoolInUse: 2,
@@ -123,7 +123,7 @@ describe('MetricsCollector', () => {
       expect(metrics.resources.activeSessions).toBe(3);
     });
 
-    it('should update partial resources', () => {
+    test('should update partial resources', () => {
       collector.updateResources({
         browserPoolSize: 3
       });
@@ -134,7 +134,7 @@ describe('MetricsCollector', () => {
   });
 
   describe('getMetrics', () => {
-    it('should return all metrics', () => {
+    test('should return all metrics', () => {
       collector.recordScrape('twitter', true);
       collector.recordPerformance(1000, 2000, 50);
       collector.recordError('RATE_LIMIT', true, false);
@@ -148,7 +148,7 @@ describe('MetricsCollector', () => {
       expect(metrics).toHaveProperty('timestamp');
     });
 
-    it('should include timestamp', () => {
+    test('should include timestamp', () => {
       const metrics = collector.getMetrics();
       expect(metrics.timestamp).toBeGreaterThan(0);
       expect(typeof metrics.timestamp).toBe('number');
@@ -156,7 +156,7 @@ describe('MetricsCollector', () => {
   });
 
   describe('getSummary', () => {
-    it('should return summary statistics', () => {
+    test('should return summary statistics', () => {
       collector.recordScrape('twitter', true);
       collector.recordScrape('twitter', false);
       collector.recordScrape('reddit', true);
@@ -170,7 +170,7 @@ describe('MetricsCollector', () => {
   });
 
   describe('reset', () => {
-    it('should reset all metrics', () => {
+    test('should reset all metrics', () => {
       collector.recordScrape('twitter', true);
       collector.recordPerformance(1000, 2000, 50);
       collector.recordError('RATE_LIMIT', true, false);
@@ -185,14 +185,14 @@ describe('MetricsCollector', () => {
   });
 
   describe('getMetricsCollector (singleton)', () => {
-    it('should return the same instance', () => {
+    test('should return the same instance', () => {
       const instance1 = getMetricsCollector();
       const instance2 = getMetricsCollector();
       
       expect(instance1).toBe(instance2);
     });
 
-    it('should share metrics across instances', () => {
+    test('should share metrics across instances', () => {
       const instance1 = getMetricsCollector();
       instance1.recordScrape('twitter', true);
       

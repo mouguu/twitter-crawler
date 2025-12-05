@@ -3,7 +3,7 @@
  * 注意：这个测试文件需要真实的文件系统交互，而不是 mock
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import { CookieManager } from '../../core/cookie-manager';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -28,7 +28,7 @@ describe('CookieManager', () => {
     });
 
     describe('scanCookieFiles', () => {
-        it('should return a list of json files in the directory', async () => {
+        test('should return a list of json files in the directory', async () => {
             // Create test files
             fs.writeFileSync(path.join(testCookiesDir, 'cookie1.json'), '{}');
             fs.writeFileSync(path.join(testCookiesDir, 'cookie2.json'), '{}');
@@ -41,14 +41,14 @@ describe('CookieManager', () => {
             expect(files.some(f => f.includes('cookie2.json'))).toBe(true);
         });
 
-        it('should return empty list if no json files exist', async () => {
+        test('should return empty list if no json files exist', async () => {
             const files = await cookieManager.scanCookieFiles();
             expect(files).toEqual([]);
         });
     });
 
     describe('getNextCookieFile', () => {
-        it('should rotate through cookie files', async () => {
+        test('should rotate through cookie files', async () => {
             fs.writeFileSync(path.join(testCookiesDir, 'a.json'), '{}');
             fs.writeFileSync(path.join(testCookiesDir, 'b.json'), '{}');
             
@@ -64,7 +64,7 @@ describe('CookieManager', () => {
     });
 
     describe('loadFromFile', () => {
-        it('should load cookies from valid file', async () => {
+        test('should load cookies from valid file', async () => {
             const cookieData = {
                 cookies: [
                     { name: 'auth_token', value: 'test123', domain: '.twitter.com', path: '/' }
@@ -80,7 +80,7 @@ describe('CookieManager', () => {
             expect(result.cookies[0].name).toBe('auth_token');
         });
 
-        it('should throw error for invalid file', async () => {
+        test('should throw error for invalid file', async () => {
             const cookieFile = path.join(testCookiesDir, 'invalid.json');
             fs.writeFileSync(cookieFile, 'not json');
             

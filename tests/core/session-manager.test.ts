@@ -1,49 +1,72 @@
+/**
+ * SessionManager 单元测试
+ * 使用真实文件系统进行集成测试
+ */
 
+import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import { SessionManager } from '../../core/session-manager';
 import * as fs from 'fs';
 import * as path from 'path';
-import { CookieManager } from '../../core/cookie-manager';
-
-// Mock fs
-jest.mock('fs');
-
-// Mock CookieManager
-jest.mock('../../core/cookie-manager');
+import * as os from 'os';
 
 describe('SessionManager', () => {
     let sessionManager: SessionManager;
-    const mockCookieDir = '/mock/cookies';
+    let testCookieDir: string;
 
     beforeEach(() => {
-        jest.clearAllMocks();
-        // Reset CookieManager mock implementation
-        (CookieManager as jest.Mock).mockImplementation(() => ({
-            loadFromFile: jest.fn().mockResolvedValue({
-                cookies: [],
-                username: 'user1',
-                source: 'file.json'
-            })
-        }));
+        // 创建临时测试目录
+        testCookieDir = path.join(os.tmpdir(), 'test-cookies-' + Date.now());
+        fs.mkdirSync(testCookieDir, { recursive: true });
         
-        sessionManager = new SessionManager(mockCookieDir);
+        sessionManager = new SessionManager(testCookieDir);
     });
 
+    afterEach(() => {
+        // 清理测试目录
+        try {
+            fs.rmSync(testCookieDir, { recursive: true, force: true });
+        } catch (error) {
+            // Ignore cleanup errors
+        }
+    });
+
+    // 辅助函数：创建模拟的 cookie 文件
+    function createMockCookieFile(filename: string) {
+        const cookieData = {
+            cookies: [
+                { name: 'auth_token', value: 'test123', domain: '.twitter.com', path: '/' }
+            ]
+        };
+        fs.writeFileSync(
+            path.join(testCookieDir, filename),
+            JSON.stringify(cookieData)
+        );
+    }
+
     describe('init', () => {
-        it('should load sessions from cookie files', async () => {
-            (fs.existsSync as jest.Mock).mockReturnValue(true);
-            (fs.readdirSync as jest.Mock).mockReturnValue(['session1.json', 'session2.json']);
+        test('should load sessions from cookie files', async () => {
+            // 创建测试 cookie 文件
+            createMockCookieFile('session1.json');
+            createMockCookieFile('session2.json');
 
             await sessionManager.init();
 
-            // We can't access private 'sessions' directly, but we can check via getSessionById or hasActiveSession
             expect(sessionManager.hasActiveSession()).toBe(true);
             expect(sessionManager.getSessionById('session1')).toBeDefined();
             expect(sessionManager.getSessionById('session2')).toBeDefined();
         });
 
-        it('should handle missing directory gracefully', async () => {
-            (fs.existsSync as jest.Mock).mockReturnValue(false);
+        test('should handle missing directory gracefully', async () => {
+            // 使用不存在的目录
+            const managerWithMissingDir = new SessionManager('/non/existent/path');
             
+            await managerWithMissingDir.init();
+            
+            expect(managerWithMissingDir.hasActiveSession()).toBe(false);
+        });
+
+        test('should handle empty directory', async () => {
+            // 目录存在但没有文件
             await sessionManager.init();
             
             expect(sessionManager.hasActiveSession()).toBe(false);
@@ -52,31 +75,28 @@ describe('SessionManager', () => {
 
     describe('getNextSession', () => {
         beforeEach(async () => {
-            (fs.existsSync as jest.Mock).mockReturnValue(true);
-            (fs.readdirSync as jest.Mock).mockReturnValue(['s1.json', 's2.json']);
+            createMockCookieFile('s1.json');
+            createMockCookieFile('s2.json');
             await sessionManager.init();
         });
 
-        it('should return a session', () => {
+        test('should return a session', () => {
             const session = sessionManager.getNextSession();
             expect(session).toBeDefined();
             expect(['s1', 's2']).toContain(session?.id);
         });
 
-        it('should prioritize preferred session', () => {
+        test('should prioritize preferred session', () => {
             const session = sessionManager.getNextSession('s2.json');
             expect(session?.id).toBe('s2');
         });
 
-        it('should exclude specified session', () => {
-            // Assuming s1 is picked first by default sort (both 0 errors, 0 usage)
-            // If we exclude s1, it should pick s2
+        test('should exclude specified session', () => {
             const session = sessionManager.getNextSession(undefined, 's1.json');
             expect(session?.id).toBe('s2');
         });
 
-        it('should prioritize healthy sessions (fewer errors)', () => {
-            // Manually modify state if possible, or use public methods to induce state
+        test('should prioritize healthy sessions (fewer errors)', () => {
             sessionManager.markBad('s1'); // s1 has 1 error
             
             const session = sessionManager.getNextSession();
@@ -87,12 +107,11 @@ describe('SessionManager', () => {
 
     describe('Session Health', () => {
         beforeEach(async () => {
-            (fs.existsSync as jest.Mock).mockReturnValue(true);
-            (fs.readdirSync as jest.Mock).mockReturnValue(['s1.json']);
+            createMockCookieFile('s1.json');
             await sessionManager.init();
         });
 
-        it('should retire session after max errors', () => {
+        test('should retire session after max errors', () => {
             const maxErrors = 3;
             for (let i = 0; i < maxErrors; i++) {
                 sessionManager.markBad('s1');
@@ -102,10 +121,18 @@ describe('SessionManager', () => {
             expect(sessionManager.hasActiveSession()).toBe(false);
         });
 
-        it('should increment usage count on markGood', () => {
+        test('should increment usage count on markGood', () => {
             sessionManager.markGood('s1');
             const session = sessionManager.getSessionById('s1');
             expect(session?.usageCount).toBe(1);
+        });
+
+        test('should reset consecutive failures on markGood', () => {
+            sessionManager.markBad('s1');
+            sessionManager.markGood('s1');
+            
+            const session = sessionManager.getSessionById('s1');
+            expect(session?.consecutiveFailures).toBe(0);
         });
     });
 });

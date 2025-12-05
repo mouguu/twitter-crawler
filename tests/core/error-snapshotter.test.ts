@@ -2,7 +2,7 @@
  * ErrorSnapshotter 单元测试
  */
 
-import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test';
 import { ErrorSnapshotter } from '../../core/error-snapshotter';
 import { Page } from 'puppeteer';
 import * as path from 'path';
@@ -33,7 +33,7 @@ describe('ErrorSnapshotter', () => {
   });
 
   describe('capture', () => {
-    it('should capture screenshot and HTML', async () => {
+    test('should capture screenshot and HTML', async () => {
       const error = new Error('Test error');
       const files = await snapshotter.capture(mockPage as Page, error, 'test-context');
       
@@ -42,7 +42,7 @@ describe('ErrorSnapshotter', () => {
       expect(mockPage.content).toHaveBeenCalled();
     });
 
-    it('should create error log file', async () => {
+    test('should create error log file', async () => {
       const error = new Error('Test error');
       const files = await snapshotter.capture(mockPage as Page, error, 'test-context');
       
@@ -56,7 +56,7 @@ describe('ErrorSnapshotter', () => {
       }
     });
 
-    it('should handle screenshot failure gracefully', async () => {
+    test('should handle screenshot failure gracefully', async () => {
       mockPage.screenshot = mock(() => Promise.reject(new Error('Screenshot failed')));
       
       const error = new Error('Test error');
@@ -66,7 +66,7 @@ describe('ErrorSnapshotter', () => {
       expect(files.length).toBeGreaterThan(0);
     });
 
-    it('should sanitize context label in filename', async () => {
+    test('should sanitize context label in filename', async () => {
       const error = new Error('Test error');
       const files = await snapshotter.capture(mockPage as Page, error, 'test@context#123');
       

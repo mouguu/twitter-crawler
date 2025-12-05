@@ -1,3 +1,4 @@
+import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test';
 /**
  * Export 工具单元测试
  */
@@ -54,7 +55,7 @@ describe('Export Utils', () => {
   ];
 
   describe('exportToCsv', () => {
-    it('should export tweets to CSV', async () => {
+    test('should export tweets to CSV', async () => {
       const csvPath = await exportUtils.exportToCsv(mockTweets, testRunContext);
       
       expect(csvPath).toBeTruthy();
@@ -66,20 +67,20 @@ describe('Export Utils', () => {
       expect(content).toContain('Test tweet 2');
     });
 
-    it('should handle empty tweet array', async () => {
+    test('should handle empty tweet array', async () => {
       const csvPath = await exportUtils.exportToCsv([], testRunContext);
       
       expect(csvPath).toBeNull();
     });
 
-    it('should escape quotes in CSV', async () => {
+    test('should escape quotes in CSV', async () => {
       const csvPath = await exportUtils.exportToCsv(mockTweets, testRunContext);
       const content = await fs.promises.readFile(csvPath!, 'utf-8');
       
       expect(content).toContain('"Test tweet 2 with ""quotes"""');
     });
 
-    it('should use custom filename', async () => {
+    test('should use custom filename', async () => {
       const csvPath = await exportUtils.exportToCsv(mockTweets, testRunContext, {
         filename: 'custom.csv'
       });
@@ -87,7 +88,7 @@ describe('Export Utils', () => {
       expect(csvPath).toContain('custom.csv');
     });
 
-    it('should throw error for invalid runContext', async () => {
+    test('should throw error for invalid runContext', async () => {
       await expect(
         exportUtils.exportToCsv(mockTweets, {} as any)
       ).rejects.toThrow();
@@ -95,7 +96,7 @@ describe('Export Utils', () => {
   });
 
   describe('exportToJson', () => {
-    it('should export tweets to JSON', async () => {
+    test('should export tweets to JSON', async () => {
       const jsonPath = await exportUtils.exportToJson(mockTweets, testRunContext);
       
       expect(jsonPath).toBeTruthy();
@@ -109,13 +110,13 @@ describe('Export Utils', () => {
       expect(parsed[0].text).toBe('Test tweet 1');
     });
 
-    it('should handle empty tweet array', async () => {
+    test('should handle empty tweet array', async () => {
       const jsonPath = await exportUtils.exportToJson([], testRunContext);
       
       expect(jsonPath).toBeNull();
     });
 
-    it('should format JSON with indentation', async () => {
+    test('should format JSON with indentation', async () => {
       const jsonPath = await exportUtils.exportToJson(mockTweets, testRunContext);
       const content = await fs.promises.readFile(jsonPath!, 'utf-8');
       
@@ -123,7 +124,7 @@ describe('Export Utils', () => {
       expect(content).toContain('\n  ');
     });
 
-    it('should use custom filename', async () => {
+    test('should use custom filename', async () => {
       const jsonPath = await exportUtils.exportToJson(mockTweets, testRunContext, {
         filename: 'custom.json'
       });
@@ -131,7 +132,7 @@ describe('Export Utils', () => {
       expect(jsonPath).toContain('custom.json');
     });
 
-    it('should throw error for invalid runContext', async () => {
+    test('should throw error for invalid runContext', async () => {
       await expect(
         exportUtils.exportToJson(mockTweets, {} as any)
       ).rejects.toThrow();

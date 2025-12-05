@@ -2,7 +2,7 @@
  * ProxyManager 单元测试（增强版）
  */
 
-import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test';
 import { ProxyManager, ProxyStats } from '../../core/proxy-manager';
 import { ScraperEventBus } from '../../core/event-bus';
 import * as fs from 'fs';
@@ -39,14 +39,14 @@ describe('ProxyManager', () => {
   });
 
   describe('init', () => {
-    it('should handle missing proxy directory', async () => {
+    test('should handle missing proxy directory', async () => {
       const managerWithoutDir = new ProxyManager('/non/existent/path');
       await managerWithoutDir.init();
       // Should not throw
       managerWithoutDir.destroy();
     });
 
-    it('should load proxies from file', async () => {
+    test('should load proxies from file', async () => {
       const proxyFile = path.join(testProxyDir, 'proxies.txt');
       fs.writeFileSync(proxyFile, 'host1:8080:user1:pass1\nhost2:8080:user2:pass2');
       
@@ -56,7 +56,7 @@ describe('ProxyManager', () => {
       expect(proxies.length).toBe(2);
     });
 
-    it('should handle invalid proxy format', async () => {
+    test('should handle invalid proxy format', async () => {
       const proxyFile = path.join(testProxyDir, 'proxies.txt');
       fs.writeFileSync(proxyFile, 'invalid-format\nhost1:8080:user1:pass1');
       
@@ -69,12 +69,12 @@ describe('ProxyManager', () => {
   });
 
   describe('getProxyForSession', () => {
-    it('should return null when no proxies available', () => {
+    test('should return null when no proxies available', () => {
       const proxy = manager.getProxyForSession('session1');
       expect(proxy).toBeNull();
     });
 
-    it('should return proxy when available', async () => {
+    test('should return proxy when available', async () => {
       const proxyFile = path.join(testProxyDir, 'proxies.txt');
       fs.writeFileSync(proxyFile, 'host1:8080:user1:pass1');
       
@@ -86,7 +86,7 @@ describe('ProxyManager', () => {
       expect(proxy?.port).toBe(8080);
     });
 
-    it('should return same proxy for same session', async () => {
+    test('should return same proxy for same session', async () => {
       const proxyFile = path.join(testProxyDir, 'proxies.txt');
       fs.writeFileSync(proxyFile, 'host1:8080:user1:pass1\nhost2:8080:user2:pass2');
       
@@ -100,7 +100,7 @@ describe('ProxyManager', () => {
   });
 
   describe('getBestProxy', () => {
-    it('should prefer proxies with higher success rate', async () => {
+    test('should prefer proxies with higher success rate', async () => {
       const proxyFile = path.join(testProxyDir, 'proxies.txt');
       fs.writeFileSync(proxyFile, 'host1:8080:user1:pass1\nhost2:8080:user2:pass2');
       
@@ -124,7 +124,7 @@ describe('ProxyManager', () => {
       expect(best?.host).toBe('host2');
     });
 
-    it('should exclude specified proxies', async () => {
+    test('should exclude specified proxies', async () => {
       const proxyFile = path.join(testProxyDir, 'proxies.txt');
       fs.writeFileSync(proxyFile, 'host1:8080:user1:pass1\nhost2:8080:user2:pass2');
       
@@ -136,7 +136,7 @@ describe('ProxyManager', () => {
   });
 
   describe('switchProxyForSession', () => {
-    it('should switch to a different proxy', async () => {
+    test('should switch to a different proxy', async () => {
       const proxyFile = path.join(testProxyDir, 'proxies.txt');
       fs.writeFileSync(proxyFile, 'host1:8080:user1:pass1\nhost2:8080:user2:pass2');
       
@@ -149,7 +149,7 @@ describe('ProxyManager', () => {
       expect(switched?.id).not.toBe(original?.id);
     });
 
-    it('should return null when no alternative proxy available', async () => {
+    test('should return null when no alternative proxy available', async () => {
       const proxyFile = path.join(testProxyDir, 'proxies.txt');
       fs.writeFileSync(proxyFile, 'host1:8080:user1:pass1');
       
@@ -164,7 +164,7 @@ describe('ProxyManager', () => {
   });
 
   describe('cooldown mechanism', () => {
-    it('should revive proxy after cooldown period', async () => {
+    test('should revive proxy after cooldown period', async () => {
       const proxyFile = path.join(testProxyDir, 'proxies.txt');
       fs.writeFileSync(proxyFile, 'host1:8080:user1:pass1');
       
@@ -193,7 +193,7 @@ describe('ProxyManager', () => {
   });
 
   describe('markProxySuccess', () => {
-    it('should update success rate and response time', async () => {
+    test('should update success rate and response time', async () => {
       const proxyFile = path.join(testProxyDir, 'proxies.txt');
       fs.writeFileSync(proxyFile, 'host1:8080:user1:pass1');
       
@@ -207,7 +207,7 @@ describe('ProxyManager', () => {
       expect(stats.avgSuccessRate).toBe(1); // 100% success rate
     });
 
-    it('should reset consecutive failures on success', async () => {
+    test('should reset consecutive failures on success', async () => {
       const proxyFile = path.join(testProxyDir, 'proxies.txt');
       fs.writeFileSync(proxyFile, 'host1:8080:user1:pass1');
       
@@ -223,7 +223,7 @@ describe('ProxyManager', () => {
   });
 
   describe('getStats', () => {
-    it('should return correct statistics', async () => {
+    test('should return correct statistics', async () => {
       const proxyFile = path.join(testProxyDir, 'proxies.txt');
       fs.writeFileSync(proxyFile, 'host1:8080:user1:pass1\nhost2:8080:user2:pass2');
       
@@ -238,7 +238,7 @@ describe('ProxyManager', () => {
   });
 
   describe('getHealthReport', () => {
-    it('should return formatted health report', async () => {
+    test('should return formatted health report', async () => {
       const proxyFile = path.join(testProxyDir, 'proxies.txt');
       fs.writeFileSync(proxyFile, 'host1:8080:user1:pass1');
       
@@ -254,7 +254,7 @@ describe('ProxyManager', () => {
   });
 
   describe('enabled/disabled state', () => {
-    it('should not return proxies when disabled', async () => {
+    test('should not return proxies when disabled', async () => {
       const proxyFile = path.join(testProxyDir, 'proxies.txt');
       fs.writeFileSync(proxyFile, 'host1:8080:user1:pass1');
       

@@ -9,6 +9,7 @@
 # Test configuration
 coverage = false
 timeout = 30000  # 30 seconds for Puppeteer tests
+root = "./tests"  # Only run tests from the tests/ directory, excluding frontend/
 
 [run]
 # Automatically load .env files

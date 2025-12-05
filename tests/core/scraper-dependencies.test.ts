@@ -2,7 +2,7 @@
  * ScraperDependencies 单元测试
  */
 
-import { describe, it, expect, beforeEach, mock } from 'bun:test';
+import { describe, test, expect, beforeEach, mock } from 'bun:test';
 import { createDefaultDependencies, ScraperDependencies } from '../../core/scraper-dependencies';
 import { ScraperEventBus } from '../../core/event-bus';
 
@@ -20,7 +20,7 @@ describe('ScraperDependencies', () => {
   });
 
   describe('createDefaultDependencies', () => {
-    it('should create all required dependencies', () => {
+    test('should create all required dependencies', () => {
       const deps = createDefaultDependencies(mockEventBus as ScraperEventBus);
       
       expect(deps).toHaveProperty('navigationService');
@@ -33,21 +33,21 @@ describe('ScraperDependencies', () => {
       expect(deps).toHaveProperty('proxyManager');
     });
 
-    it('should use custom cookie directory', () => {
+    test('should use custom cookie directory', () => {
       const customCookieDir = './test-cookies';
       const deps = createDefaultDependencies(mockEventBus as ScraperEventBus, customCookieDir);
       
       expect(deps.sessionManager).toBeDefined();
     });
 
-    it('should use custom progress directory', () => {
+    test('should use custom progress directory', () => {
       const customProgressDir = './test-progress';
       const deps = createDefaultDependencies(mockEventBus as ScraperEventBus, './cookies', customProgressDir);
       
       expect(deps.progressManager).toBeDefined();
     });
 
-    it('should create independent instances', () => {
+    test('should create independent instances', () => {
       const deps1 = createDefaultDependencies(mockEventBus as ScraperEventBus);
       const deps2 = createDefaultDependencies(mockEventBus as ScraperEventBus);
       
@@ -55,7 +55,7 @@ describe('ScraperDependencies', () => {
       expect(deps1.navigationService).not.toBe(deps2.navigationService);
     });
 
-    it('should pass eventBus to services', () => {
+    test('should pass eventBus to services', () => {
       const deps = createDefaultDependencies(mockEventBus as ScraperEventBus);
       
       // Verify eventBus is passed (indirectly through service behavior)
@@ -65,7 +65,7 @@ describe('ScraperDependencies', () => {
   });
 
   describe('ScraperDependencies interface', () => {
-    it('should match expected structure', () => {
+    test('should match expected structure', () => {
       const deps = createDefaultDependencies(mockEventBus as ScraperEventBus);
       
       // Type check: all properties should exist

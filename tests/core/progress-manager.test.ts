@@ -2,7 +2,7 @@
  * ProgressManager 单元测试
  */
 
-import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, mock, test } from 'bun:test';
 import { ProgressManager } from '../../core/progress-manager';
 import { ScraperEventBus } from '../../core/event-bus';
 import * as fs from 'fs';
@@ -37,7 +37,7 @@ describe('ProgressManager', () => {
   });
 
   describe('saveProgress', () => {
-    it('should save progress to file', () => {
+    test('should save progress to file', () => {
       const progress = {
         targetType: 'profile',
         targetValue: 'testuser',
@@ -55,7 +55,7 @@ describe('ProgressManager', () => {
       expect(fs.existsSync(filePath)).toBe(true);
     });
 
-    it('should update existing progress', async () => {
+    test('should update existing progress', async () => {
       const progress1 = {
         targetType: 'profile',
         targetValue: 'testuser',
@@ -82,7 +82,7 @@ describe('ProgressManager', () => {
   });
 
   describe('loadProgress', () => {
-    it('should load progress from file', async () => {
+    test('should load progress from file', async () => {
       const progress = {
         targetType: 'profile',
         targetValue: 'testuser',
@@ -101,12 +101,12 @@ describe('ProgressManager', () => {
       expect(loaded?.totalScraped).toBe(50);
     });
 
-    it('should return null for non-existent progress', async () => {
+    test('should return null for non-existent progress', async () => {
         const loaded = await manager.loadProgress('timeline', 'testuser');
         expect(loaded).toBeNull();
     });
 
-    it('should load saved progress', async () => {
+    test('should load saved progress', async () => {
         const manager = new ProgressManager(testProgressDir, mockEventBus as ScraperEventBus);
         const progress = await manager.startScraping('timeline', 'testuser', 100);
         
@@ -117,7 +117,7 @@ describe('ProgressManager', () => {
   });
 
   describe('startScraping', () => {
-    it('should start new scraping session', async () => {
+    test('should start new scraping session', async () => {
       const progress = await manager.startScraping('profile', 'testuser', 100);
       
       expect(progress.totalRequested).toBe(100);
@@ -125,7 +125,7 @@ describe('ProgressManager', () => {
       expect(progress.completed).toBe(false);
     });
 
-    it('should resume from progress', async () => {
+    test('should resume from progress', async () => {
         const manager = new ProgressManager(testProgressDir, mockEventBus as ScraperEventBus);
         
         // Create initial progress
@@ -141,7 +141,7 @@ describe('ProgressManager', () => {
   });
 
   describe('updateProgress', () => {
-    it('should mark as completed when target reached', async () => {
+    test('should mark as completed when target reached', async () => {
         const manager = new ProgressManager(testProgressDir, mockEventBus as ScraperEventBus);
         
         const progress = await manager.startScraping('timeline', 'testuser', 50);
@@ -152,7 +152,7 @@ describe('ProgressManager', () => {
         expect(current?.completed).toBe(true);
     });
 
-    it('should update progress with additional info', async () => {
+    test('should update progress with additional info', async () => {
         const manager = new ProgressManager(testProgressDir, mockEventBus as ScraperEventBus);
         
         await manager.startScraping('timeline', 'testuser', 100);
