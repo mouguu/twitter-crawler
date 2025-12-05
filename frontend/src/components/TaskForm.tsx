@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { DatePicker } from "@/components/ui/date-picker";
 
 type ScrapeMode = "graphql" | "puppeteer" | "mixed";
 
@@ -31,6 +32,12 @@ interface TaskFormProps {
   startDate: string;
   endDate: string;
   redditStrategy: string;
+  lookbackHours?: number;
+  keywords?: string;
+  onLookbackHoursChange?: (value: number) => void;
+  onKeywordsChange?: (value: string) => void;
+  antiDetectionLevel?: 'low' | 'medium' | 'high' | 'paranoid';
+  onAntiDetectionLevelChange?: (level: 'low' | 'medium' | 'high' | 'paranoid') => void;
   isScraping: boolean;
   canSubmit: boolean;
   onTabChange: (tab: TabType) => void;
@@ -97,6 +104,8 @@ export function TaskForm(props: TaskFormProps) {
     onStartDateChange,
     onEndDateChange,
     onRedditStrategyChange,
+    antiDetectionLevel = 'high',
+    onAntiDetectionLevelChange,
     onSubmit,
     onStop,
   } = props;
@@ -302,18 +311,36 @@ export function TaskForm(props: TaskFormProps) {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label className="text-sm font-medium">Start Date</Label>
-                        <Input
-                          type="date"
-                          value={startDate}
-                          onChange={(e) => onStartDateChange(e.target.value)}
+                        <DatePicker
+                          date={startDate ? new Date(startDate) : undefined}
+                          setDate={(date: Date | undefined) => {
+                            if (date) {
+                              // Format as YYYY-MM-DD
+                              const offset = date.getTimezoneOffset();
+                              const localDate = new Date(date.getTime() - (offset * 60 * 1000));
+                              onStartDateChange(localDate.toISOString().split('T')[0]);
+                            } else {
+                              onStartDateChange("");
+                            }
+                          }}
+                          placeholder="Select start date"
                         />
                       </div>
                       <div className="space-y-2">
                         <Label className="text-sm font-medium">End Date</Label>
-                        <Input
-                          type="date"
-                          value={endDate}
-                          onChange={(e) => onEndDateChange(e.target.value)}
+                        <DatePicker
+                          date={endDate ? new Date(endDate) : undefined}
+                          setDate={(date: Date | undefined) => {
+                            if (date) {
+                                // Format as YYYY-MM-DD
+                                const offset = date.getTimezoneOffset();
+                                const localDate = new Date(date.getTime() - (offset * 60 * 1000));
+                                onEndDateChange(localDate.toISOString().split('T')[0]);
+                            } else {
+                              onEndDateChange("");
+                            }
+                          }}
+                          placeholder="Select end date"
                         />
                       </div>
                     </div>
@@ -367,6 +394,8 @@ export function TaskForm(props: TaskFormProps) {
                       </>
                     )}
 
+
+
                     {activeTab === "search" && (
                       <>
                         <label className="flex items-center gap-3 cursor-pointer group">
@@ -402,6 +431,49 @@ export function TaskForm(props: TaskFormProps) {
                           </motion.div>
                         )}
                       </>
+                    )}
+
+                    {/* Anti-Detection Level */}
+                    {activeTab !== "reddit" && onAntiDetectionLevelChange && (
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">
+                          Anti-Detection Level
+                        </Label>
+                        <Select
+                          value={antiDetectionLevel}
+                          onValueChange={(v: any) => onAntiDetectionLevelChange(v)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="low">
+                              <div className="flex flex-col">
+                                <span className="font-medium">Low</span>
+                                <span className="text-xs text-muted-foreground">Basic fingerprint only</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="medium">
+                              <div className="flex flex-col">
+                                <span className="font-medium">Medium</span>
+                                <span className="text-xs text-muted-foreground">Advanced fingerprint (Canvas/WebGL)</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="high">
+                              <div className="flex flex-col">
+                                <span className="font-medium">High (Recommended)</span>
+                                <span className="text-xs text-muted-foreground">Human behavior + Advanced FP</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="paranoid">
+                              <div className="flex flex-col">
+                                <span className="font-medium">Paranoid</span>
+                                <span className="text-xs text-muted-foreground">Full simulation (Slowest)</span>
+                              </div>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     )}
                   </div>
 
