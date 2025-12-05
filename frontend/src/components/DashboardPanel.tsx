@@ -61,6 +61,18 @@ export function DashboardPanel({
     [fetchJobStatusProp],
   );
 
+  const removeJob = useCallback((jobId: string) => {
+    setActiveJobs((prev) => {
+      const updated = new Map(prev);
+      const job = updated.get(jobId);
+      if (job?.eventSource) {
+        job.eventSource.close();
+      }
+      updated.delete(jobId);
+      return updated;
+    });
+  }, []);
+
   const addJob = useCallback(
     (jobId: string, type: 'twitter' | 'reddit') => {
       // Check if job already exists to avoid duplicate connections
@@ -113,10 +125,16 @@ export function DashboardPanel({
             updateWithResult();
           },
           onFailed: (error) => {
+            const errorMessage = String(error);
+            const isCancelled = errorMessage.toLowerCase().includes('cancel');
+
             updateJob(jobId, (currentJob: ActiveJob) => ({
-              state: 'failed',
-              logs: [...(currentJob.logs || []), `❌ Job failed: ${error}`],
+              state: isCancelled ? 'cancelled' : 'failed',
+              logs: [...(currentJob.logs || []), isCancelled ? '🛑 Job cancelled by user' : `❌ Job failed: ${errorMessage}`],
             }));
+
+            // Remove from list after a short delay to let user see the status
+            setTimeout(() => removeJob(jobId), 2000);
           },
         });
 
@@ -126,35 +144,27 @@ export function DashboardPanel({
         return updated;
       });
     },
-    [updateJob, fetchJobStatus, onJobComplete],
+    [updateJob, fetchJobStatus, onJobComplete, removeJob],
   );
-
-  const removeJob = useCallback((jobId: string) => {
-    setActiveJobs((prev) => {
-      const updated = new Map(prev);
-      const job = updated.get(jobId);
-      if (job?.eventSource) {
-        job.eventSource.close();
-      }
-      updated.delete(jobId);
-      return updated;
-    });
-  }, []);
 
   const handleCancel = useCallback(
     async (jobId: string) => {
       try {
-        await cancelJob(jobId);
+        // Optimistic UX update: Log intent, but do not change state to 'cancelled' or remove
         updateJob(jobId, (currentJob: ActiveJob) => ({
-          state: 'cancelled',
-          logs: [...(currentJob.logs || []), '🛑 Job cancelled by user'],
+          logs: [...(currentJob.logs || []), '🛑 Sending cancel request...'],
         }));
-        setTimeout(() => removeJob(jobId), 2000);
+        
+        await cancelJob(jobId);
+        // Do nothing else; wait for SSE 'failed' event with "cancelled" message
       } catch (error) {
         console.error('Failed to cancel job:', error);
+        updateJob(jobId, (currentJob: ActiveJob) => ({
+            logs: [...(currentJob.logs || []), `❌ Failed to send cancel request: ${error}`],
+        }));
       }
     },
-    [updateJob, removeJob],
+    [updateJob],
   );
 
   // Fetch active jobs on mount and restore them

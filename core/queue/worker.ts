@@ -158,6 +158,12 @@ export function createScrapeWorker(concurrency?: number) {
         }
         const result = await adapter.process(job.data, ctx);
 
+        // Check for cancellation one last time before marking as completed
+        // This prevents race conditions where a user cancels just as the job finishes
+        if (jobId && (await isJobCancelled(jobId))) {
+          throw new Error('Job cancelled by user');
+        }
+
         // Mark job as completed in PostgreSQL
         if (jobId) {
           try {
@@ -173,9 +179,16 @@ export function createScrapeWorker(concurrency?: number) {
         const scraperError = ErrorClassifier.classify(error);
         const serializedError = serializeError(error);
 
+        // Standardize cancellation error message
+        if (error.message === 'Job cancelled by user') {
+          // error is already classified as UNKNOWN_ERROR (retryable=false) by default
+        }
+
         // Log error and update status to failed in PostgreSQL
         if (job.data.jobId) {
           try {
+            // For cancelled jobs, we might want to set a specific status if DB supports it,
+            // but for now 'failed' with the specific message works with the frontend logic.
             await JobRepository.updateStatus(job.data.jobId, 'failed', scraperError.message);
             await JobRepository.logError({
               jobId: job.data.jobId,
