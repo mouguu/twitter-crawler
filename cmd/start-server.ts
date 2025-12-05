@@ -173,7 +173,7 @@ app.post('/api/scrape-v2', async (c) => {
     }
 
     // Build config
-    let config: any = {};
+    let config: Record<string, unknown> = {};
 
     if (isTwitter) {
       const normalizedUsername = type === 'profile' ? normalizeUsername(input) : undefined;
@@ -209,7 +209,7 @@ app.post('/api/scrape-v2', async (c) => {
     serverLogger.info('PostgreSQL Job created', { dbJobId: dbJob.id, type });
 
     // Add to BullMQ queue
-    const jobData: any = {
+    const jobData = {
       jobId: dbJob.id,
       type: isTwitter ? 'twitter' : 'reddit',
       config,
@@ -219,7 +219,11 @@ app.post('/api/scrape-v2', async (c) => {
       priority: type === 'thread' ? 10 : 5,
     });
 
-    await JobRepository.updateBullJobId(dbJob.id, bullJob.id!);
+    if (!bullJob.id) {
+      throw new Error('Failed to get BullMQ job ID');
+    }
+
+    await JobRepository.updateBullJobId(dbJob.id, bullJob.id);
 
     serverLogger.info('任务已加入队列', { dbJobId: dbJob.id, bullJobId: bullJob.id, type });
 
@@ -231,7 +235,8 @@ app.post('/api/scrape-v2', async (c) => {
       statusUrl: `/api/jobs/${bullJob.id}`,
       progressUrl: `/api/jobs/${bullJob.id}/stream`,
     });
-  } catch (error: any) {
+  } catch (err) {
+    const error = err as Error;
     serverLogger.error('队列添加失败', error);
     return c.json(
       {
@@ -300,11 +305,17 @@ app.get('/api/download', (c) => {
     downloadName = `${idSegment}-timeline-${timestamp}${countSegment}.md`;
   }
 
+  /*
+   * 修复中文文件名下载问题
+   * RFC 5987/6266: Use filename*=UTF-8''... for non-ASCII
+   * Fallback to filename="..." for legacy (though modern browsers prefer star)
+   */
   const fileContent = fs.readFileSync(resolvedPath);
+  const encodedFilename = encodeURIComponent(downloadName);
   return new Response(fileContent, {
     headers: {
       'Content-Type': 'application/octet-stream',
-      'Content-Disposition': `attachment; filename="${downloadName}"`,
+      'Content-Disposition': `attachment; filename*=UTF-8''${encodedFilename}; filename="${encodedFilename}"`,
     },
   });
 });
@@ -315,7 +326,8 @@ app.get('/api/sessions', async (c) => {
     const cookieManager = await createCookieManager();
     const sessions = await cookieManager.listSessions();
     return c.json({ success: true, sessions });
-  } catch (error: any) {
+  } catch (err) {
+    const error = err as Error & { code?: string };
     if (error.code === 'COOKIE_LOAD_FAILED' || error.message?.includes('No cookie files found')) {
       serverLogger.warn('/api/sessions: 未找到 cookies（首次运行正常）');
       return c.json({ success: true, sessions: [] });
@@ -357,7 +369,8 @@ app.post('/api/cookies', async (c) => {
         message: 'Cookies uploaded and validated successfully',
         filename,
       });
-    } catch (validationError: any) {
+    } catch (err) {
+      const validationError = err as Error;
       // If invalid, delete the file
       fs.unlinkSync(filePath);
       return c.json(
@@ -368,7 +381,8 @@ app.post('/api/cookies', async (c) => {
         400,
       );
     }
-  } catch (error: any) {
+  } catch (err) {
+    const error = err as Error;
     serverLogger.error('上传 cookies 失败', error);
     return c.json({ success: false, error: error.message }, 500);
   }
