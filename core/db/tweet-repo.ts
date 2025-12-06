@@ -12,14 +12,9 @@ export class TweetRepository {
     if (!jobId) return undefined;
 
     try {
-      // Check if this is a valid UUID (DB job ID) vs a BullMQ queue ID
-      // BullMQ IDs typically look like: "profile-1701234567890-abc123"
-      // DB UUIDs look like: "550e8400-e29b-41d4-a716-446655440000"
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-      if (!uuidRegex.test(jobId)) {
-        // Not a UUID, likely a BullMQ queue ID - don't use it for DB
-        logger.debug(`Skipping non-UUID jobId for DB: ${jobId}`);
+      // Relaxed validation: Allow any string ID (BullMQ IDs might be "1", "2", etc.)
+      // We will check if it exists in the DB. If the DB schema enforces UUID, the findUnique will simply fail or return null.
+      if (!jobId || typeof jobId !== 'string') {
         return undefined;
       }
 

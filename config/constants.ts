@@ -10,6 +10,10 @@
  * - utils/config-manager.ts (ConfigManager)
  */
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+
 // ==================== 浏览器配置 ====================
 
 /**
@@ -440,7 +444,7 @@ export const X_API_BEARER_TOKEN =
 /**
  * GraphQL API 操作定义
  */
-export const X_API_OPS = {
+const DEFAULT_API_OPS = {
   UserByScreenName: {
     queryId: '-oaLodhGbbnzJBACb1kk2Q',
     operationName: 'UserByScreenName',
@@ -477,6 +481,27 @@ export const X_API_OPS = {
     operationType: 'query',
   },
 } as const;
+
+/**
+ * Load API Operations from config file if exists
+ */
+function loadApiOps() {
+  try {
+    const configPath = path.resolve(process.cwd(), 'config', 'query-ids.json');
+    if (fs.existsSync(configPath)) {
+      const content = fs.readFileSync(configPath, 'utf-8');
+      const loaded = JSON.parse(content);
+      // Shallow merge or just return loaded if structure is guaranteed
+      return { ...DEFAULT_API_OPS, ...loaded };
+    }
+  } catch (e) {
+    console.warn('Failed to load query-ids.json, using defaults:', e);
+  }
+  return DEFAULT_API_OPS;
+}
+
+export const X_API_OPS = loadApiOps();
+
 
 /**
  * 搜索 API 的反机器人请求头（从真实浏览器请求中捕获）

@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { Tweet } from '../../types/tweet';
+import { Tweet } from '../../types/tweet-definitions';
 import * as exportUtils from '../../utils/export';
 import * as fileUtils from '../../utils/fileutils';
 

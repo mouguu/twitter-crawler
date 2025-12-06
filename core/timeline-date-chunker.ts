@@ -55,7 +55,7 @@ async function scrapeChunkWithRetry(
 
         // Check if we should retry with session rotation
         if (retryCount < CHUNK_RETRY_CONFIG.maxChunkRetries && engine.isRotationEnabled()) {
-          const allActiveSessions = engine.sessionManager.getAllActiveSessions();
+          const allActiveSessions = await engine.sessionManager.getAllActiveSessions();
           const untriedSessions = allActiveSessions.filter((s) => !attemptedSessions.has(s.id));
 
           if (untriedSessions.length > 0) {
@@ -106,6 +106,11 @@ async function scrapeChunkWithRetry(
       // biome-ignore lint/suspicious/noExplicitAny: error handling
     } catch (error: any) {
       const errorMsg = error instanceof Error ? error.message : String(error);
+
+      if (errorMsg === 'Job cancelled by user') {
+         throw error;
+      }
+
       engine.eventBus.emitLog(
         `[Chunk Retry] Error scraping chunk ${chunkIndex + 1}: ${errorMsg}`,
         'error',
@@ -113,7 +118,7 @@ async function scrapeChunkWithRetry(
 
       // Check if we should retry with session rotation
       if (retryCount < CHUNK_RETRY_CONFIG.maxChunkRetries && engine.isRotationEnabled()) {
-        const allActiveSessions = engine.sessionManager.getAllActiveSessions();
+        const allActiveSessions = await engine.sessionManager.getAllActiveSessions();
         const untriedSessions = allActiveSessions.filter((s) => !attemptedSessions.has(s.id));
 
         if (untriedSessions.length > 0) {
@@ -184,7 +189,14 @@ export async function runTimelineDateChunks(
   // REVERSE ranges to scrape newest first (Deep Search usually implies getting latest history first)
   ranges.reverse();
 
-  const parallelChunks = config.parallelChunks || 1; // 并行数量，默认1（串行）
+  let parallelChunks = (config as any).parallelChunks || 1; 
+  if (parallelChunks > 1) {
+    engine.eventBus.emitLog(
+        `Safety Override: Parallel chunking (requested: ${parallelChunks}) is disabled to prevent resource exhaustion (OOM). Forcing sequential execution (parallelChunks=1).`,
+        'warn'
+    );
+    parallelChunks = 1;
+  }
   const isParallel = parallelChunks > 1;
 
   if (isParallel) {
@@ -237,7 +249,7 @@ export async function runTimelineDateChunks(
   };
 
   // 并行处理模式
-  if (isParallel && engine.browserPool) {
+  if (isParallel) {
     // 使用并发控制队列并行处理chunks
     const processChunksInParallel = async () => {
       const _chunkTasks: Array<{
@@ -305,9 +317,9 @@ export async function runTimelineDateChunks(
             saveMarkdown: false,
             exportCsv: false,
             exportJson: false,
-            progressBase: chunkStartCount, // 使用chunk开始时的累计量
+            progressBase: chunkStartCount,
             progressTarget: globalLimit,
-          };
+          } as any;
 
           // 创建包装的eventBus，拦截进度更新和日志，基于共享状态重新计算
           const originalEmitProgress = engine.eventBus.emitProgress.bind(engine.eventBus);
@@ -319,7 +331,7 @@ export async function runTimelineDateChunks(
           // biome-ignore lint/suspicious/noExplicitAny: generic event data
           wrappedEventBus.emitProgress = (data: any) => {
             // data.current 是chunk内部的计数（基于progressBase），需要转换为chunk内部的绝对计数
-            const chunkCurrent = data.current - (chunkConfig.progressBase || 0);
+            const chunkCurrent = data.current - ((chunkConfig as any).progressBase || 0);
 
             // 使用增量更新机制，累加这个chunk的增量到全局
             const globalTotal = sharedProgress.addChunkIncrement(i, chunkCurrent);
@@ -362,7 +374,7 @@ export async function runTimelineDateChunks(
               }
             }
             // 转发到原始eventBus
-            originalEmitLog(message, level);
+            originalEmitLog(message, level as any);
           };
 
           // 为每个chunk创建独立的engine实例（共享依赖和浏览器池）
@@ -373,9 +385,14 @@ export async function runTimelineDateChunks(
 
           const chunkEngine = new ScraperEngine(chunkShouldStop, {
             apiOnly: false,
-            browserPool: engine.browserPool, // 共享浏览器池
             dependencies: engine.dependencies, // 共享依赖（session manager等）
-            eventBus: wrappedEventBus as typeof engine.eventBus, // 使用包装的eventBus
+            logger: {
+              info: (msg) => wrappedEventBus.emitLog(msg, 'info'),
+              warn: (msg) => wrappedEventBus.emitLog(msg, 'warn'),
+              error: (msg) => wrappedEventBus.emitLog(msg, 'error'),
+              debug: (msg) => wrappedEventBus.emitLog(msg, 'debug'),
+            },
+            onProgress: (p) => wrappedEventBus.emitProgress(p),
             headless: true,
             jobId: config.jobId, // Pass jobId to child engine
           });
@@ -397,6 +414,7 @@ export async function runTimelineDateChunks(
             return { index: i, result };
             // biome-ignore lint/suspicious/noExplicitAny: error handling
           } catch (error: any) {
+            if (error.message === 'Job cancelled by user') throw error;
             await chunkEngine.close();
             return {
               index: i,
@@ -503,7 +521,7 @@ export async function runTimelineDateChunks(
         exportJson: false,
         progressBase: totalCollected, // 全局累计量作为基础
         progressTarget: globalLimit, // 全局目标量
-      };
+      } as any;
 
       const result = await scrapeChunkWithRetry(engine, chunkConfig, i, ranges.length, range);
 
@@ -566,7 +584,7 @@ export async function runTimelineDateChunks(
       );
 
       // Reset session manager to allow reusing sessions
-      const allActiveSessions = engine.sessionManager.getAllActiveSessions();
+      const allActiveSessions = await engine.sessionManager.getAllActiveSessions();
       if (allActiveSessions.length > 0) {
         // Try to use a different session for global retry
         // 使用更智能的session选择：优先选择未尝试过的session，如果都尝试过则轮换
@@ -634,7 +652,7 @@ export async function runTimelineDateChunks(
           exportJson: false,
           progressBase: totalCollected, // 全局累计量作为基础
           progressTarget: globalLimit, // 全局目标量
-        };
+        } as any;
 
         engine.eventBus.emitLog(
           `[Global Retry] Retrying chunk ${failedChunk.index + 1}/${ranges.length}: ` +

@@ -8,7 +8,7 @@ import {
   X_SELECTORS,
 } from './data-extractor';
 import { ScraperErrors } from './errors';
-import { ScraperEventBus } from './event-bus';
+import { ScraperEventBus } from './scraper-engine.types';
 
 export interface NavigationOptions {
   maxRetries?: number;
@@ -124,7 +124,7 @@ export class NavigationService {
     }
   }
 
-  private _log(message: string, level: string = 'info'): void {
+  private _log(message: string, level: 'info' | 'warn' | 'error' | 'debug' = 'info'): void {
     if (this.eventBus) {
       this.eventBus.emitLog(message, level);
     } else {

@@ -10,14 +10,15 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as readline from 'node:readline';
 import { Command } from 'commander';
-import type { LogMessageData, ScrapeProgressData } from '../core';
-import { eventBusInstance } from '../core';
-import type { TwitterUserIdentifier } from '../core/scrape-unified';
-import * as scraper from '../core/scrape-unified';
+import type { LogMessageData, ScrapeProgressData, TwitterUserIdentifier } from '../core';
+import { eventBusInstance, scrapeThread, scrapeTwitterUsers, ProxyManager } from '../core';
+import { RedditScraper } from '../core/platforms/reddit/scraper'; // [NEW] Import TS Scraper
 import { getConfigManager } from '../utils';
 import * as aiExportUtils from '../utils/ai-export';
 import * as fileUtils from '../utils/fileutils';
 import * as timeUtils from '../utils/time';
+
+const scraper = { scrapeThread, scrapeTwitterUsers };
 
 const configManager = getConfigManager();
 const outputConfig = configManager.getOutputConfig();
@@ -30,7 +31,7 @@ function monitorProgress(debugMode: boolean): () => void {
   let lastProgress: ScrapeProgressData | null = null;
 
   const updateBar = (current: number, total: number, action: string): void => {
-    lastProgress = { current, target: total, action };
+    lastProgress = { current, target: total, total, action };
     const width = 30;
     const percentage = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0;
     const filled = Math.round((width * percentage) / 100);
@@ -106,59 +107,82 @@ program
   )
   .option('--save-json', 'Save individual JSON files')
   .action(async (options: any) => {
-    console.log(`🚀 Starting Reddit Scraper...`);
-    console.log(`r/ ${options.subreddit}`);
+    console.log(`🚀 Starting Reddit Scraper (TS Implementation)...`);
+    console.log(`r/${options.subreddit}`);
     console.log(`📊 Target: ${options.count} posts`);
-    console.log(`🎯 Strategy: ${options.strategy}`);
 
-    const pythonScript = path.join(__dirname, 'platforms/reddit/reddit_cli.py');
-    const python: ChildProcess = spawn('python3', [
-      pythonScript,
-      '--subreddit',
-      options.subreddit,
-      '--max_posts',
-      options.count,
-      '--strategy',
-      options.strategy,
-      ...(options.saveJson ? ['--save_json'] : []),
-    ]);
-
-    python.stdout?.on('data', (data: Buffer) => {
-      const output = data.toString();
-      // Filter out the JSON result marker for clean logs
-      if (!output.includes('__JSON_RESULT__')) {
-        process.stdout.write(output);
-      } else {
-        // Parse result
-        const parts = output.split('__JSON_RESULT__');
-        if (parts[0].trim()) process.stdout.write(parts[0]);
-
-        try {
-          const resultJson = parts[1].trim();
-          const result = JSON.parse(resultJson);
-          if (result.status === 'success') {
-            console.log('\n✅ Scraping completed successfully!');
-            console.log(`📈 Scraped Count: ${result.scraped_count}`);
-            console.log(`💾 Total in DB: ${result.total_posts_in_db}`);
-          } else {
-            console.error('\n❌ Scraping failed:', result.message);
-          }
-        } catch (e) {
-          console.error('Error parsing result:', e);
+    let monitorStop: (() => void) | undefined;
+    try {
+      // 1. Initialize Proxy Manager
+      const proxyManager = new ProxyManager(); // Loads from ./proxy by default
+      await proxyManager.init();
+      
+      let proxyConfig;
+      if (proxyManager.hasProxies()) {
+        const proxy = proxyManager.getNextProxy();
+        if (proxy) {
+            proxyConfig = {
+                host: proxy.host,
+                port: proxy.port,
+                username: proxy.username || '',
+                password: proxy.password || '',
+            };
+            console.log(`🛡️ Using Proxy: ${proxy.host}:${proxy.port}`);
         }
       }
-    });
 
-    python.stderr?.on('data', (data: Buffer) => {
-      process.stderr.write(`[PYTHON ERROR] ${data}`);
-    });
+      // Wrapper for ScraperEventBus compatibility
+      const redditEventBus = {
+        emitLog: (message: string, level: any) => eventBusInstance.emit('log', { message, level }),
+        emitProgress: (data: any) => eventBusInstance.emit('progress', data),
+        emitError: (error: Error) => eventBusInstance.emit('log', { message: error.message, level: 'error' }),
+        emitPerformance: () => {},
+      };
 
-    python.on('close', (code: number | null) => {
-      if (code !== 0) {
-        console.log(`Python process exited with code ${code}`);
+      // 2. Initialize Scraper with dependencies
+      const scraper = new RedditScraper(proxyConfig, redditEventBus);
+
+      // 3. Start Progress Monitoring
+      monitorStop = monitorProgress(!!options.saveJson); // Use debug flag logic? or just show bar. passing false usually shows bar. passing debug shows logs.
+      // existing monitorProgress takes debugMode.
+      
+      const result = await scraper.scrapeSubreddit({
+        subreddit: options.subreddit,
+        limit: parseInt(options.count, 10),
+        sortType: options.strategy || 'hot',
+      });
+
+      if (monitorStop) monitorStop();
+
+      if (result.status === 'success') {
+        console.log('\n✅ Scraping completed successfully!');
+        console.log(`📈 Scraped Count: ${result.scrapedCount}`);
+        
+        // Save results to file (Backup/Export)
+        if (options.saveJson && result.posts && result.posts.length > 0) {
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const filename = `reddit_${options.subreddit}_${timestamp}.json`;
+            const outputPath = path.join(outputConfig.baseDir, 'reddit', filename);
+            const dir = path.dirname(outputPath);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+            try {
+              fs.writeFileSync(outputPath, JSON.stringify(result.posts, null, 2));
+              console.log(`💾 Saved backup JSON to: ${outputPath}`);
+            } catch (saveError: any) {
+              console.error(`Failed to save JSON: ${saveError.message}`);
+            }
+        }
+      } else {
+        console.error('\n❌ Scraping failed:', result.message);
       }
-    });
+    } catch (error: any) {
+      if (monitorStop) monitorStop();
+      console.error('❌ Error executing Reddit scraper:', error);
+      process.exit(1);
+    }
   });
+
 
 // Twitter Command (existing)
 program
@@ -469,7 +493,7 @@ program
       // 显示结果摘要
       if (results && results.length > 0) {
         console.log('\n📊 Scraping results summary:');
-        results.forEach((result) => {
+        results.forEach((result: any) => {
           const p = result.profile;
           const meta: string[] = [];
           if (p?.displayName) meta.push(`${p.displayName}`);
@@ -481,11 +505,11 @@ program
         });
 
         const runDirs = results
-          .map((result) => result.runContext?.runDir)
-          .filter((dir): dir is string => dir !== undefined && dir !== null);
+          .map((result: any) => result.runContext?.runDir)
+          .filter((dir: any): dir is string => dir !== undefined && dir !== null);
         if (runDirs.length > 0) {
           console.log('\n📂 Output directories:');
-          runDirs.forEach((dir) => console.log(`- ${dir}`));
+          runDirs.forEach((dir: string) => console.log(`- ${dir}`));
         }
       }
     } catch (error: any) {

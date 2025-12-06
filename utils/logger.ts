@@ -151,6 +151,7 @@ export type LogContext = Record<string, unknown>;
  */
 export class EnhancedLogger {
   private baseLogger: ModuleLogger;
+  public module: string;
   private context: LogContext = {};
 
   constructor(module: string) {

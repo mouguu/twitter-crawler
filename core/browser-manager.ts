@@ -28,6 +28,8 @@ export interface BrowserLaunchOptions {
   proxy?: ProxyConfig;
   /** 🆕 是否启用指纹随机化（默认 true） */
   randomizeFingerprint?: boolean;
+  /** Explicit viewport configuration (overrides random fingerprint) */
+  viewport?: { width: number; height: number };
 }
 
 /**
@@ -74,7 +76,7 @@ export class BrowserManager {
     const fingerprint = useRandomFingerprint ? getRandomFingerprint() : null;
 
     // 确定使用的 viewport
-    const viewport = fingerprint?.viewport || constants.BROWSER_VIEWPORT;
+    const viewport = options.viewport || fingerprint?.viewport || constants.BROWSER_VIEWPORT;
 
     // 构建浏览器启动参数
     const browserArgs = [...constants.BROWSER_ARGS];

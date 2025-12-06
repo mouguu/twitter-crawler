@@ -18,6 +18,7 @@ interface ActiveJob {
     stats?: { count: number; duration: number };
   };
   eventSource?: EventSource;
+  isCancelling?: boolean;
 }
 
 interface DashboardPanelProps {
@@ -133,8 +134,8 @@ export function DashboardPanel({
               logs: [...(currentJob.logs || []), isCancelled ? '🛑 Job cancelled by user' : `❌ Job failed: ${errorMessage}`],
             }));
 
-            // Remove from list after a short delay to let user see the status
-            setTimeout(() => removeJob(jobId), 2000);
+            // Do not remove from list automatically. Let user dismiss.
+            // setTimeout(() => removeJob(jobId), 2000);
           },
         });
 
@@ -152,6 +153,7 @@ export function DashboardPanel({
       try {
         // Optimistic UX update: Log intent, but do not change state to 'cancelled' or remove
         updateJob(jobId, (currentJob: ActiveJob) => ({
+          isCancelling: true,
           logs: [...(currentJob.logs || []), '🛑 Sending cancel request...'],
         }));
         
@@ -160,6 +162,7 @@ export function DashboardPanel({
       } catch (error) {
         console.error('Failed to cancel job:', error);
         updateJob(jobId, (currentJob: ActiveJob) => ({
+            isCancelling: false,
             logs: [...(currentJob.logs || []), `❌ Failed to send cancel request: ${error}`],
         }));
       }
@@ -360,6 +363,7 @@ function JobCard({
   const StatusIcon = () => {
     if (isCompleted) return <CheckCircle2 className="w-5 h-5 text-foreground" />;
     if (isFailed) return <XCircle className="w-5 h-5 text-red-600" />;
+    if (job.isCancelling) return <Loader2 className="w-5 h-5 text-red-500 animate-spin" />;
     if (isActive) return <Loader2 className="w-5 h-5 text-foreground animate-spin" />;
     return <Clock className="w-5 h-5 text-muted-foreground" />;
   };
@@ -456,9 +460,17 @@ function JobCard({
               variant="ghost"
               size="sm"
               onClick={onCancel}
+              disabled={job.isCancelling}
               className="text-red-600 hover:text-red-700 hover:bg-red-50"
             >
-              Cancel
+              {job.isCancelling ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Cancelling
+                </>
+              ) : (
+                'Cancel'
+              )}
             </Button>
           )}
         </div>

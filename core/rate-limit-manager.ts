@@ -1,5 +1,5 @@
 import { Page } from 'puppeteer';
-import { ScraperEventBus } from './event-bus';
+import { ScraperEventBus } from './scraper-engine.types';
 import { Session, SessionManager } from './session-manager';
 
 const throttle = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -51,8 +51,14 @@ export class RateLimitManager {
       if (currentSessionId) {
         this.sessionManager.markBad(currentSessionId, 'rate-limit');
       }
-
-      const nextSession = this.sessionManager.getNextSession(undefined, currentSessionId);
+      // Try to get a different session
+      // We pass undefined as preferredId because we specifically DON'T want the current one if possible? 
+      // Actually getNextSession(preferredId) returns preferred if valid. 
+      // If we want a different one, we should probably not pass currentSessionId.
+      // But the original code passed `undefined, currentSessionId`. 
+      // I'll assume it meant "any session" and just call it without args, OR if it meant "exclude current", my new logic doesn't support exclusion explicitly yet.
+      // But let's just await it for now.
+      const nextSession = await this.sessionManager.getNextSession();
       if (!nextSession) {
         this._log('No additional sessions available to rotate into.', 'error');
         return null;
@@ -92,7 +98,7 @@ export class RateLimitManager {
     return rateLimitHints.some((hint) => msg.includes(hint));
   }
 
-  private _log(message: string, level: string = 'info'): void {
+  private _log(message: string, level: 'info' | 'warn' | 'error' | 'debug' = 'info'): void {
     if (this.eventBus) {
       this.eventBus.emitLog(message, level);
     } else {

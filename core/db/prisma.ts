@@ -1,5 +1,3 @@
-import { PrismaPg } from '@prisma/adapter-pg';
-import { Pool } from 'pg';
 import { PrismaClient } from '../../generated/prisma/client';
 import { createEnhancedLogger } from '../../utils/logger';
 
@@ -25,28 +23,37 @@ const createMockPrismaClient = (): PrismaClient => {
     $executeRaw: async () => 0,
     $queryRaw: async () => [],
     $transaction: async (fn: any) => fn,
+    // Add other necessary mock methods if tests fail
   } as any;
 };
 
-// Create real PrismaClient with pg adapter (Prisma v7 pattern)
+// Create real PrismaClient - Using Adapter for Prisma 7 compatibility
 const createRealPrismaClient = (): PrismaClient => {
-  const connectionString = process.env.DATABASE_URL;
-
-  if (!connectionString) {
+  if (!process.env.DATABASE_URL) {
     throw new Error('DATABASE_URL environment variable is missing');
   }
 
-  // 1. 初始化 PG 连接池
-  console.log('[Prisma Init] Initializing pg Pool...');
-  const pool = new Pool({ connectionString });
-
-  // 2. 初始化适配器
-  console.log('[Prisma Init] Initializing PrismaPg adapter...');
-  const adapter = new PrismaPg(pool);
-
-  // 3. 初始化 Client
-  console.log('[Prisma Init] Initializing PrismaClient...');
-  return new PrismaClient({ adapter });
+  try {
+    const { Pool } = require('pg');
+    const { PrismaPg } = require('@prisma/adapter-pg');
+    
+    console.log('[Prisma Init] Initializing PrismaClient with pg adapter...');
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    const adapter = new PrismaPg(pool);
+    
+    return new PrismaClient({ 
+      adapter,
+      log: [
+        { emit: 'event', level: 'query' },
+        { emit: 'stdout', level: 'info' },
+        { emit: 'stdout', level: 'warn' },
+        { emit: 'stdout', level: 'error' },
+      ],
+    } as any);
+  } catch (e) {
+    console.warn('[Prisma Init] Failed to load adapter, falling back to standard client (might fail if engine type mismatch):', e);
+    return new PrismaClient();
+  }
 };
 
 let prismaInstance: PrismaClient;

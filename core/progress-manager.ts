@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { safeJsonParse } from '../utils';
 import { CheckpointRepository } from './db/checkpoint-repo';
-import { ScraperEventBus } from './event-bus';
+import { ScraperEventBus } from './scraper-engine.types';
 
 export interface ScrapingProgress {
   jobId?: string; // Link to DB job

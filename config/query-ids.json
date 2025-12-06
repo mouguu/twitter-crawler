@@ -1,0 +1,32 @@
+{
+  "UserByScreenName": {
+    "queryId": "-oaLodhGbbnzJBACb1kk2Q",
+    "operationName": "UserByScreenName",
+    "operationType": "query"
+  },
+  "UserTweets": {
+    "queryId": "lZRf8IC-GTuGxDwcsHW8aw",
+    "operationName": "UserTweets",
+    "operationType": "query"
+  },
+  "SearchTimeline": {
+    "queryId": "bshMIjqDk8LTXTq4w91WKw",
+    "operationName": "SearchTimeline",
+    "operationType": "query"
+  },
+  "TweetDetail": {
+    "queryId": "6QzqakNMdh_YzBAR9SYPkQ",
+    "operationName": "TweetDetail",
+    "operationType": "query"
+  },
+  "TweetResultByRestId": {
+    "queryId": "kLXoXTloWpv9d2FSXRg-Tg",
+    "operationName": "TweetResultByRestId",
+    "operationType": "query"
+  },
+  "TweetResultsByRestIds": {
+    "queryId": "BWy5aoI-WvwbeSiHUIf2Hw",
+    "operationName": "TweetResultsByRestIds",
+    "operationType": "query"
+  }
+}

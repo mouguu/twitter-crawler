@@ -47,6 +47,11 @@ describe('DataExtractor', () => {
         displayName: 'Test User',
         handle: 'testuser',
         followers: 1000,
+        bio: 'Bio',
+        location: 'Location',
+        website: 'website.com',
+        joined: 'Joined 2020',
+        following: 50,
       };
       evaluateMock.mockImplementation(() => Promise.resolve(mockProfile));
 
@@ -78,7 +83,22 @@ describe('DataExtractor', () => {
     });
 
     test('should extract tweets using correct selectors', async () => {
-      const mockTweets = [{ id: '1', text: 'Hello', author: 'user1' }];
+      const mockTweets = [
+        {
+          id: '1',
+          text: 'Hello',
+          author: 'user1',
+          time: '2023-01-01',
+          url: 'http://twitter.com/user1/status/1',
+          likes: 0,
+          retweets: 0,
+          replies: 0,
+          views: 0,
+          hasMedia: false,
+          isReply: false,
+          quotedContent: null,
+        },
+      ];
       evaluateMock.mockImplementation(() => Promise.resolve(mockTweets));
 
       const result = await extractTweetsFromPage(mockPage);

@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { ScraperEventBus } from '../../core/event-bus';
+import { ScraperEventBus } from '../../core/scraper-engine.types';
 import { ProgressManager } from '../../core/progress-manager';
 
 describe('ProgressManager', () => {
@@ -21,8 +21,7 @@ describe('ProgressManager', () => {
       emitLog: mock(() => {}),
       emitProgress: mock(() => {}),
       emitPerformance: mock(() => {}),
-      on: mock(() => {}),
-      off: mock(() => {}),
+      emitError: mock(() => {}),
     } as any;
 
     manager = new ProgressManager(testProgressDir, mockEventBus as ScraperEventBus);

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { Page, Protocol } from 'puppeteer';
-import { ScraperEventBus } from '../../core/event-bus';
+import { ScraperEventBus } from '../../core/scraper-engine.types';
 import { RateLimitManager } from '../../core/rate-limit-manager';
 import { Session } from '../../core/session-manager';
 
@@ -18,6 +18,7 @@ class FakeSessionManager {
         consecutiveFailures: 0,
         isRetired: false,
         filePath: 'session-a.json',
+        platform: 'twitter',
       },
       {
         id: 'session-b',
@@ -27,6 +28,7 @@ class FakeSessionManager {
         consecutiveFailures: 0,
         isRetired: false,
         filePath: 'session-b.json',
+        platform: 'twitter',
       },
     ];
   }
@@ -48,7 +50,12 @@ describe('RateLimitManager', () => {
   let mockPage: Partial<Page>;
 
   beforeEach(() => {
-    mockEventBus = new ScraperEventBus();
+    mockEventBus = {
+        emitLog: () => {},
+        emitProgress: () => {},
+        emitError: () => {},
+        emitPerformance: () => {},
+    };
     fakeSessionManager = new FakeSessionManager();
     rateLimitManager = new RateLimitManager(fakeSessionManager as any, mockEventBus);
     mockPage = {} as Page;

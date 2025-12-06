@@ -6,6 +6,7 @@
 export * from './ai-export';
 
 // Configuration
+export * from './concurrency';
 export {
   type AppConfig,
   ConfigManager,

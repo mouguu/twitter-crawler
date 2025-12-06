@@ -17,7 +17,28 @@ export const redditAdapter: PlatformAdapter = {
 
     await ctx.log(`Starting Reddit scrape: ${jobConfig.subreddit || jobConfig.postUrl}`);
 
-    const scraper = new RedditScraper();
+    // Initialize ProxyManager to get a proxy
+    const { ProxyManager } = await import('../proxy-manager');
+    const proxyManager = new ProxyManager();
+    await proxyManager.init(); // Load from files
+    
+    let proxyConfig;
+    if (proxyManager.hasProxies()) {
+        const proxy = proxyManager.getNextProxy();
+        if (proxy) {
+             proxyConfig = {
+                host: proxy.host,
+                port: proxy.port,
+                username: proxy.username || '',
+                password: proxy.password || '',
+            };
+            await ctx.log(`Using proxy: ${proxy.host}:${proxy.port}`, 'info');
+        }
+    } else {
+        await ctx.log('No proxies found! Running in direct connection mode (High Risk of Ban)', 'warn');
+    }
+
+    const scraper = new RedditScraper(proxyConfig);
     const isPostUrl = jobConfig.postUrl !== undefined;
 
     try {

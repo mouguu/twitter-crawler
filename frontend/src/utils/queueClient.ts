@@ -105,7 +105,14 @@ export async function cancelJob(jobId: string): Promise<void> {
   });
 
   if (!response.ok) {
-    throw new Error('Failed to cancel job');
+    let errorMsg = 'Failed to cancel job';
+    try {
+      const errorData = await response.json();
+      if (errorData.error) errorMsg = errorData.error;
+    } catch (e) {
+      // Ignore JSON parse error, use default message
+    }
+    throw new Error(`${errorMsg} (${response.status})`);
   }
 }
 

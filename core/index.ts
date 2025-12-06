@@ -3,11 +3,9 @@
  * 统一导出核心模块，建立清晰的模块边界
  */
 
-export { AdvancedFingerprint } from './advanced-fingerprint';
-export { AntiDetection } from './anti-detection';
 // Managers
 export { type BrowserLaunchOptions, BrowserManager, type ProxyConfig } from './browser-manager';
-export { BrowserPool, type BrowserPoolOptions } from './browser-pool';
+export { AntiDetection } from './anti-detection';
 // Cookie Manager Factory
 export {
   type CookieLoadResult,
@@ -30,14 +28,6 @@ export {
   type SuccessResult,
   successResult,
 } from './errors';
-// Event Bus
-export {
-  default as eventBus,
-  default as eventBusInstance,
-  type LogMessageData,
-  type ScrapeProgressData,
-  type ScraperEventBus,
-} from './event-bus';
 export { FingerprintManager } from './fingerprint-manager';
 export { HumanBehavior } from './human-behavior';
 
@@ -45,7 +35,7 @@ export { HumanBehavior } from './human-behavior';
 export { NavigationService } from './navigation-service';
 export { PerformanceMonitor, type PerformanceStats } from './performance-monitor';
 // Platform adapters
-export { getAdapter, listAdapters, registerAdapter } from './platforms/registry';
+// export { getAdapter, listAdapters, registerAdapter } from './platforms/registry'; // Removed
 export type {
   CrawlJobConfig,
   CrawlTarget,
@@ -90,3 +80,4 @@ export {
   setShouldStopScraping,
 } from './stop-signal';
 export { XApiClient } from './x-api';
+export * from './scrape-unified';

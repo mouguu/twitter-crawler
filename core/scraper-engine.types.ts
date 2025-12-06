@@ -1,42 +1,46 @@
 import type { ProfileInfo, Tweet } from '../types/tweet-definitions';
 import type { RunContext } from '../utils';
 import type { BrowserLaunchOptions } from './browser-manager';
-import type { BrowserPool, BrowserPoolOptions } from './browser-pool';
-import type { ScraperEventBus } from './event-bus';
 import type { PerformanceStats } from './performance-monitor';
 import type { ScraperDependencies } from './scraper-dependencies';
+
+export interface ScraperLogger {
+  info(message: string, ...args: any[]): void;
+  warn(message: string, ...args: any[]): void;
+  error(message: string, ...args: any[]): void;
+  debug(message: string, ...args: any[]): void;
+}
+
+export interface ScraperEventBus {
+  emitLog(message: string, level?: 'info' | 'warn' | 'error' | 'debug'): void;
+  emitProgress(progress: { current: number; target: number; action: string }): void;
+  emitError(error: Error): void;
+  emitPerformance(data: any): void;
+}
 
 export interface ScraperEngineOptions {
   headless?: boolean;
   browserOptions?: BrowserLaunchOptions;
   sessionId?: string;
-  eventBus?: ScraperEventBus;
+  
+  /** Optional logger or callbacks */
+  logger?: ScraperLogger;
+  onProgress?: (progress: { current: number; target: number; action: string }) => void;
+
   /**
-   * 如果为 true，只初始化 API 客户端，不启动浏览器
-   * 适用于纯 GraphQL API 模式，节省资源
+   * If true, only initialize API client, do not launch browser.
+   * Suitable for pure GraphQL API mode.
    */
   apiOnly?: boolean;
-  /** 依赖注入（用于测试和自定义配置） */
+  
+  /** Dependency injection */
   dependencies?: ScraperDependencies;
-  /**
-   * 浏览器池选项（可选功能，默认关闭）
-   * 仅在需要批量爬取多个任务时启用，可以复用浏览器实例节省启动时间
-   * 对于单任务场景，每次创建新浏览器即可，不需要启用此功能
-   */
-  browserPoolOptions?: BrowserPoolOptions;
-  /**
-   * 浏览器池实例（可选功能，默认关闭）
-   * 如果提供，直接使用此实例；否则根据 browserPoolOptions 创建
-   */
-  browserPool?: BrowserPool;
+
   /** Linked BullMQ Job ID (for DB persistence) */
   jobId?: string;
+  
   /**
-   * 反检测级别 (默认: 'high')
-   * - 'low': 仅基础指纹 (UA/Viewport)
-   * - 'medium': 基础 + 高级指纹 (Canvas/WebGL/Audio)
-   * - 'high': 基础 + 高级指纹 + 快速人性化行为 (推荐)
-   * - 'paranoid': 完整反检测，模拟真人行为 (较慢但最安全)
+   * Anti-detection level (default: 'high')
    */
   antiDetectionLevel?: 'low' | 'medium' | 'high' | 'paranoid';
 }
@@ -57,9 +61,9 @@ export interface ScrapeTimelineConfig {
   stopAtTweetId?: string;
   sinceTimestamp?: number;
   collectProfileInfo?: boolean;
-  /** 爬取模式: 'graphql' 使用 API (默认), 'puppeteer' 使用 DOM, 'mixed' 先 API 后 DOM 补深度 */
-  scrapeMode?: 'graphql' | 'puppeteer' | 'mixed';
-  /** API 变体: 默认 GraphQL；如果希望用 v1.1 + max_id/tweet_mode=extended，请设置为 'rest' */
+  /** Scrape mode: 'graphql' (default) or 'puppeteer' */
+  scrapeMode?: 'graphql' | 'puppeteer';
+  /** API variant: 'graphql' (default) or 'rest' */
   apiVariant?: 'graphql' | 'rest';
   resume?: boolean;
   dateRange?: {
@@ -67,16 +71,6 @@ export interface ScrapeTimelineConfig {
     end: string;
   };
   enableRotation?: boolean;
-  /** Internal use: offset progress current/target when doing mixed模式 DOM 续跑 */
-  progressBase?: number;
-  progressTarget?: number;
-  /**
-   * 并行处理chunks的数量（仅适用于日期分块模式）
-   * 默认：1（串行处理）
-   * 建议：2-3（避免触发Twitter限流）
-   * 需要浏览器池支持，会自动启用浏览器池
-   */
-  parallelChunks?: number;
   jobId?: string;
 }
 
@@ -101,7 +95,7 @@ export interface ScrapeThreadOptions {
   outputDir?: string;
   headless?: boolean;
   sessionId?: string;
-  /** 爬取模式: 'graphql' 使用 API (默认), 'puppeteer' 使用 DOM */
+  /** Scrape mode: 'graphql' (default) or 'puppeteer' */
   scrapeMode?: 'graphql' | 'puppeteer';
   jobId?: string;
 }

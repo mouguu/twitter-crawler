@@ -42,7 +42,6 @@ describe('AntiDetection', () => {
 
       expect(summary).toContain('medium');
       expect(summary).toContain('Basic Fingerprint');
-      expect(summary).toContain('Advanced Fingerprint');
     });
 
     test('low level should have minimal features', () => {
@@ -50,7 +49,6 @@ describe('AntiDetection', () => {
       const summary = ad.getSummary();
 
       expect(summary).toContain('Basic Fingerprint: ✓');
-      expect(summary).toContain('Advanced Fingerprint: ✗');
       expect(summary).toContain('Human Behavior: ✗');
     });
 
@@ -59,7 +57,6 @@ describe('AntiDetection', () => {
       const summary = ad.getSummary();
 
       expect(summary).toContain('Basic Fingerprint: ✓');
-      expect(summary).toContain('Advanced Fingerprint: ✓');
       expect(summary).toContain('Human Behavior: ✓');
     });
   });
@@ -70,7 +67,6 @@ describe('AntiDetection', () => {
       const components = ad.getComponents();
 
       expect(components.fingerprintManager).toBeDefined();
-      expect(components.advancedFingerprint).toBeDefined();
       expect(components.humanBehavior).toBeDefined();
     });
   });
@@ -108,16 +104,6 @@ describe('AntiDetection', () => {
   });
 
   describe('Custom Configuration', () => {
-    test('should accept custom fingerprint config', () => {
-      const ad = new AntiDetection({
-        level: 'high',
-        fingerprint: {
-          timezone: 'Asia/Tokyo',
-        },
-      });
-      expect(ad).toBeDefined();
-    });
-
     test('should accept custom behavior config', () => {
       const ad = new AntiDetection({
         level: 'high',

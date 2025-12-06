@@ -19,11 +19,6 @@
  */
 
 import { Page } from 'puppeteer';
-import {
-  AdvancedFingerprint,
-  type AdvancedFingerprintConfig,
-  generateRandomConfig,
-} from './advanced-fingerprint';
 import { FingerprintManager } from './fingerprint-manager';
 import {
   DEFAULT_HUMAN_CONFIG,
@@ -38,7 +33,6 @@ export type AntiDetectionLevel = 'low' | 'medium' | 'high' | 'paranoid';
 // 配置选项
 export interface AntiDetectionOptions {
   level?: AntiDetectionLevel;
-  fingerprint?: Partial<AdvancedFingerprintConfig>;
   behavior?: Partial<HumanBehaviorConfig>;
   fingerprintDir?: string; // 指纹存储目录
 }
@@ -50,51 +44,35 @@ const LEVEL_CONFIGS: Record<
   AntiDetectionLevel,
   {
     useBasicFingerprint: boolean;
-    useAdvancedFingerprint: boolean;
     useHumanBehavior: boolean;
     behaviorSpeed: 'fast' | 'normal';
-    canvasNoise: number;
-    audioNoise: number;
   }
 > = {
   low: {
     useBasicFingerprint: true,
-    useAdvancedFingerprint: false,
     useHumanBehavior: false,
     behaviorSpeed: 'fast',
-    canvasNoise: 0,
-    audioNoise: 0,
   },
   medium: {
     useBasicFingerprint: true,
-    useAdvancedFingerprint: true,
     useHumanBehavior: false,
     behaviorSpeed: 'fast',
-    canvasNoise: 0.005,
-    audioNoise: 0.0001,
   },
   high: {
     useBasicFingerprint: true,
-    useAdvancedFingerprint: true,
     useHumanBehavior: true,
     behaviorSpeed: 'fast',
-    canvasNoise: 0.01,
-    audioNoise: 0.0003,
   },
   paranoid: {
     useBasicFingerprint: true,
-    useAdvancedFingerprint: true,
     useHumanBehavior: true,
     behaviorSpeed: 'normal',
-    canvasNoise: 0.015,
-    audioNoise: 0.0005,
   },
 };
 
 export class AntiDetection {
   private level: AntiDetectionLevel;
   private fingerprintManager: FingerprintManager;
-  private advancedFingerprint: AdvancedFingerprint;
   private humanBehavior: HumanBehavior;
   private levelConfig: (typeof LEVEL_CONFIGS)[AntiDetectionLevel];
 
@@ -104,15 +82,6 @@ export class AntiDetection {
 
     // 初始化指纹管理器
     this.fingerprintManager = new FingerprintManager(options.fingerprintDir);
-
-    // 初始化高级指纹
-    const fingerprintConfig = generateRandomConfig();
-    if (options.fingerprint) {
-      Object.assign(fingerprintConfig, options.fingerprint);
-    }
-    fingerprintConfig.canvas.factor = this.levelConfig.canvasNoise;
-    fingerprintConfig.audio.noiseFactor = this.levelConfig.audioNoise;
-    this.advancedFingerprint = new AdvancedFingerprint(fingerprintConfig);
 
     // 初始化人性化行为
     const behaviorConfig =
@@ -136,12 +105,7 @@ export class AntiDetection {
       await this.fingerprintManager.injectFingerprint(page, sessionId, rotate);
     }
 
-    // 2. 注入高级指纹 (Canvas, WebGL, Audio 等)
-    if (this.levelConfig.useAdvancedFingerprint) {
-      await this.advancedFingerprint.inject(page);
-    }
-
-    // 3. 设置额外的页面配置
+    // 2. 设置额外的页面配置
     await this.setupPage(page);
   }
 
@@ -290,12 +254,13 @@ export class AntiDetection {
     } else {
       this.humanBehavior.useDefaultConfig();
     }
+  }
 
-    // 更新指纹配置
-    this.advancedFingerprint.setConfig({
-      canvas: { enabled: true, factor: this.levelConfig.canvasNoise },
-      audio: { enabled: true, noiseFactor: this.levelConfig.audioNoise },
-    });
+  /**
+   * Get fingerprint for a session (without injecting)
+   */
+  getFingerprint(sessionId: string): any {
+    return this.fingerprintManager.getFingerprint(sessionId, false);
   }
 
   /**
@@ -304,7 +269,6 @@ export class AntiDetection {
   getComponents() {
     return {
       fingerprintManager: this.fingerprintManager,
-      advancedFingerprint: this.advancedFingerprint,
       humanBehavior: this.humanBehavior,
     };
   }
@@ -315,9 +279,6 @@ export class AntiDetection {
   getSummary(): string {
     return `AntiDetection [${this.level}]
   ├─ Basic Fingerprint: ${this.levelConfig.useBasicFingerprint ? '✓' : '✗'}
-  ├─ Advanced Fingerprint: ${this.levelConfig.useAdvancedFingerprint ? '✓' : '✗'}
-  │  ├─ Canvas Noise: ${this.levelConfig.canvasNoise}
-  │  └─ Audio Noise: ${this.levelConfig.audioNoise}
   └─ Human Behavior: ${this.levelConfig.useHumanBehavior ? '✓' : '✗'} (${this.levelConfig.behaviorSpeed})`;
   }
 }

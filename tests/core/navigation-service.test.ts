@@ -5,7 +5,7 @@
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { Page } from 'puppeteer';
-import { ScraperEventBus } from '../../core/event-bus';
+import { ScraperEventBus } from '../../core/scraper-engine.types';
 import { NavigationService } from '../../core/navigation-service';
 
 describe('NavigationService', () => {
@@ -18,8 +18,7 @@ describe('NavigationService', () => {
       emitLog: mock(() => {}),
       emitProgress: mock(() => {}),
       emitPerformance: mock(() => {}),
-      on: mock(() => {}),
-      off: mock(() => {}),
+      emitError: mock(() => {}),
     };
 
     mockPage = {

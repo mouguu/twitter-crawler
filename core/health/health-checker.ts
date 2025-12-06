@@ -81,38 +81,56 @@ export class HealthChecker {
   /**
    * Check Proxy health (if configured)
    */
+  /**
+   * Check Proxy health using ProxyManager
+   */
   async checkProxy(): Promise<HealthStatus> {
-    const proxyUrl = process.env.PROXY_URL;
-
-    if (!proxyUrl) {
-      return {
-        status: 'healthy',
-        responseTime: 0,
-        message: 'No proxy configured (direct connection)',
-      };
-    }
-
     const start = Date.now();
     try {
-      // Test proxy by hitting httpbin.org
-      await axios.get('http://httpbin.org/ip', {
-        proxy: this.parseProxyUrl(proxyUrl),
-        timeout: 5000,
-      });
+      // Dynamic import to avoid circular dependencies if any
+      const { ProxyManager } = await import('../proxy-manager');
+      const proxyManager = new ProxyManager();
+      // Use init() to load from files, not loadProxies()
+      await proxyManager.init();
 
+      if (!proxyManager.isEnabled()) {
+         return {
+          status: 'healthy',
+          responseTime: 0,
+          message: 'Proxy system disabled',
+        };
+      }
+
+      if (!proxyManager.hasProxies()) {
+        return {
+          status: 'down',
+          responseTime: 0,
+          message: 'No active proxies available in pool',
+        };
+      }
+
+      // Check stats
+      const stats = proxyManager.getStats();
+      const avgSuccessRate = stats.avgSuccessRate;
+      
       const responseTime = Date.now() - start;
+      
+      let status: 'healthy' | 'degraded' | 'down' = 'healthy';
+      if (avgSuccessRate < 0.5) status = 'down';
+      else if (avgSuccessRate < 0.8) status = 'degraded';
 
       return {
-        status: responseTime < 1000 ? 'healthy' : 'degraded',
-        responseTime,
-        message: responseTime < 1000 ? 'Proxy responding normally' : 'Proxy responding slowly',
+        status,
+        responseTime, // This is just check time, not proxy response time
+        message: `Active: ${stats.active}, Success Rate: ${(avgSuccessRate * 100).toFixed(1)}%`,
+        details: proxyManager.getStats(),
       };
     } catch (error: any) {
       logger.error('Proxy health check failed', error);
       return {
         status: 'down',
         responseTime: Date.now() - start,
-        message: 'Proxy connection failed',
+        message: 'Proxy manager check failed',
         details: error.message,
       };
     }

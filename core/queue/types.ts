@@ -27,6 +27,7 @@ export interface ScrapeJobData {
     enableProxy?: boolean;
     dateRange?: { start: string; end: string };
     antiDetectionLevel?: 'low' | 'medium' | 'high' | 'paranoid';
+    sessionLabel?: string;
   };
 }
 

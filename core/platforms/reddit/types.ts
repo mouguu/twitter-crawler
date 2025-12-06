@@ -121,7 +121,7 @@ export interface RedditScraperResult {
   message?: string;
   post?: RedditPost;
   comments?: FlattenedComment[];
-  posts?: Array<{ url: string; id: string }>;
+  posts?: Array<{ post: RedditPost; comments: FlattenedComment[] }>;
   filePath?: string;
   scrapedCount?: number;
   totalPosts?: number;

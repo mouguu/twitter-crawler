@@ -1,6 +1,6 @@
 import { createEnhancedLogger } from '../../utils/logger';
 import { ScraperErrors } from '../errors';
-import { createEventBus } from '../event-bus';
+
 import { ScraperEngine } from '../scraper-engine';
 import { PlatformAdapter } from './types';
 
@@ -13,33 +13,22 @@ export const twitterAdapter: PlatformAdapter = {
     const { config: jobConfig } = data;
     const startTime = Date.now();
 
-    const jobEventBus = createEventBus();
-    // biome-ignore lint/suspicious/noExplicitAny: dynamic progress events
-    jobEventBus.on(jobEventBus.events.SCRAPE_PROGRESS, (progress: any) => {
-      ctx.emitProgress({
-        current: progress.current ?? 0,
-        target: progress.target ?? jobConfig.limit ?? 0,
-        action: progress.action || 'scraping',
-      });
-    });
-    // biome-ignore lint/suspicious/noExplicitAny: dynamic log events
-    jobEventBus.on(jobEventBus.events.LOG_MESSAGE, (log: any) => {
-      ctx.emitLog({
-        // biome-ignore lint/suspicious/noExplicitAny: log level type casting
-        level: (log.level || 'info') as any,
-        message: log.message,
-        timestamp: log.timestamp ? new Date(log.timestamp).getTime() : Date.now(),
-      });
-    });
-
-    await ctx.log(
-      `Starting Twitter scrape: ${jobConfig.username || jobConfig.tweetUrl || jobConfig.searchQuery}`,
-    );
-
     const engine = new ScraperEngine(async () => await ctx.getShouldStop(), {
       apiOnly: jobConfig.mode === 'graphql',
-      eventBus: jobEventBus,
-      jobId: data.jobId, // Pass BullMQ Job ID
+      logger: {
+        info: (message: string) => ctx.emitLog({ level: 'info', message, timestamp: Date.now() }),
+        warn: (message: string) => ctx.emitLog({ level: 'warn', message, timestamp: Date.now() }),
+        error: (message: string) => ctx.emitLog({ level: 'error', message, timestamp: Date.now() }),
+        debug: (message: string) => ctx.emitLog({ level: 'debug', message, timestamp: Date.now() }),
+      },
+      onProgress: (progress: any) => {
+        ctx.emitProgress({
+          current: progress.current ?? 0,
+          target: progress.target ?? jobConfig.limit ?? 0,
+          action: progress.action || 'scraping',
+        });
+      },
+      jobId: data.jobId,
       antiDetectionLevel: jobConfig.antiDetectionLevel,
     });
 
@@ -49,6 +38,12 @@ export const twitterAdapter: PlatformAdapter = {
     try {
       await engine.init();
       engine.proxyManager.setEnabled(jobConfig.enableProxy || false);
+
+      // Set preferred session if specified in config (e.g. for scraping specific timeline)
+      if (jobConfig.sessionLabel) {
+        engine.preferredSessionId = jobConfig.sessionLabel;
+        await ctx.log(`Requesting session: ${jobConfig.sessionLabel}`, 'info');
+      }
 
       const cookiesLoaded = await engine.loadCookies(jobConfig.enableRotation !== false);
       if (!cookiesLoaded) {
@@ -127,7 +122,7 @@ export const twitterAdapter: PlatformAdapter = {
           searchQuery: jobConfig.searchQuery,
           limit: jobConfig.limit || 50,
           saveMarkdown: true,
-          scrapeMode: jobConfig.mode || 'puppeteer',
+          scrapeMode: (jobConfig.mode === 'mixed' ? 'puppeteer' : jobConfig.mode || 'puppeteer') as 'puppeteer' | 'graphql',
           dateRange: jobConfig.dateRange,
         });
 

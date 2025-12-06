@@ -5,7 +5,7 @@
 
 import { AntiDetection, type AntiDetectionLevel } from './anti-detection';
 import { ErrorSnapshotter } from './error-snapshotter';
-import { ScraperEventBus } from './event-bus';
+import { ScraperEventBus } from './scraper-engine.types';
 import { NavigationService } from './navigation-service';
 import { PerformanceMonitor } from './performance-monitor';
 import { ProgressManager } from './progress-manager';
@@ -33,7 +33,7 @@ export function createDefaultDependencies(
   progressDir: string = './data/progress',
   antiDetectionLevel: AntiDetectionLevel = 'high',
 ): ScraperDependencies {
-  const sessionManager = new SessionManager(cookieDir, eventBus);
+  const sessionManager = new SessionManager(cookieDir, 3, eventBus);
 
   return {
     navigationService: new NavigationService(eventBus),

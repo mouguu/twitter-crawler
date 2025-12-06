@@ -10,7 +10,7 @@ import { createEnhancedLogger } from '../../utils/logger';
 import { JobRepository } from '../db/job-repo';
 import { ErrorClassifier } from '../errors';
 import { redditAdapter } from '../platforms/reddit-adapter';
-import { getAdapter, registerAdapter } from '../platforms/registry';
+// import { getAdapter, registerAdapter } from '../platforms/registry'; // Removed
 import { twitterAdapter } from '../platforms/twitter-adapter';
 import { AdapterJobContext } from '../platforms/types';
 import { redisConnection, redisPublisher } from './connection';
@@ -41,9 +41,8 @@ export async function isJobCancelled(jobId: string): Promise<boolean> {
   return exists === 1;
 }
 
-// Register built-in adapters at startup
-registerAdapter(twitterAdapter);
-registerAdapter(redditAdapter);
+// Register built-in adapters (removed in favor of explicit switch case)
+// twitterAdapter and redditAdapter are imported directly
 
 /**
  * Safely serialize error objects (handles Axios circular references)
@@ -152,11 +151,17 @@ export function createScrapeWorker(concurrency?: number) {
       }
 
       try {
-        const adapter = getAdapter(type);
-        if (adapter.init) {
-          await adapter.init();
+        let result: ScrapeJobResult;
+
+        if (type === 'twitter') {
+          if (twitterAdapter.init) await twitterAdapter.init();
+          result = await twitterAdapter.process(job.data, ctx);
+        } else if (type === 'reddit') {
+          if (redditAdapter.init) await redditAdapter.init();
+          result = await redditAdapter.process(job.data, ctx);
+        } else {
+          throw new Error(`Unknown job type: ${type}`);
         }
-        const result = await adapter.process(job.data, ctx);
 
         // Check for cancellation one last time before marking as completed
         // This prevents race conditions where a user cancels just as the job finishes

@@ -3,7 +3,7 @@
  */
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
-import { ScraperEventBus } from '../../core/event-bus';
+import { ScraperEventBus } from '../../core/scraper-engine.types';
 import { createDefaultDependencies, ScraperDependencies } from '../../core/scraper-dependencies';
 
 describe('ScraperDependencies', () => {
@@ -14,8 +14,7 @@ describe('ScraperDependencies', () => {
       emitLog: mock(() => {}),
       emitProgress: mock(() => {}),
       emitPerformance: mock(() => {}),
-      on: mock(() => {}),
-      off: mock(() => {}),
+      emitError: mock(() => {}),
     } as any;
   });
 

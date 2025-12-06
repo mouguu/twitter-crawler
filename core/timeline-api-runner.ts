@@ -6,12 +6,12 @@ import {
   parseTweetsFromInstructions,
 } from '../types/tweet-definitions';
 import * as fileUtils from '../utils';
-import { cleanTweetsFast } from '../utils';
+import { cleanTweetsFast, sleepOrCancel, waitOrCancel } from '../utils';
 import { ScraperError, ScraperErrors } from './errors';
 import type { ScraperEngine } from './scraper-engine';
 import type { ScrapeTimelineConfig, ScrapeTimelineResult } from './scraper-engine.types';
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+// Removed local sleep function in favor of sleepOrCancel
 
 /**
  * Run timeline scraping using REST API v1.1
@@ -62,6 +62,8 @@ async function runTimelineRestApi(
   let consecutiveEmpty = 0;
   let lastError: string | undefined;
 
+  const shouldStop = () => engine.shouldStop();
+
   while (collectedTweets.length < limit) {
     if (await engine.shouldStop()) {
       engine.eventBus.emitLog('Manual stop signal received.');
@@ -72,12 +74,12 @@ async function runTimelineRestApi(
       const apiClient = engine.ensureApiClient();
       const pageSize = Math.min(200, limit - collectedTweets.length);
 
-      const response = await apiClient.getUserTimelineRest(username, {
+      const response = await waitOrCancel(apiClient.getUserTimelineRest(username, {
         count: pageSize,
         maxId,
         includeRts: true,
         excludeReplies: config.withReplies ? false : undefined,
-      });
+      }), shouldStop);
 
       if (!Array.isArray(response) || response.length === 0) {
         consecutiveEmpty += 1;
@@ -85,7 +87,7 @@ async function runTimelineRestApi(
           `REST timeline returned empty page (${consecutiveEmpty}/2). Collected ${collectedTweets.length}/${totalTarget}`,
         );
         if (consecutiveEmpty >= 2) break;
-        await sleep(300 + Math.random() * 400);
+        await sleepOrCancel(300 + Math.random() * 400, shouldStop);
         continue;
       }
 
@@ -151,7 +153,7 @@ async function runTimelineRestApi(
       }
 
       const delay = 120 + Math.random() * 220;
-      await sleep(delay);
+      await sleepOrCancel(delay, shouldStop);
       // biome-ignore lint/suspicious/noExplicitAny: error handling
     } catch (error: any) {
       lastError = error instanceof Error ? error.message : String(error);
@@ -229,6 +231,8 @@ export async function runTimelineApi(
   const currentSession = engine.getCurrentSession();
   if (currentSession) attemptedSessions.add(currentSession.id);
 
+  const shouldStop = () => engine.shouldStop();
+
   const cursorHistory: Array<{
     cursor: string;
     sessionId: string;
@@ -252,10 +256,10 @@ export async function runTimelineApi(
 
       if (mode === 'search' && searchQuery) {
         engine.eventBus.emitLog(`Fetching search results for "${searchQuery}"...`);
-        response = await apiClient.searchTweets(searchQuery, 20, cursor);
+        response = await waitOrCancel(apiClient.searchTweets(searchQuery, 20, cursor), shouldStop);
       } else if (userId) {
         engine.eventBus.emitLog(`Fetching tweets for user ${username}...`);
-        response = await apiClient.getUserTweets(userId, 40, cursor);
+        response = await waitOrCancel(apiClient.getUserTweets(userId, 40, cursor), shouldStop);
       } else {
         throw ScraperErrors.invalidConfiguration(
           'Invalid configuration: missing username or search query',
@@ -354,7 +358,7 @@ export async function runTimelineApi(
 
       const baseDelay = consecutiveErrors > 0 ? 2000 : 100;
       const delay = baseDelay + Math.random() * 400;
-      await sleep(delay);
+      await sleepOrCancel(delay, shouldStop);
       // biome-ignore lint/suspicious/noExplicitAny: error handling
     } catch (error: any) {
       const handled = await handleApiError({
@@ -540,7 +544,7 @@ async function handleEmptyCursor({
   }
 
   const sessionsAtThisCursor = emptyCursorSessions.get(nextCursor || '')?.size || 0;
-  const allActiveSessions = engine.sessionManager.getAllActiveSessions();
+  const allActiveSessions = await engine.sessionManager.getAllActiveSessions();
   const hasMoreSessions = allActiveSessions.some((s) => !attemptedSessions.has(s.id));
   const likelyRealEnd = sessionsAtThisCursor >= 3 || !hasMoreSessions;
 
@@ -578,7 +582,7 @@ async function handleEmptyCursor({
           `Switched to session: ${nextSession.id} (${attemptedSessions.size} session(s) tried). Retrying same cursor...`,
           'info',
         );
-        await sleep(200 + Math.random() * 300);
+        await sleepOrCancel(200 + Math.random() * 300, () => engine.shouldStop());
         return {
           shouldContinue: true,
           updatedCursor: cursor,
@@ -639,7 +643,7 @@ async function handleEmptyCursor({
     )}ms...`,
     'warn',
   );
-  await sleep(retryDelay);
+  await sleepOrCancel(retryDelay, () => engine.shouldStop());
 
   return {
     shouldContinue: true,
@@ -689,7 +693,7 @@ async function handleApiError({
         `404 error with cursor in search mode. Refreshing search headers/xclid and retrying current cursor once...`,
         'warn',
       );
-      await sleep(300 + Math.random() * 300);
+      await sleepOrCancel(300 + Math.random() * 300, () => engine.shouldStop());
       return {
         cursor,
         consecutiveErrors,
@@ -730,7 +734,7 @@ async function handleApiError({
     }
 
     engine.eventBus.emitLog(`API Error: ${error.message}. Attempting session rotation...`, 'warn');
-    const allActiveSessions = engine.sessionManager.getAllActiveSessions();
+    const allActiveSessions = await engine.sessionManager.getAllActiveSessions();
     const untriedSessions = allActiveSessions.filter((s) => !attemptedSessions.has(s.id));
 
     if (untriedSessions.length > 0) {
@@ -790,7 +794,7 @@ async function handleApiError({
     engine.performanceMonitor.recordApiRequest(0, true);
     engine.eventBus.emitLog(`Transient error: ${error.message}. Retrying...`, 'warn');
     const waitTime = 500 + Math.random() * 500;
-    await sleep(waitTime);
+    await sleepOrCancel(waitTime, () => engine.shouldStop());
     engine.performanceMonitor.recordRateLimitWait(waitTime);
     engine.performanceMonitor.recordTweets(collectedTweets.length);
     engine.emitPerformanceUpdate();

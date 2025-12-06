@@ -274,6 +274,7 @@ export async function waitForNewTweets(
 export async function scrollToBottomSmart(
   page: Page,
   timeout: number = SCROLL_CONFIG.smartScrollTimeout,
+  shouldStop?: () => boolean | Promise<boolean>,
 ): Promise<void> {
   // 1. 设置网络监听
   let requestCount = 0;
@@ -288,14 +289,19 @@ export async function scrollToBottomSmart(
   page.on('request', onRequest);
 
   try {
+    if (await shouldStop?.()) return;
+
     // 2. 执行滚动策略 (Keyboard Strategy - More reliable for infinite scroll)
     try {
       // Press PageDown multiple times to trigger scroll events
       // This is better than window.scrollTo because it fires all the native events
       for (let i = 0; i < 5; i++) {
+        if (await shouldStop?.()) return;
         await page.keyboard.press('PageDown');
         await new Promise((r) => setTimeout(r, 200));
       }
+
+      if (await shouldStop?.()) return;
 
       // Final ensure bottom
       await page.evaluate(() => {
@@ -304,6 +310,8 @@ export async function scrollToBottomSmart(
     } catch (e) {
       console.warn('Scroll execution failed:', e);
     }
+
+    if (await shouldStop?.()) return;
 
     // 2.5 Check for "Show more" / "Load more" buttons
     try {
@@ -327,12 +335,15 @@ export async function scrollToBottomSmart(
       });
 
       if (clicked) {
+        if (await shouldStop?.()) return;
         // If we clicked a button, wait a bit for new content
         await new Promise((r) => setTimeout(r, SCROLL_CONFIG.showMoreButtonWait));
       }
     } catch (_e) {
       // Ignore errors checking for buttons
     }
+
+    if (await shouldStop?.()) return;
 
     // 3. 智能等待 (等待网络空闲)
     const checkInterval = SCROLL_CONFIG.networkStabilityCheckInterval;
@@ -343,6 +354,8 @@ export async function scrollToBottomSmart(
     const startTime = Date.now();
 
     while (Date.now() - startTime < timeout) {
+      if (await shouldStop?.()) return;
+
       await new Promise((r) => setTimeout(r, checkInterval));
 
       if (requestCount === lastRequestCount) {
@@ -515,14 +528,23 @@ export async function detectNoResultsPage(page: Page): Promise<boolean> {
 export async function recoverFromErrorPage(
   page: Page,
   maxRetries: number = ERROR_RECOVERY_CONFIG.maxRetries,
+  shouldStop?: () => boolean | Promise<boolean>,
 ): Promise<boolean> {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
+    if (await shouldStop?.()) {
+      return false;
+    }
+
     try {
       const hasError = await detectErrorPage(page);
 
       if (!hasError) {
         // 没有错误，页面正常
         return true;
+      }
+
+      if (shouldStop?.()) {
+        return false;
       }
 
       // 检测到错误，尝试点击 "Try Again" 按钮
@@ -534,6 +556,10 @@ export async function recoverFromErrorPage(
           ERROR_RECOVERY_CONFIG.initialWaitAfterClick +
           attempt * ERROR_RECOVERY_CONFIG.retryWaitIncrement;
         await new Promise((r) => setTimeout(r, waitTime));
+
+        if (shouldStop?.()) {
+          return false;
+        }
 
         // 再次检查是否还有错误
         const stillHasError = await detectErrorPage(page);
@@ -551,6 +577,11 @@ export async function recoverFromErrorPage(
         // 但如果是第一次尝试，可以再等一会儿看看页面是否自动恢复
         if (attempt === 0) {
           await new Promise((r) => setTimeout(r, ERROR_RECOVERY_CONFIG.autoRecoveryWait));
+          
+          if (shouldStop?.()) {
+             return false;
+          }
+
           const autoRecovered = !(await detectErrorPage(page));
           if (autoRecovered) {
             return true;

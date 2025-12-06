@@ -127,3 +127,49 @@ model Tweet {
   @@index([username])
   @@index([createdAt])
 }
+
+// ==================== Reddit Data Models ====================
+
+model RedditPost {
+  id                    String   @id // Short ID e.g. "18hskj"
+  name                  String   // Fullname e.g. "t3_18hskj"
+  title                 String
+  selftext              String?  @db.Text
+  author                String
+  subreddit             String
+  subredditNamePrefixed String   // r/subreddit
+  score                 Int
+  upvoteRatio           Float?
+  numComments           Int
+  createdUtc            Float
+  url                   String
+  permalink             String
+  isSelf                Boolean
+  
+  scrapedAt             DateTime @default(now())
+  
+  comments              RedditComment[]
+  
+  @@index([subreddit])
+  @@index([createdUtc])
+}
+
+model RedditComment {
+  id              String   @id // Short ID
+  name            String   // Fullname t1_...
+  postId          String
+  post            RedditPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  
+  author          String
+  body            String   @db.Text
+  score           Int
+  createdUtc      Float
+  parentId        String?
+  permalink       String
+  depth           Int      @default(0)
+  
+  scrapedAt       DateTime @default(now())
+  
+  @@index([postId])
+}
+
