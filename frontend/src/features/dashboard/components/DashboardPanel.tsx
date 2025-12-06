@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Download, X, CheckCircle2, XCircle, Loader2, Clock, Zap } from 'lucide-react';
-import { connectToJobStream, cancelJob, type JobProgressEvent } from '../utils/queueClient';
+import { connectToJobStream, cancelJob, type JobProgressEvent } from '@/utils/queueClient';
 
-import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
-import { Badge } from '@/components/ui/badge';
+import { Button } from '@/shared/ui/button';
+import { Progress } from '@/shared/ui/progress';
+import { Badge } from '@/shared/ui/badge';
 
 interface ActiveJob {
   jobId: string;

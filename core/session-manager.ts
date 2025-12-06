@@ -57,22 +57,30 @@ export class SessionManager {
   private async importLegacySessions(): Promise<void> {
     try {
       if (!fs.existsSync(this.cookieDir)) return;
-      
-      const files = fs.readdirSync(this.cookieDir).filter((f) => f.endsWith('.json') && !f.endsWith('.meta.json'));
-      
+
+      const files = fs
+        .readdirSync(this.cookieDir)
+        .filter((f) => f.endsWith('.json') && !f.endsWith('.meta.json'));
+
       for (const file of files) {
         try {
           const filePath = path.join(this.cookieDir, file);
           const raw = fs.readFileSync(filePath, 'utf-8');
-          const cookies = JSON.parse(raw);
-          
+          const parsed = JSON.parse(raw);
+
+          // Support both formats: plain array or { cookies: [...] }
+          const cookies = Array.isArray(parsed) ? parsed : parsed.cookies || null;
+
           if (!Array.isArray(cookies)) {
-            this._log(`Skipping invalid cookie file ${file}: not an array`, 'warn');
+            this._log(
+              `Skipping invalid cookie file ${file}: not an array or object with cookies field`,
+              'warn',
+            );
             continue;
           }
 
           const label = path.basename(file, '.json');
-          
+
           // Upsert to DB
           await this.prisma.cookieSession.upsert({
             where: {
@@ -96,13 +104,13 @@ export class SessionManager {
           });
 
           this._log(`Imported legacy session to DB: ${label}`);
-          fs.renameSync(filePath, filePath + '.imported');
+          fs.renameSync(filePath, `${filePath}.imported`);
         } catch (e: any) {
           this._log(`Failed to import legacy session ${file}: ${e.message}`, 'error');
         }
       }
     } catch (error) {
-       this._log(`Error during legacy session import: ${error}`, 'error');
+      this._log(`Error during legacy session import: ${error}`, 'error');
     }
   }
 
@@ -113,15 +121,22 @@ export class SessionManager {
    */
   async getNextSession(preferredId?: string): Promise<Session | undefined> {
     try {
-      let dbSession;
+      let dbSession: {
+        id: string;
+        cookies: unknown;
+        errorCount: number;
+        label: string | null;
+        lastUsedAt: Date | null;
+        username: string | null;
+      } | null = null;
 
       if (preferredId) {
         dbSession = await this.prisma.cookieSession.findFirst({
           where: {
             id: preferredId,
             isValid: true,
-            platform: 'twitter'
-          }
+            platform: 'twitter',
+          },
         });
       }
 
@@ -131,11 +146,9 @@ export class SessionManager {
         dbSession = await this.prisma.cookieSession.findFirst({
           where: {
             isValid: true,
-            platform: 'twitter'
+            platform: 'twitter',
           },
-          orderBy: [
-            { lastUsed: 'asc' }
-          ]
+          orderBy: [{ lastUsed: 'asc' }],
         });
       }
 
@@ -144,7 +157,7 @@ export class SessionManager {
       // Update lastUsed to rotate
       await this.prisma.cookieSession.update({
         where: { id: dbSession.id },
-        data: { lastUsed: new Date() }
+        data: { lastUsed: new Date() },
       });
 
       return {
@@ -152,13 +165,12 @@ export class SessionManager {
         cookies: dbSession.cookies as any,
         usageCount: 0, // Reset for this run context
         errorCount: dbSession.errorCount,
-        consecutiveFailures: 0, 
+        consecutiveFailures: 0,
         isRetired: false,
         username: dbSession.username,
         platform: 'twitter',
-        filePath: dbSession.label || undefined
+        filePath: dbSession.label || undefined,
       };
-
     } catch (error: any) {
       this._log(`Failed to get next session: ${error.message}`, 'error');
       return undefined;
@@ -176,7 +188,7 @@ export class SessionManager {
   async getSessionById(sessionId: string): Promise<Session | undefined> {
     try {
       const dbSession = await this.prisma.cookieSession.findUnique({
-        where: { id: sessionId }
+        where: { id: sessionId },
       });
 
       if (!dbSession) return undefined;
@@ -190,7 +202,7 @@ export class SessionManager {
         isRetired: !dbSession.isValid,
         username: dbSession.username,
         platform: 'twitter',
-        filePath: dbSession.label || undefined
+        filePath: dbSession.label || undefined,
       };
     } catch (error: any) {
       this._log(`Failed to get session ${sessionId}: ${error.message}`, 'error');
@@ -206,9 +218,9 @@ export class SessionManager {
       const dbSessions = await this.prisma.cookieSession.findMany({
         where: {
           isValid: true,
-          platform: 'twitter'
+          platform: 'twitter',
         },
-        orderBy: { lastUsed: 'asc' }
+        orderBy: { lastUsed: 'asc' },
       });
 
       return dbSessions.map((dbSession: any) => ({
@@ -220,7 +232,7 @@ export class SessionManager {
         isRetired: false,
         username: dbSession.username,
         platform: 'twitter',
-        filePath: dbSession.label || undefined
+        filePath: dbSession.label || undefined,
       }));
     } catch (error: any) {
       this._log(`Failed to get all active sessions: ${error.message}`, 'error');
@@ -236,8 +248,8 @@ export class SessionManager {
       const count = await this.prisma.cookieSession.count({
         where: {
           isValid: true,
-          platform: 'twitter'
-        }
+          platform: 'twitter',
+        },
       });
       return count > 0;
     } catch (error: any) {
@@ -255,17 +267,21 @@ export class SessionManager {
       if (!session) return;
 
       const newErrorCount = session.errorCount + 1;
-      this._log(`Marking session ${sessionId} BAD: ${reason || 'Unknown'} (Errors: ${newErrorCount})`, 'warn');
+      this._log(
+        `Marking session ${sessionId} BAD: ${reason || 'Unknown'} (Errors: ${newErrorCount})`,
+        'warn',
+      );
 
       await this.prisma.cookieSession.update({
         where: { id: sessionId },
         data: {
           errorCount: newErrorCount,
           lastUsed: new Date(),
-        }
+        },
       });
 
-      if (newErrorCount >= 10) { // Hardcoded limit for now, could be dynamic
+      if (newErrorCount >= 10) {
+        // Hardcoded limit for now, could be dynamic
         await this.retire(sessionId);
       }
     } catch (e: any) {
@@ -291,7 +307,7 @@ export class SessionManager {
         data: {
           lastUsed: new Date(),
           errorCount: 0, // Reset error count on success? Debateable. Let's say yes for "recovery".
-        }
+        },
       });
     } catch (e: any) {
       this._log(`Failed to mark success for session ${sessionId}: ${e.message}`, 'error');
@@ -306,7 +322,7 @@ export class SessionManager {
     try {
       await this.prisma.cookieSession.update({
         where: { id: sessionId },
-        data: { isValid: false }
+        data: { isValid: false },
       });
     } catch (e: any) {
       this._log(`Failed to retire session ${sessionId}: ${e.message}`, 'error');

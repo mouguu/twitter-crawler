@@ -1,60 +1,21 @@
 import { motion } from 'framer-motion';
 import { ArrowRight, Square, Zap, Globe, MessageSquare, MessageCircle } from 'lucide-react';
 
-import type { TabType } from '../types/ui';
+import { useCrawlerStore } from '../store/useCrawlerStore';
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Button } from '@/shared/ui/button';
+import { Input } from '@/shared/ui/input';
+import { Label } from '@/shared/ui/label';
+import { Checkbox } from '@/shared/ui/checkbox';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { DatePicker } from '@/components/ui/date-picker';
-
-type ScrapeMode = 'graphql' | 'puppeteer' | 'mixed';
-
-interface TaskFormProps {
-  activeTab: TabType;
-  input: string;
-  limit: number;
-  scrapeLikes: boolean;
-  scrapeMode: ScrapeMode;
-  autoRotateSessions: boolean;
-  enableDeepSearch: boolean;
-  parallelChunks: number;
-  enableProxy: boolean;
-  startDate: string;
-  endDate: string;
-  redditStrategy: string;
-  lookbackHours?: number;
-  keywords?: string;
-  onLookbackHoursChange?: (value: number) => void;
-  onKeywordsChange?: (value: string) => void;
-  antiDetectionLevel?: 'low' | 'medium' | 'high' | 'paranoid';
-  onAntiDetectionLevelChange?: (level: 'low' | 'medium' | 'high' | 'paranoid') => void;
-  isScraping: boolean;
-  canSubmit: boolean;
-  onTabChange: (tab: TabType) => void;
-  onInputChange: (value: string) => void;
-  onLimitChange: (value: number) => void;
-  onScrapeModeChange: (mode: ScrapeMode) => void;
-  onToggleLikes: (value: boolean) => void;
-  onToggleAutoRotate: (value: boolean) => void;
-  onToggleDeepSearch: (value: boolean) => void;
-  onParallelChunksChange: (value: number) => void;
-  onToggleProxy: (value: boolean) => void;
-  onStartDateChange: (value: string) => void;
-  onEndDateChange: (value: string) => void;
-  onRedditStrategyChange: (value: string) => void;
-  onSubmit: () => void;
-  onStop: () => void;
-}
+} from '@/shared/ui/select';
+import { Badge } from '@/shared/ui/badge';
+import { DatePicker } from '@/shared/ui/date-picker';
 
 const tabs = [
   { id: 'profile' as const, label: 'Profile', icon: Globe, description: 'Scrape user tweets' },
@@ -86,7 +47,13 @@ const itemVariants = {
   visible: { opacity: 1, y: 0, transition: { duration: 0.5 } },
 };
 
-export function TaskForm(props: TaskFormProps) {
+interface TaskFormProps {
+  onSubmit: () => void;
+  onStop: () => void;
+}
+
+export function TaskForm({ onSubmit, onStop }: TaskFormProps) {
+  // All state from Zustand store
   const {
     activeTab,
     input,
@@ -101,28 +68,27 @@ export function TaskForm(props: TaskFormProps) {
     endDate,
     redditStrategy,
     isScraping,
+    antiDetectionLevel,
+    setActiveTab,
+    setInput,
+    setLimit,
+    setScrapeLikes,
+    setScrapeMode,
+    setAutoRotateSessions,
+    setEnableDeepSearch,
+    setParallelChunks,
+    setEnableProxy,
+    setStartDate,
+    setEndDate,
+    setRedditStrategy,
+    setAntiDetectionLevel,
     canSubmit,
-    onTabChange,
-    onInputChange,
-    onLimitChange,
-    onScrapeModeChange,
-    onToggleLikes,
-    onToggleAutoRotate,
-    onToggleDeepSearch,
-    onParallelChunksChange,
-    onToggleProxy,
-    onStartDateChange,
-    onEndDateChange,
-    onRedditStrategyChange,
-    antiDetectionLevel = 'high',
-    onAntiDetectionLevelChange,
-    onSubmit,
-    onStop,
-  } = props;
+  } = useCrawlerStore();
 
   const isRedditPostUrl =
     activeTab === 'reddit' && input.includes('reddit.com') && input.includes('/comments/');
   const currentTab = tabs.find((t) => t.id === activeTab);
+  const isSubmitEnabled = canSubmit();
 
   return (
     <section id="scrape" className="pt-24 pb-16 px-6">
@@ -150,7 +116,7 @@ export function TaskForm(props: TaskFormProps) {
               return (
                 <button
                   key={tab.id}
-                  onClick={() => onTabChange(tab.id)}
+                  onClick={() => setActiveTab(tab.id)}
                   className={`
                     relative p-4 rounded-2xl border text-left transition-all duration-300
                     ${
@@ -204,7 +170,7 @@ export function TaskForm(props: TaskFormProps) {
                 <div className="relative">
                   <Input
                     value={input}
-                    onChange={(e) => onInputChange(e.target.value)}
+                    onChange={(e) => setInput(e.target.value)}
                     placeholder={
                       activeTab === 'profile'
                         ? 'elonmusk or https://x.com/elonmusk'
@@ -231,12 +197,14 @@ export function TaskForm(props: TaskFormProps) {
                     'to:user',
                     '#hashtag',
                     'min_faves:100',
+                    'min_retweets:50',
                     '-is:retweet',
+                    '-filter:replies',
                     'lang:en',
                   ].map((hint) => (
                     <button
                       key={hint}
-                      onClick={() => onInputChange(input + (input ? ' ' : '') + hint)}
+                      onClick={() => setInput(input + (input ? ' ' : '') + hint)}
                       className="px-3 py-1.5 text-xs font-mono bg-muted rounded-lg hover:bg-muted/80 transition-colors"
                     >
                       {hint}
@@ -262,7 +230,7 @@ export function TaskForm(props: TaskFormProps) {
                       <Input
                         type="number"
                         value={limit}
-                        onChange={(e) => onLimitChange(parseInt(e.target.value))}
+                        onChange={(e) => setLimit(parseInt(e.target.value))}
                         onWheel={(e) => e.currentTarget.blur()}
                         min={10}
                         max={1000}
@@ -275,7 +243,7 @@ export function TaskForm(props: TaskFormProps) {
                   {activeTab === 'reddit' && !isRedditPostUrl && (
                     <div className="space-y-2">
                       <Label className="text-sm font-medium">Scrape Strategy</Label>
-                      <Select value={redditStrategy} onValueChange={onRedditStrategyChange}>
+                      <Select value={redditStrategy} onValueChange={setRedditStrategy}>
                         <SelectTrigger className="w-full">
                           <SelectValue />
                         </SelectTrigger>
@@ -297,7 +265,7 @@ export function TaskForm(props: TaskFormProps) {
                         {(['graphql', 'puppeteer', 'mixed'] as const).map((mode) => (
                           <button
                             key={mode}
-                            onClick={() => onScrapeModeChange(mode)}
+                            onClick={() => setScrapeMode(mode)}
                             className={`
                               px-4 py-2 rounded-xl text-sm font-medium transition-all
                               ${
@@ -346,13 +314,12 @@ export function TaskForm(props: TaskFormProps) {
                           date={startDate ? new Date(startDate + 'T00:00:00') : undefined}
                           setDate={(date: Date | undefined) => {
                             if (date) {
-                              // Format as YYYY-MM-DD (date is already in local time)
                               const year = date.getFullYear();
                               const month = String(date.getMonth() + 1).padStart(2, '0');
                               const day = String(date.getDate()).padStart(2, '0');
-                              onStartDateChange(`${year}-${month}-${day}`);
+                              setStartDate(`${year}-${month}-${day}`);
                             } else {
-                              onStartDateChange('');
+                              setStartDate('');
                             }
                           }}
                           placeholder="Select start date"
@@ -364,13 +331,12 @@ export function TaskForm(props: TaskFormProps) {
                           date={endDate ? new Date(endDate + 'T00:00:00') : undefined}
                           setDate={(date: Date | undefined) => {
                             if (date) {
-                              // Format as YYYY-MM-DD (date is already in local time)
                               const year = date.getFullYear();
                               const month = String(date.getMonth() + 1).padStart(2, '0');
                               const day = String(date.getDate()).padStart(2, '0');
-                              onEndDateChange(`${year}-${month}-${day}`);
+                              setEndDate(`${year}-${month}-${day}`);
                             } else {
-                              onEndDateChange('');
+                              setEndDate('');
                             }
                           }}
                           placeholder="Select end date"
@@ -385,7 +351,7 @@ export function TaskForm(props: TaskFormProps) {
                       <label className="flex items-center gap-3 cursor-pointer group">
                         <Checkbox
                           checked={scrapeLikes}
-                          onCheckedChange={(c) => onToggleLikes(c as boolean)}
+                          onCheckedChange={(c) => setScrapeLikes(c as boolean)}
                         />
                         <span className="text-sm group-hover:text-foreground transition-colors">
                           Include liked tweets
@@ -398,7 +364,7 @@ export function TaskForm(props: TaskFormProps) {
                         <label className="flex items-center gap-3 cursor-pointer group">
                           <Checkbox
                             checked={autoRotateSessions}
-                            onCheckedChange={(c) => onToggleAutoRotate(c as boolean)}
+                            onCheckedChange={(c) => setAutoRotateSessions(c as boolean)}
                           />
                           <div>
                             <span className="text-sm group-hover:text-foreground transition-colors block">
@@ -413,7 +379,7 @@ export function TaskForm(props: TaskFormProps) {
                         <label className="flex items-center gap-3 cursor-pointer group">
                           <Checkbox
                             checked={enableProxy}
-                            onCheckedChange={(c) => onToggleProxy(c as boolean)}
+                            onCheckedChange={(c) => setEnableProxy(c as boolean)}
                           />
                           <div>
                             <span className="text-sm group-hover:text-foreground transition-colors block">
@@ -432,7 +398,7 @@ export function TaskForm(props: TaskFormProps) {
                         <label className="flex items-center gap-3 cursor-pointer group">
                           <Checkbox
                             checked={enableDeepSearch}
-                            onCheckedChange={(c) => onToggleDeepSearch(c as boolean)}
+                            onCheckedChange={(c) => setEnableDeepSearch(c as boolean)}
                           />
                           <div>
                             <span className="text-sm group-hover:text-foreground transition-colors block">
@@ -456,7 +422,7 @@ export function TaskForm(props: TaskFormProps) {
                               min={1}
                               max={3}
                               value={parallelChunks}
-                              onChange={(e) => onParallelChunksChange(parseInt(e.target.value))}
+                              onChange={(e) => setParallelChunks(parseInt(e.target.value))}
                               className="w-20 font-mono"
                             />
                           </motion.div>
@@ -465,12 +431,12 @@ export function TaskForm(props: TaskFormProps) {
                     )}
 
                     {/* Anti-Detection Level */}
-                    {activeTab !== 'reddit' && onAntiDetectionLevelChange && (
+                    {activeTab !== 'reddit' && (
                       <div className="space-y-2">
                         <Label className="text-sm font-medium">Anti-Detection Level</Label>
                         <Select
                           value={antiDetectionLevel}
-                          onValueChange={(v: any) => onAntiDetectionLevelChange(v)}
+                          onValueChange={(v) => setAntiDetectionLevel(v as typeof antiDetectionLevel)}
                         >
                           <SelectTrigger>
                             <SelectValue>
@@ -537,13 +503,13 @@ export function TaskForm(props: TaskFormProps) {
               {/* Action Bar */}
               <div className="flex items-center justify-between pt-6 border-t border-border/50">
                 <div className="text-sm text-muted-foreground">
-                  {canSubmit ? 'Ready to extract' : 'Enter a valid input to start'}
+                  {isSubmitEnabled ? 'Ready to extract' : 'Enter a valid input to start'}
                 </div>
 
                 {!isScraping ? (
                   <Button
                     onClick={onSubmit}
-                    disabled={!canSubmit}
+                    disabled={!isSubmitEnabled}
                     size="lg"
                     className="gap-2 px-8 rounded-xl hover-lift"
                   >

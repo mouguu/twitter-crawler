@@ -66,7 +66,7 @@ export class CookieManager {
 
       const files = await fs.readdir(this.cookiesDir);
       this.cookieFiles = files
-        .filter((file) => file.endsWith('.json'))
+        .filter((file) => file.endsWith('.json') && !file.endsWith('.meta.json'))
         .map((file) => path.join(this.cookiesDir, file));
       return [...this.cookieFiles];
     } catch (_error: any) {

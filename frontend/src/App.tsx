@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ErrorNotification } from './components/ErrorNotification';
-import { SessionManager } from './components/SessionManager';
+import { SessionManager } from './features/sessions/SessionManager';
 import { HeaderBar } from './components/HeaderBar';
-import { TaskForm } from './components/TaskForm';
-import { DashboardPanel } from './components/DashboardPanel';
+import { TaskForm } from './features/crawler/components/TaskForm';
+import { DashboardPanel } from './features/dashboard/components/DashboardPanel';
+import { useCrawlerStore } from './features/crawler/store/useCrawlerStore';
 import { submitJob, cancelJob } from './utils/queueClient';
-import type { TabType } from './types/ui';
 
 // Error types
 export enum ErrorType {
@@ -91,48 +91,34 @@ function classifyError(error: any): AppError {
 }
 
 function App() {
-  const [activeTab, setActiveTab] = useState<TabType>('profile');
-  const [input, setInput] = useState('');
-  const [limit, setLimit] = useState(50);
-
-  const [apiKey, setApiKey] = useState<string>(''); // applied key
-  const [apiKeyInput, setApiKeyInput] = useState<string>(''); // input buffer
+  // API Key state (not part of crawler store as it's app-level config)
+  const [apiKey, setApiKey] = useState<string>('');
+  const [apiKeyInput, setApiKeyInput] = useState<string>('');
   const [apiBase, setApiBase] = useState<string>(window.__APP_CONFIG__?.apiBase || '');
-
-  // Queue Mode is now the ONLY mode.
-  // const [useQueueAPI, setUseQueueAPI] = useState(true);
-
-  // Options
-  const [scrapeLikes, setScrapeLikes] = useState(false);
-
-  // Scrape Mode: 'graphql' (API) or 'puppeteer' (DOM)
-  const [scrapeMode, setScrapeMode] = useState<'graphql' | 'puppeteer' | 'mixed'>('puppeteer');
-  const [latestJobId, setLatestJobId] = useState<string | null>(null);
-
-  // Monitor Options
-  const [lookbackHours, setLookbackHours] = useState(24);
-  const [keywords, setKeywords] = useState('');
-
-  // Reddit Options
-  const [redditStrategy, setRedditStrategy] = useState('auto');
-
-  // Advanced Options
-  const [isScraping, setIsScraping] = useState(false);
-  const [autoRotateSessions, setAutoRotateSessions] = useState(true);
-  const [enableDeepSearch, setEnableDeepSearch] = useState(false);
-  const [parallelChunks, setParallelChunks] = useState(1); // 并行处理chunks数量（1=串行，2-3=并行）
-  const [enableProxy, setEnableProxy] = useState(false);
-  const [antiDetectionLevel, setAntiDetectionLevel] = useState<
-    'low' | 'medium' | 'high' | 'paranoid'
-  >('high');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
 
   // Error Handling
   const [currentError, setCurrentError] = useState<AppError | null>(null);
 
-  const trimmedInput = input.trim();
-  const canSubmit = trimmedInput.length > 0;
+  // Get state and actions from store
+  const {
+    activeTab,
+    input,
+    limit,
+    scrapeMode,
+    scrapeLikes,
+    autoRotateSessions,
+    enableProxy,
+    startDate,
+    endDate,
+    redditStrategy,
+    antiDetectionLevel,
+    latestJobId,
+    setLatestJobId,
+    setLimit,
+    setScrapeMode,
+    setRedditStrategy,
+    setIsScraping,
+  } = useCrawlerStore();
 
   const withBase = useCallback(
     (path: string): string => {
@@ -157,6 +143,7 @@ function App() {
     }
   }, []);
 
+  // Load server config
   useEffect(() => {
     if (apiBase) return;
     const loadConfig = async () => {
@@ -185,7 +172,7 @@ function App() {
       }
     };
     loadConfig();
-  }, [apiBase]);
+  }, [apiBase, setLimit, setScrapeMode, setRedditStrategy]);
 
   // Persist API key
   useEffect(() => {
@@ -195,11 +182,6 @@ function App() {
       localStorage.removeItem('apiKey');
     }
   }, [apiKey]);
-
-  // Auto-scroll removed as per user request
-  // useEffect(() => {
-  //     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  // }, [logs]);
 
   const appendApiKey = useCallback(
     (url: string | null): string | null => {
@@ -217,25 +199,14 @@ function App() {
 
   const handleJobComplete = useCallback((jobId: string, downloadUrl?: string) => {
     console.log(`Job ${jobId} completed`, downloadUrl);
-    setLatestJobId((prev) => (prev === jobId ? null : prev));
-  }, []);
+    setLatestJobId(null);
+  }, [setLatestJobId]);
 
-  // On mount, if server 还有在跑的任务，让 UI 显示停止按钮
   const applyApiKey = () => {
     setApiKey(apiKeyInput.trim());
   };
 
-  const handleTabChange = (tab: TabType) => {
-    setActiveTab(tab);
-    setInput(''); // Clear input on tab switch
-  };
-
-  const handleScrapeModeChange = (mode: 'graphql' | 'puppeteer' | 'mixed') => {
-    setScrapeMode(mode);
-  };
-
   const handleScrape = async () => {
-    // Always use Queue API
     try {
       const jobInfo = await submitJob({
         type:
@@ -254,14 +225,12 @@ function App() {
       });
 
       setLatestJobId(jobInfo.jobId);
+      
       // Add job to Dashboard Panel
       const addJobFn = (window as any).__addJobToPanel;
       if (addJobFn) {
         addJobFn(jobInfo.jobId, activeTab === 'reddit' ? 'reddit' : 'twitter');
       }
-
-      // Optional: Clear input after successful submission?
-      // setInput("");
     } catch (error) {
       const appError = classifyError(error);
       setCurrentError(appError);
@@ -276,6 +245,7 @@ function App() {
     try {
       await cancelJob(latestJobId);
     } catch (err: any) {
+      console.error('Failed to cancel job:', err);
     } finally {
       setIsScraping(false);
     }
@@ -306,38 +276,6 @@ function App() {
 
       <main className="relative">
         <TaskForm
-          activeTab={activeTab}
-          input={input}
-          limit={limit}
-          scrapeLikes={scrapeLikes}
-          scrapeMode={scrapeMode}
-          autoRotateSessions={autoRotateSessions}
-          enableDeepSearch={enableDeepSearch}
-          parallelChunks={parallelChunks}
-          enableProxy={enableProxy}
-          startDate={startDate}
-          endDate={endDate}
-          lookbackHours={lookbackHours}
-          keywords={keywords}
-          onLookbackHoursChange={setLookbackHours}
-          onKeywordsChange={setKeywords}
-          redditStrategy={redditStrategy}
-          isScraping={isScraping}
-          canSubmit={canSubmit}
-          onTabChange={handleTabChange}
-          onInputChange={setInput}
-          onLimitChange={setLimit}
-          onScrapeModeChange={handleScrapeModeChange}
-          onToggleLikes={setScrapeLikes}
-          onToggleAutoRotate={setAutoRotateSessions}
-          onToggleDeepSearch={setEnableDeepSearch}
-          onParallelChunksChange={setParallelChunks}
-          onToggleProxy={setEnableProxy}
-          antiDetectionLevel={antiDetectionLevel}
-          onAntiDetectionLevelChange={setAntiDetectionLevel}
-          onStartDateChange={setStartDate}
-          onEndDateChange={setEndDate}
-          onRedditStrategyChange={setRedditStrategy}
           onSubmit={handleScrape}
           onStop={handleStop}
         />

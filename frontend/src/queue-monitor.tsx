@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { QueueMonitor } from './components/QueueMonitor';
+import { QueueMonitor } from './features/dashboard/components/QueueMonitor';
 import './index.css';
 
 function QueueMonitorApp() {
