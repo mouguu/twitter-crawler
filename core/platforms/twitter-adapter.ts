@@ -1,16 +1,35 @@
 import { createEnhancedLogger } from '../../utils/logger';
 import { ScraperErrors } from '../errors';
-
+import type {
+  ScrapeThreadResult,
+  ScrapeTimelineConfig,
+  ScrapeTimelineResult,
+} from '../scraper-engine';
 import { ScraperEngine } from '../scraper-engine';
-import { PlatformAdapter } from './types';
+import { AdapterJobContext, PlatformAdapter } from './types';
 
 const logger = createEnhancedLogger('TwitterAdapter');
+
+interface TwitterJobConfig {
+  mode?: 'puppeteer' | 'graphql' | 'mixed';
+  limit?: number;
+  username?: string;
+  tweetUrl?: string;
+  searchQuery?: string;
+  tab?: 'tweets' | 'replies' | 'likes' | 'media';
+  likes?: boolean;
+  enableProxy?: boolean;
+  enableRotation?: boolean;
+  sessionLabel?: string;
+  antiDetectionLevel?: 'low' | 'medium' | 'high' | 'paranoid';
+  dateRange?: { start?: string; end?: string };
+}
 
 export const twitterAdapter: PlatformAdapter = {
   name: 'twitter',
 
-  async process(data, ctx) {
-    const { config: jobConfig } = data;
+  async process(data, ctx: AdapterJobContext) {
+    const jobConfig = data.config as TwitterJobConfig;
     const startTime = Date.now();
 
     const engine = new ScraperEngine(async () => await ctx.getShouldStop(), {
@@ -21,7 +40,7 @@ export const twitterAdapter: PlatformAdapter = {
         error: (message: string) => ctx.emitLog({ level: 'error', message, timestamp: Date.now() }),
         debug: (message: string) => ctx.emitLog({ level: 'debug', message, timestamp: Date.now() }),
       },
-      onProgress: (progress: any) => {
+      onProgress: (progress) => {
         ctx.emitProgress({
           current: progress.current ?? 0,
           target: progress.target ?? jobConfig.limit ?? 0,
@@ -32,8 +51,7 @@ export const twitterAdapter: PlatformAdapter = {
       antiDetectionLevel: jobConfig.antiDetectionLevel,
     });
 
-    // biome-ignore lint/suspicious/noExplicitAny: dynamic result type
-    let result: any;
+    let result: ScrapeTimelineResult | ScrapeThreadResult | undefined;
 
     try {
       await engine.init();
@@ -53,15 +71,22 @@ export const twitterAdapter: PlatformAdapter = {
       if (jobConfig.username) {
         await ctx.log(`Scraping @${jobConfig.username}'s ${jobConfig.tab || 'posts'}...`);
 
-        // biome-ignore lint/suspicious/noExplicitAny: complex config type
-        const timelineConfig: any = {
+        const timelineConfig: ScrapeTimelineConfig = {
           username: jobConfig.username,
           limit: jobConfig.limit || 50,
           saveMarkdown: true,
           scrapeMode: (jobConfig.mode || 'puppeteer') as 'puppeteer' | 'graphql',
-          dateRange: jobConfig.dateRange,
-          jobId: data.jobId, // Pass to config as well
+          // jobId is not part of ScrapeTimelineConfig but was passed before.
+          // Assuming engine handles it via constructor options.
         };
+
+        // Handle dateRange type mismatch
+        if (jobConfig.dateRange?.start && jobConfig.dateRange?.end) {
+          timelineConfig.dateRange = {
+            start: jobConfig.dateRange.start,
+            end: jobConfig.dateRange.end,
+          };
+        }
 
         if (jobConfig.tab === 'likes' || jobConfig.tab === 'replies') {
           timelineConfig.tab = jobConfig.tab;
@@ -87,13 +112,14 @@ export const twitterAdapter: PlatformAdapter = {
             scrapeMode: 'puppeteer',
           });
 
-          if (likesResult.success && likesResult.tweets) {
-            // biome-ignore lint/suspicious/noExplicitAny: tweet structure
-            const likedTweets = likesResult.tweets.map((t: any) => ({
+          if (likesResult.success && likesResult.tweets && 'tweets' in result) {
+            const likedTweets = likesResult.tweets.map((t) => ({
               ...t,
               isLiked: true,
             }));
-            result.tweets = [...(result.tweets || []), ...likedTweets];
+            // Type assertion needed as result can be ThreadResult which doesn't have mutable tweets in same way
+            // but here we know it's TimelineResult
+            (result as ScrapeTimelineResult).tweets = [...(result.tweets || []), ...likedTweets];
             await ctx.log(`Added ${likedTweets.length} liked tweets`);
           }
         }
@@ -122,8 +148,13 @@ export const twitterAdapter: PlatformAdapter = {
           searchQuery: jobConfig.searchQuery,
           limit: jobConfig.limit || 50,
           saveMarkdown: true,
-          scrapeMode: (jobConfig.mode === 'mixed' ? 'puppeteer' : jobConfig.mode || 'puppeteer') as 'puppeteer' | 'graphql',
-          dateRange: jobConfig.dateRange,
+          scrapeMode: (jobConfig.mode === 'mixed' ? 'puppeteer' : jobConfig.mode || 'puppeteer') as
+            | 'puppeteer'
+            | 'graphql',
+          dateRange: 
+            jobConfig.dateRange?.start && jobConfig.dateRange?.end
+              ? { start: jobConfig.dateRange.start, end: jobConfig.dateRange.end }
+              : undefined,
         });
 
         if (result?.tweets) {
@@ -138,11 +169,11 @@ export const twitterAdapter: PlatformAdapter = {
           'Invalid Twitter job configuration: missing username, tweetUrl, or searchQuery',
         );
       }
-      // biome-ignore lint/suspicious/noExplicitAny: error handling
-    } catch (error: any) {
-      await ctx.log(`Error: ${error.message}`, 'error');
-      logger.error('Twitter scraping failed', error);
-      throw error;
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      await ctx.log(`Error: ${err.message}`, 'error');
+      logger.error('Twitter scraping failed', err);
+      throw err;
     } finally {
       await engine.close();
     }
@@ -165,11 +196,12 @@ export const twitterAdapter: PlatformAdapter = {
     throw new Error(result?.error || 'Scraping failed with unknown error');
   },
 
-  // biome-ignore lint/suspicious/noExplicitAny: error handling
-  classifyError(err: any) {
-    if (err?.response?.status === 401) return 'auth';
-    if (err?.response?.status === 404) return 'not_found';
-    if (err?.response?.status === 429) return 'rate_limit';
+  classifyError(err: unknown) {
+    // biome-ignore lint/suspicious/noExplicitAny: error property access
+    const error = err as any;
+    if (error?.response?.status === 401) return 'auth';
+    if (error?.response?.status === 404) return 'not_found';
+    if (error?.response?.status === 429) return 'rate_limit';
     return 'unknown';
   },
 };

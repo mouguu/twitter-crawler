@@ -4,6 +4,7 @@ import { getOutputPathManager } from '../../utils';
 import { createEnhancedLogger } from '../../utils/logger';
 import { exportRedditToMarkdown } from './reddit/markdown-export';
 import { RedditScraper } from './reddit/scraper';
+import { FlattenedComment, RedditPost, RedditScraperResult } from './reddit/types';
 import { PlatformAdapter } from './types';
 
 const logger = createEnhancedLogger('RedditAdapter');
@@ -21,31 +22,35 @@ export const redditAdapter: PlatformAdapter = {
     const { ProxyManager } = await import('../proxy-manager');
     const proxyManager = new ProxyManager();
     await proxyManager.init(); // Load from files
-    
+
+    // biome-ignore lint/suspicious/noImplicitAnyLet: proxy config initialized conditionally
     let proxyConfig;
     if (proxyManager.hasProxies()) {
-        const proxy = proxyManager.getNextProxy();
-        if (proxy) {
-             proxyConfig = {
-                host: proxy.host,
-                port: proxy.port,
-                username: proxy.username || '',
-                password: proxy.password || '',
-            };
-            await ctx.log(`Using proxy: ${proxy.host}:${proxy.port}`, 'info');
-        }
+      const proxy = proxyManager.getNextProxy();
+      if (proxy) {
+        proxyConfig = {
+          host: proxy.host,
+          port: proxy.port,
+          username: proxy.username || '',
+          password: proxy.password || '',
+        };
+        await ctx.log(`Using proxy: ${proxy.host}:${proxy.port}`, 'info');
+      }
     } else {
-        await ctx.log('No proxies found! Running in direct connection mode (High Risk of Ban)', 'warn');
+      await ctx.log(
+        'No proxies found! Running in direct connection mode (High Risk of Ban)',
+        'warn',
+      );
     }
 
     const scraper = new RedditScraper(proxyConfig);
     const isPostUrl = jobConfig.postUrl !== undefined;
 
     try {
-      // biome-ignore lint/suspicious/noExplicitAny: dynamic post structure
-      let result: any;
-      // biome-ignore lint/suspicious/noExplicitAny: dynamic post structure
-      let posts: any[] = [];
+      let result: RedditScraperResult | undefined;
+      // Define a type that matches the "flattened" structure used in JSON output
+      type ScrapedRedditItem = RedditPost & { comments: FlattenedComment[] };
+      let posts: ScrapedRedditItem[] = [];
       let outputPath: string | undefined;
 
       if (isPostUrl && jobConfig.postUrl) {
@@ -156,13 +161,13 @@ export const redditAdapter: PlatformAdapter = {
         fs.writeFileSync(jsonPath, JSON.stringify(posts, null, 2));
 
         // Export Markdown (creates index + individual posts)
-        const postsWithComments = posts.map((p) => ({
-          post: { ...p, comments: undefined },
-          comments: p.comments || [],
+        const postsForMarkdown = posts.map((p) => ({
+          post: p, // ScrapedRedditItem is compatible with RedditPost (it extends it)
+          comments: p.comments,
         }));
 
         const mdPath = exportRedditToMarkdown(
-          postsWithComments,
+          postsForMarkdown,
           runDir,
           `r_${subreddit}_${posts.length}posts.md`,
         );
@@ -189,19 +194,23 @@ export const redditAdapter: PlatformAdapter = {
           duration,
         },
       };
-      // biome-ignore lint/suspicious/noExplicitAny: error handling
-    } catch (error: any) {
-      await ctx.log(`Error: ${error.message}`, 'error');
-      logger.error('Reddit scraping failed', error);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      await ctx.log(`Error: ${errorMessage}`, 'error');
+      logger.error(
+        'Reddit scraping failed',
+        error instanceof Error ? error : new Error(String(error)),
+      );
       throw error;
     }
   },
 
-  // biome-ignore lint/suspicious/noExplicitAny: generic error
-  classifyError(err: any) {
-    if (err?.response?.status === 401) return 'auth';
-    if (err?.response?.status === 404) return 'not_found';
-    if (err?.response?.status === 429) return 'rate_limit';
+  classifyError(err: unknown) {
+    // biome-ignore lint/suspicious/noExplicitAny: error checking
+    const anyErr = err as any;
+    if (anyErr?.response?.status === 401) return 'auth';
+    if (anyErr?.response?.status === 404) return 'not_found';
+    if (anyErr?.response?.status === 429) return 'rate_limit';
     return 'unknown';
   },
 };

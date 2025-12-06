@@ -47,30 +47,47 @@ export async function isJobCancelled(jobId: string): Promise<boolean> {
 /**
  * Safely serialize error objects (handles Axios circular references)
  */
-// biome-ignore lint/suspicious/noExplicitAny: error handling
-function serializeError(error: any): any {
+interface SerializedError {
+  name: string;
+  message: string;
+  code?: string;
+  stack?: string;
+  status?: number;
+  statusText?: string;
+  url?: string;
+  method?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Safely serialize error objects (handles Axios circular references)
+ */
+function serializeError(error: unknown): SerializedError | null {
   if (!error) return null;
 
+  // biome-ignore lint/suspicious/noExplicitAny: standard error property access
+  const err = error as any; // Safe cast for property access
+
   // Handle Axios errors specifically
-  if (error.isAxiosError) {
+  if (err.isAxiosError) {
     return {
-      name: error.name,
-      message: error.message,
-      code: error.code,
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      url: error.config?.url,
-      method: error.config?.method,
-      stack: error.stack,
+      name: err.name,
+      message: err.message,
+      code: err.code,
+      status: err.response?.status,
+      statusText: err.response?.statusText,
+      url: err.config?.url,
+      method: err.config?.method,
+      stack: err.stack,
     };
   }
 
   // Handle standard errors
   return {
-    name: error.name || 'Error',
-    message: error.message || String(error),
-    code: error.code,
-    stack: error.stack,
+    name: err.name || 'Error',
+    message: err.message || String(error),
+    code: err.code,
+    stack: err.stack,
   };
 }
 
