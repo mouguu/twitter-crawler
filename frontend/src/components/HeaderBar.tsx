@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, ChevronDown, Key, Menu, X } from 'lucide-react';
 
-import { Button } from '@/shared/ui/button';
-import { Input } from '@/shared/ui/input';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 interface HeaderBarProps {
   apiKey: string;

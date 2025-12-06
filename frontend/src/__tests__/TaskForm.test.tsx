@@ -1,12 +1,17 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { TaskForm } from '../components/TaskForm';
-import type { TabType } from '../types/ui';
+import { TaskForm } from '../features/crawler/TaskForm';
+import { useCrawlerStore } from '../features/crawler/useCrawlerStore';
+
+// Mock Zustand store
+vi.mock('../features/crawler/useCrawlerStore', () => ({
+  useCrawlerStore: vi.fn(),
+}));
 
 describe('TaskForm Component', () => {
-  const defaultProps = {
-    activeTab: 'profile' as TabType,
+  const mockStore = {
+    activeTab: 'profile' as const,
     input: '',
     limit: 50,
     scrapeLikes: false,
@@ -19,32 +24,40 @@ describe('TaskForm Component', () => {
     endDate: '',
     redditStrategy: 'auto',
     isScraping: false,
-    canSubmit: false,
-    onTabChange: vi.fn(),
-    onInputChange: vi.fn(),
-    onLimitChange: vi.fn(),
-    onScrapeModeChange: vi.fn(),
-    onToggleLikes: vi.fn(),
-    onToggleAutoRotate: vi.fn(),
-    onToggleDeepSearch: vi.fn(),
-    onParallelChunksChange: vi.fn(),
-    onToggleProxy: vi.fn(),
-    onStartDateChange: vi.fn(),
-    onEndDateChange: vi.fn(),
-    onRedditStrategyChange: vi.fn(),
+    antiDetectionLevel: 'high' as const,
+    setActiveTab: vi.fn(),
+    setInput: vi.fn(),
+    setLimit: vi.fn(),
+    setScrapeLikes: vi.fn(),
+    setScrapeMode: vi.fn(),
+    setAutoRotateSessions: vi.fn(),
+    setEnableDeepSearch: vi.fn(),
+    setParallelChunks: vi.fn(),
+    setEnableProxy: vi.fn(),
+    setStartDate: vi.fn(),
+    setEndDate: vi.fn(),
+    setRedditStrategy: vi.fn(),
+    setAntiDetectionLevel: vi.fn(),
+    canSubmit: vi.fn().mockReturnValue(false),
+  };
+
+  const defaultProps = {
     onSubmit: vi.fn(),
     onStop: vi.fn(),
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset mock to default state
+    (useCrawlerStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      ...mockStore,
+      canSubmit: vi.fn().mockReturnValue(false),
+    });
   });
 
-  it('renders correctly with default props', () => {
+  it('renders correctly with default state', () => {
     render(<TaskForm {...defaultProps} />);
-    // Updated to match the actual heading in the component
     expect(screen.getByText('Data Extraction')).toBeInTheDocument();
-    // Updated placeholder to match the current UI
     expect(
       screen.getByPlaceholderText(/elonmusk or https:\/\/x\.com\/elonmusk/i),
     ).toBeInTheDocument();
@@ -52,51 +65,82 @@ describe('TaskForm Component', () => {
   });
 
   it('handles input changes', async () => {
-    const onInputChange = vi.fn();
-    render(<TaskForm {...defaultProps} onInputChange={onInputChange} />);
+    const setInput = vi.fn();
+    (useCrawlerStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      ...mockStore,
+      setInput,
+    });
+
+    render(<TaskForm {...defaultProps} />);
 
     const input = screen.getByPlaceholderText(/elonmusk or https:\/\/x\.com\/elonmusk/i);
     await userEvent.type(input, 'testuser');
 
-    expect(onInputChange).toHaveBeenCalled();
+    expect(setInput).toHaveBeenCalled();
   });
 
-  it('enables submit button when canSubmit is true', () => {
-    render(<TaskForm {...defaultProps} canSubmit={true} />);
+  it('enables submit button when canSubmit returns true', () => {
+    (useCrawlerStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      ...mockStore,
+      canSubmit: vi.fn().mockReturnValue(true),
+    });
+
+    render(<TaskForm {...defaultProps} />);
     expect(screen.getByRole('button', { name: /begin extraction/i })).toBeEnabled();
   });
 
   it('calls onSubmit when submit button is clicked', async () => {
     const onSubmit = vi.fn();
-    render(<TaskForm {...defaultProps} canSubmit={true} onSubmit={onSubmit} />);
+    (useCrawlerStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      ...mockStore,
+      canSubmit: vi.fn().mockReturnValue(true),
+    });
+
+    render(<TaskForm onSubmit={onSubmit} onStop={vi.fn()} />);
 
     await userEvent.click(screen.getByRole('button', { name: /begin extraction/i }));
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 
-  it('shows stop button when scraping', () => {
-    render(<TaskForm {...defaultProps} isScraping={true} />);
-    // In the current UI, the stop button just says "Stop", not "Stop Process"
+  it('shows stop button when isScraping is true', () => {
+    (useCrawlerStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      ...mockStore,
+      isScraping: true,
+    });
+
+    render(<TaskForm {...defaultProps} />);
     expect(screen.getByRole('button', { name: /stop/i })).toBeInTheDocument();
   });
 
-  it('switches tabs correctly', async () => {
-    const onTabChange = vi.fn();
-    render(<TaskForm {...defaultProps} onTabChange={onTabChange} />);
+  it('switches tabs correctly via store', async () => {
+    const setActiveTab = vi.fn();
+    (useCrawlerStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      ...mockStore,
+      setActiveTab,
+    });
 
-    const searchTab = screen.getByRole('button', { name: /search/i });
-    await userEvent.click(searchTab);
+    render(<TaskForm {...defaultProps} />);
 
-    expect(onTabChange).toHaveBeenCalledWith('search');
+    // Click the Search tab button (it has "Search" text inside)
+    const searchTab = screen.getByText('Search').closest('button');
+    expect(searchTab).toBeTruthy();
+    await userEvent.click(searchTab!);
+
+    expect(setActiveTab).toHaveBeenCalledWith('search');
   });
 
   it('shows Tweet Limit label for profile tab', () => {
     render(<TaskForm {...defaultProps} />);
-    // Updated to match the actual label in the component
     expect(screen.getByText('Tweet Limit')).toBeInTheDocument();
   });
 
   it('displays extraction mode options for profile tab', () => {
+    // Profile tab should show extraction mode options
+    (useCrawlerStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      ...mockStore,
+      activeTab: 'profile',
+    });
+
     render(<TaskForm {...defaultProps} />);
     expect(screen.getByText('GraphQL')).toBeInTheDocument();
     expect(screen.getByText('Puppeteer')).toBeInTheDocument();

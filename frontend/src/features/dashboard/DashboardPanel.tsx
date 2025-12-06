@@ -3,9 +3,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Download, X, CheckCircle2, XCircle, Loader2, Clock, Zap } from 'lucide-react';
 import { connectToJobStream, cancelJob, type JobProgressEvent } from '@/utils/queueClient';
 
-import { Button } from '@/shared/ui/button';
-import { Progress } from '@/shared/ui/progress';
-import { Badge } from '@/shared/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
 
 interface ActiveJob {
   jobId: string;
@@ -18,7 +18,9 @@ interface ActiveJob {
     stats?: { count: number; duration: number };
   };
   eventSource?: EventSource;
+  statusCheckInterval?: NodeJS.Timeout;
   isCancelling?: boolean;
+  hasConnected?: boolean; // Track if we've already shown connection message
 }
 
 interface DashboardPanelProps {
@@ -69,6 +71,9 @@ export function DashboardPanel({
       if (job?.eventSource) {
         job.eventSource.close();
       }
+      if (job?.statusCheckInterval) {
+        clearInterval(job.statusCheckInterval);
+      }
       updated.delete(jobId);
       return updated;
     });
@@ -79,7 +84,7 @@ export function DashboardPanel({
       // Check if job already exists to avoid duplicate connections
       setActiveJobs((prev) => {
         if (prev.has(jobId)) return prev;
-        
+
         const job: ActiveJob = {
           jobId,
           type,
@@ -89,24 +94,54 @@ export function DashboardPanel({
 
         const eventSource = connectToJobStream(jobId, {
           onConnected: (data) => {
-            updateJob(jobId, {
-              state: data.state,
-              logs: [`Connected! Job state: ${data.state}`],
+            updateJob(jobId, (currentJob) => {
+              // Use hasConnected flag to avoid duplicate connection messages
+              if (currentJob?.hasConnected) {
+                // Already connected, just update state silently
+                return {
+                  state: data.state,
+                };
+              }
+
+              // First connection - add connection logs
+              const existingLogs = currentJob?.logs || [];
+              return {
+                state: data.state,
+                hasConnected: true,
+                logs: [...existingLogs, `✅ Connected! Job state: ${data.state}`, `📊 Starting job monitoring...`],
+              };
             });
           },
           onProgress: (progress) => {
-            updateJob(jobId, (currentJob: ActiveJob) => ({
-              progress,
-              logs: [
-                ...(currentJob.logs || []),
-                `Progress: ${progress.current}/${progress.target} - ${progress.action}`,
-              ].slice(-50),
-            }));
+            updateJob(jobId, (currentJob: ActiveJob) => {
+              const percentage = progress.target > 0
+                ? Math.round((progress.current / progress.target) * 100)
+                : 0;
+              const progressMsg = `📊 Progress: ${progress.current}/${progress.target} (${percentage}%) - ${progress.action}`;
+              const existingLogs = currentJob.logs || [];
+              return {
+                progress,
+                logs: [...existingLogs, progressMsg],
+              };
+            });
           },
           onLog: (log) => {
-            updateJob(jobId, (currentJob: ActiveJob) => ({
-              logs: [...(currentJob.logs || []), `[${log.level}] ${log.message}`].slice(-50),
-            }));
+            updateJob(jobId, (currentJob: ActiveJob) => {
+              // Format log message with emoji based on level
+              const emoji = log.level === 'error' ? '❌' : log.level === 'warn' ? '⚠️' : 'ℹ️';
+              const logMessage = `${emoji} ${log.message}`;
+              const existingLogs = currentJob.logs || [];
+              const newLogs = [...existingLogs, logMessage];
+
+              // Debug: log if logs are being truncated unexpectedly
+              if (existingLogs.length > 0 && newLogs.length < existingLogs.length) {
+                console.warn(`[DashboardPanel] Logs truncated: ${existingLogs.length} -> ${newLogs.length}`);
+              }
+
+              return {
+                logs: newLogs,
+              };
+            });
           },
           onCompleted: (result) => {
             const updateWithResult = async () => {
@@ -114,13 +149,16 @@ export function DashboardPanel({
                 (result.result && result.result.downloadUrl ? result.result : undefined) ||
                 (await fetchJobStatus(jobId)) ||
                 result.result;
-              
-              updateJob(jobId, (currentJob: ActiveJob) => ({
-                state: 'completed',
-                result: latestResult,
-                logs: [...(currentJob.logs || []), '✅ Job completed!'],
-              }));
-              
+
+              updateJob(jobId, (currentJob: ActiveJob) => {
+                const existingLogs = currentJob.logs || [];
+                return {
+                  state: 'completed',
+                  result: latestResult,
+                  logs: [...existingLogs, '✅ Job completed!'],
+                };
+              });
+
               onJobComplete?.(jobId, latestResult?.downloadUrl);
             };
             updateWithResult();
@@ -129,10 +167,13 @@ export function DashboardPanel({
             const errorMessage = String(error);
             const isCancelled = errorMessage.toLowerCase().includes('cancel');
 
-            updateJob(jobId, (currentJob: ActiveJob) => ({
-              state: isCancelled ? 'cancelled' : 'failed',
-              logs: [...(currentJob.logs || []), isCancelled ? '🛑 Job cancelled by user' : `❌ Job failed: ${errorMessage}`],
-            }));
+            updateJob(jobId, (currentJob: ActiveJob) => {
+              const existingLogs = currentJob.logs || [];
+              return {
+                state: isCancelled ? 'cancelled' : 'failed',
+                logs: [...existingLogs, isCancelled ? '🛑 Job cancelled by user' : `❌ Job failed: ${errorMessage}`],
+              };
+            });
 
             // Do not remove from list automatically. Let user dismiss.
             // setTimeout(() => removeJob(jobId), 2000);
@@ -140,6 +181,53 @@ export function DashboardPanel({
         });
 
         job.eventSource = eventSource;
+
+        // Add periodic status check as fallback (in case SSE fails)
+        const statusCheckInterval = setInterval(async () => {
+          try {
+            // Use getJobStatus to get full job info (not just result)
+            const res = await fetch(`/api/jobs/${jobId}`);
+            if (!res.ok) return;
+            const status = await res.json();
+
+            if (status) {
+              const currentState = status.state;
+              // If job is completed or failed but SSE didn't notify, update manually
+              if (currentState === 'completed' || currentState === 'failed') {
+                if (currentState === 'completed') {
+                  updateJob(jobId, (currentJob: ActiveJob) => {
+                    const existingLogs = currentJob.logs || [];
+                    return {
+                      state: 'completed',
+                      result: status.result,
+                      logs: [...existingLogs, '✅ Job completed (detected via status check)'],
+                    };
+                  });
+                  onJobComplete?.(jobId, status.result?.downloadUrl);
+                } else {
+                  updateJob(jobId, (currentJob: ActiveJob) => {
+                    const existingLogs = currentJob.logs || [];
+                    return {
+                      state: 'failed',
+                      logs: [...existingLogs, `❌ Job failed: ${status.failedReason || 'Unknown error'}`],
+                    };
+                  });
+                }
+                clearInterval(statusCheckInterval);
+                if (job.eventSource) {
+                  job.eventSource.close();
+                }
+              }
+            }
+          } catch (error) {
+            // Silently fail - status check is just a fallback
+            console.debug('Status check failed (this is OK):', error);
+          }
+        }, 5000); // Check every 5 seconds
+
+        // Store interval ID for cleanup
+        job.statusCheckInterval = statusCheckInterval;
+
         const updated = new Map(prev);
         updated.set(jobId, job);
         return updated;
@@ -156,7 +244,7 @@ export function DashboardPanel({
           isCancelling: true,
           logs: [...(currentJob.logs || []), '🛑 Sending cancel request...'],
         }));
-        
+
         await cancelJob(jobId);
         // Do nothing else; wait for SSE 'failed' event with "cancelled" message
       } catch (error) {
@@ -218,7 +306,7 @@ export function DashboardPanel({
     };
 
     fetchActiveJobs();
-    
+
     return () => {
       mounted = false;
     };
@@ -342,7 +430,9 @@ function JobCard({
       : null,
   );
   const [resolving, setResolving] = useState(false);
-  const [showLogs, setShowLogs] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  // Show logs by default for active jobs so users can see progress
+  const [showLogs, setShowLogs] = useState(isActive);
 
   useEffect(() => {
     if (job.result?.downloadUrl) {
@@ -353,11 +443,24 @@ function JobCard({
   const handleResolveDownload = async () => {
     if (resolvedDownload || resolving) return;
     setResolving(true);
-    const latest = await fetchJobStatus(job.jobId);
-    if (latest?.downloadUrl) {
-      setResolvedDownload(appendApiKey?.(latest.downloadUrl) || latest.downloadUrl);
+    setDownloadError(null);
+    try {
+      const latest = await fetchJobStatus(job.jobId);
+      if (latest?.downloadUrl) {
+        const url = appendApiKey?.(latest.downloadUrl) || latest.downloadUrl;
+        setResolvedDownload(url);
+        // Automatically trigger download
+        window.open(url, '_blank');
+      } else {
+        // If no download URL, show error
+        setDownloadError('No download URL available. The job may have been cancelled with no data scraped.');
+      }
+    } catch (error: any) {
+      console.error('Failed to resolve download URL:', error);
+      setDownloadError(`Failed to get download URL: ${error?.message || error}`);
+    } finally {
+      setResolving(false);
     }
-    setResolving(false);
   };
 
   const StatusIcon = () => {
@@ -432,21 +535,39 @@ function JobCard({
           {/* Download or Fetch */}
           {resolvedDownload ? (
             <Button asChild size="sm" className="gap-2">
-              <a href={resolvedDownload} download>
+              <a href={resolvedDownload} download target="_blank" rel="noopener noreferrer">
                 <Download className="w-4 h-4" />
                 Download
               </a>
             </Button>
           ) : (
             isCompleted && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleResolveDownload}
-                disabled={resolving}
-              >
-                {resolving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Get Link'}
-              </Button>
+              <div className="flex flex-col items-end gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleResolveDownload}
+                  disabled={resolving}
+                  className="gap-2"
+                >
+                  {resolving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-4 h-4" />
+                      Download
+                    </>
+                  )}
+                </Button>
+                {downloadError && (
+                  <span className="text-xs text-red-600 max-w-[200px] text-right">
+                    {downloadError}
+                  </span>
+                )}
+              </div>
             )
           )}
 
@@ -485,18 +606,30 @@ function JobCard({
             exit={{ height: 0, opacity: 0 }}
             className="border-t border-border/50 bg-muted/30"
           >
-            <div className="p-4 max-h-48 overflow-y-auto font-mono text-xs space-y-1">
+            <div className="p-4 max-h-96 overflow-y-auto font-mono text-xs space-y-1">
               {job.logs.length === 0 ? (
                 <p className="text-muted-foreground italic">Waiting for logs...</p>
               ) : (
-                job.logs.map((log, i) => (
-                  <div
-                    key={i}
-                    className="text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {log}
+                <>
+                  <div className="text-xs text-muted-foreground/70 mb-2 sticky top-0 bg-muted/30 py-1 px-2 rounded">
+                    Showing {job.logs.length} log entries (scroll to see more)
                   </div>
-                ))
+                  {job.logs.map((log, i) => {
+                    // Use log content + index as key to ensure proper rendering
+                    const logKey = `log-${i}-${log.slice(0, 20).replace(/\s/g, '-')}`;
+                    return (
+                      <div
+                        key={logKey}
+                        className="text-muted-foreground hover:text-foreground transition-colors py-0.5 border-b border-border/20 last:border-0 break-words"
+                      >
+                        <span className="text-muted-foreground/50 mr-2 font-bold">
+                          {String(i + 1).padStart(3, '0')}
+                        </span>
+                        <span className="whitespace-pre-wrap">{log}</span>
+                      </div>
+                    );
+                  })}
+                </>
               )}
             </div>
           </motion.div>

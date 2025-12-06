@@ -1,6 +1,8 @@
 {
   "name": "xrcrawler",
+  "private": true,
   "version": "1.0.0",
+  "workspaces": ["frontend"],
   "description": "XRCrawler - A powerful tool to scrape Twitter/X and Reddit content (Powered by Bun 🚀)",
   "main": "cmd/cli.ts",
   "scripts": {
@@ -26,6 +28,9 @@
     "build:wasm:url": "cd wasm/url-normalizer && wasm-pack build --target nodejs --out-dir pkg",
     "build:wasm:all": "bun run build:wasm && bun run build:wasm:reddit && bun run build:wasm:url",
     "postinstall": "bun run build:wasm:all",
+    "cleanup:jobs": "bun run scripts/cleanup-stuck-jobs.ts",
+    "cleanup:jobs:force": "bun run scripts/cleanup-stuck-jobs.ts --force",
+    "force:cancel": "bun run scripts/force-cancel-job.ts",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "serve": "bun run cmd/start-server.ts",
@@ -58,6 +63,7 @@
     "fingerprint-generator": "^2.1.77",
     "fingerprint-injector": "^2.1.77",
     "hono": "^4.10.7",
+    "http-proxy-agent": "^7.0.2",
     "https-proxy-agent": "^7.0.6",
     "ioredis": "^5.8.2",
     "pg": "^8.16.3",

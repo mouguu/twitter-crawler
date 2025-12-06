@@ -22,7 +22,8 @@ RUN bun install --ignore-scripts
 RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" bunx prisma generate
 
 # 5. 构建前端 (产出到 frontend/dist)
-RUN cd frontend && bun install && bun run build
+# 使用 --ignore-scripts 跳过 postinstall（WASM 已预构建）
+RUN cd frontend && bun install --ignore-scripts && bun run build
 
 # ==========================================
 # 阶段 2: 运行阶段 (Runner)

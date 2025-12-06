@@ -155,14 +155,34 @@ jobRoutes.get('/:jobId/stream', async (c) => {
       await redisSubscriber.subscribe(progressChannel, logChannel);
 
       // Message handler for Redis Pub/Sub
-      const messageHandler = (channel: string, message: string) => {
+      const messageHandler = async (channel: string, message: string) => {
+        if (isEnded) return; // Don't process messages if stream is ended
+
         try {
           const data = safeJsonParse(message);
 
           if (channel === progressChannel) {
-            stream.writeSSE({ event: 'progress', data: JSON.stringify(data) });
+            try {
+              await stream.writeSSE({ event: 'progress', data: JSON.stringify(data) });
+            } catch (writeError) {
+              logger.warn('Failed to write progress to SSE stream', {
+                error: writeError instanceof Error ? writeError.message : String(writeError),
+                jobId,
+              });
+              // Stream may be closed, mark as ended
+              isEnded = true;
+            }
           } else if (channel === logChannel) {
-            stream.writeSSE({ event: 'log', data: JSON.stringify(data) });
+            try {
+              await stream.writeSSE({ event: 'log', data: JSON.stringify(data) });
+            } catch (writeError) {
+              logger.warn('Failed to write log to SSE stream', {
+                error: writeError instanceof Error ? writeError.message : String(writeError),
+                jobId,
+              });
+              // Stream may be closed, mark as ended
+              isEnded = true;
+            }
           }
         } catch (error) {
           logger.error('Failed to parse Redis message', error as Error);
@@ -173,6 +193,7 @@ jobRoutes.get('/:jobId/stream', async (c) => {
 
       // Poll job state for completion/failure
       let isEnded = false;
+      let heartbeatInterval: NodeJS.Timeout | undefined;
       const pollInterval = setInterval(async () => {
         if (isEnded) return;
 
@@ -180,45 +201,94 @@ jobRoutes.get('/:jobId/stream', async (c) => {
           const currentState = await job.getState();
 
           if (currentState === 'completed') {
-            await stream.writeSSE({
-              event: 'completed',
-              data: JSON.stringify({
-                result: job.returnvalue,
-                finishedAt: job.finishedOn,
-              }),
-            });
+            try {
+              await stream.writeSSE({
+                event: 'completed',
+                data: JSON.stringify({
+                  result: job.returnvalue,
+                  finishedAt: job.finishedOn,
+                }),
+              });
+            } catch (writeError) {
+              logger.warn('Failed to write completed event to SSE stream', {
+                error: writeError instanceof Error ? writeError.message : String(writeError),
+                jobId,
+              });
+            }
             isEnded = true;
             clearInterval(pollInterval);
           } else if (currentState === 'failed') {
-            await stream.writeSSE({
-              event: 'failed',
-              data: JSON.stringify({
-                error: job.failedReason,
-                finishedAt: job.finishedOn,
-              }),
-            });
+            try {
+              await stream.writeSSE({
+                event: 'failed',
+                data: JSON.stringify({
+                  error: job.failedReason,
+                  finishedAt: job.finishedOn,
+                }),
+              });
+            } catch (writeError) {
+              logger.warn('Failed to write failed event to SSE stream', {
+                error: writeError instanceof Error ? writeError.message : String(writeError),
+                jobId,
+              });
+            }
             isEnded = true;
             clearInterval(pollInterval);
           }
         } catch (error) {
           logger.error('Failed to poll job state', error as Error);
+          // Don't end stream on polling error, just log it
         }
       }, 1000);
 
       // Keep connection alive and handle cleanup
       try {
+        // Send heartbeat every 30 seconds to keep connection alive
+        let heartbeatCount = 0;
+        heartbeatInterval = setInterval(async () => {
+          if (isEnded) {
+            clearInterval(heartbeatInterval);
+            return;
+          }
+          try {
+            await stream.writeSSE({
+              event: 'heartbeat',
+              data: JSON.stringify({ timestamp: Date.now(), count: heartbeatCount++ }),
+            });
+          } catch (error) {
+            // Client may have disconnected, stop heartbeat
+            clearInterval(heartbeatInterval);
+          }
+        }, 30000);
+
         // Keep stream open until client disconnects or job ends
         while (!isEnded) {
-          await stream.sleep(1000);
+          try {
+            await stream.sleep(1000);
 
-          // Check if job has ended
-          const state = await job.getState();
-          if (state === 'completed' || state === 'failed') {
+            // Check if job has ended
+            const state = await job.getState();
+            if (state === 'completed' || state === 'failed') {
+              isEnded = true;
+              if (heartbeatInterval) {
+                clearInterval(heartbeatInterval);
+              }
+            }
+          } catch (error) {
+            // Stream may have been closed by client or network issue
+            logger.debug('SSE stream sleep interrupted, client may have disconnected', {
+              jobId,
+              error: error instanceof Error ? error.message : String(error),
+            });
             isEnded = true;
+            break;
           }
         }
       } finally {
         clearInterval(pollInterval);
+        if (heartbeatInterval) {
+          clearInterval(heartbeatInterval);
+        }
         redisSubscriber.off('message', messageHandler);
         await redisSubscriber.unsubscribe(progressChannel, logChannel);
         logger.debug('SSE client disconnected', { jobId });

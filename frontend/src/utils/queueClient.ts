@@ -159,8 +159,16 @@ export function connectToJobStream(
   });
 
   eventSource.onerror = (error) => {
-    console.error('SSE connection error:', error);
-    eventSource.close();
+    // Only log if connection is actually closed (readyState 2)
+    // readyState 0 = CONNECTING, 1 = OPEN, 2 = CLOSED
+    if (eventSource.readyState === EventSource.CLOSED) {
+      console.warn('SSE connection closed. This may be normal if the job completed or failed.');
+      // Connection closed - could be normal (job finished) or error
+      // The component should handle reconnection if needed
+    } else {
+      // Connection is still open, might be a temporary network issue
+      console.debug('SSE connection warning (but still open):', error);
+    }
   };
 
   return eventSource;

@@ -1,21 +1,21 @@
 import { motion } from 'framer-motion';
 import { ArrowRight, Square, Zap, Globe, MessageSquare, MessageCircle } from 'lucide-react';
 
-import { useCrawlerStore } from '../store/useCrawlerStore';
+import { useCrawlerStore } from './useCrawlerStore';
 
-import { Button } from '@/shared/ui/button';
-import { Input } from '@/shared/ui/input';
-import { Label } from '@/shared/ui/label';
-import { Checkbox } from '@/shared/ui/checkbox';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/shared/ui/select';
-import { Badge } from '@/shared/ui/badge';
-import { DatePicker } from '@/shared/ui/date-picker';
+} from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { DatePicker } from '@/components/ui/date-picker';
 
 const tabs = [
   { id: 'profile' as const, label: 'Profile', icon: Globe, description: 'Scrape user tweets' },
@@ -359,39 +359,39 @@ export function TaskForm({ onSubmit, onStop }: TaskFormProps) {
                       </label>
                     )}
 
+                    {/* Twitter-specific options (Profile, Thread, Search) */}
                     {activeTab !== 'reddit' && (
-                      <>
-                        <label className="flex items-center gap-3 cursor-pointer group">
-                          <Checkbox
-                            checked={autoRotateSessions}
-                            onCheckedChange={(c) => setAutoRotateSessions(c as boolean)}
-                          />
-                          <div>
-                            <span className="text-sm group-hover:text-foreground transition-colors block">
-                              Auto-rotate sessions
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              Switch accounts on rate limit
-                            </span>
-                          </div>
-                        </label>
-
-                        <label className="flex items-center gap-3 cursor-pointer group">
-                          <Checkbox
-                            checked={enableProxy}
-                            onCheckedChange={(c) => setEnableProxy(c as boolean)}
-                          />
-                          <div>
-                            <span className="text-sm group-hover:text-foreground transition-colors block">
-                              Enable proxy
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              Use proxies from ./proxy directory
-                            </span>
-                          </div>
-                        </label>
-                      </>
+                      <label className="flex items-center gap-3 cursor-pointer group">
+                        <Checkbox
+                          checked={autoRotateSessions}
+                          onCheckedChange={(c) => setAutoRotateSessions(c as boolean)}
+                        />
+                        <div>
+                          <span className="text-sm group-hover:text-foreground transition-colors block">
+                            Auto-rotate sessions
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            Switch accounts on rate limit
+                          </span>
+                        </div>
+                      </label>
                     )}
+
+                    {/* Proxy option - available for all tabs (Twitter and Reddit) */}
+                    <label className="flex items-center gap-3 cursor-pointer group">
+                      <Checkbox
+                        checked={enableProxy}
+                        onCheckedChange={(c) => setEnableProxy(c as boolean)}
+                      />
+                      <div>
+                        <span className="text-sm group-hover:text-foreground transition-colors block">
+                          Enable proxy
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          Use proxies from ./proxy directory
+                        </span>
+                      </div>
+                    </label>
 
                     {activeTab === 'search' && (
                       <>

@@ -1,6 +1,6 @@
 import { render, screen, waitFor, act } from '@testing-library/react';
 import { vi, describe, it, beforeEach, afterEach, expect } from 'vitest';
-import { DashboardPanel } from '../components/DashboardPanel';
+import { DashboardPanel } from '../features/dashboard/DashboardPanel';
 
 // Mock the queueClient module at the top level
 vi.mock('../utils/queueClient', () => ({

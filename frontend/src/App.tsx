@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { ErrorNotification } from './components/ErrorNotification';
 import { SessionManager } from './features/sessions/SessionManager';
 import { HeaderBar } from './components/HeaderBar';
-import { TaskForm } from './features/crawler/components/TaskForm';
-import { DashboardPanel } from './features/dashboard/components/DashboardPanel';
-import { useCrawlerStore } from './features/crawler/store/useCrawlerStore';
+import { TaskForm } from './features/crawler/TaskForm';
+import { DashboardPanel } from './features/dashboard/DashboardPanel';
+import { useCrawlerStore } from './features/crawler/useCrawlerStore';
 import { submitJob, cancelJob } from './utils/queueClient';
 
 // Error types
@@ -225,7 +225,7 @@ function App() {
       });
 
       setLatestJobId(jobInfo.jobId);
-      
+
       // Add job to Dashboard Panel
       const addJobFn = (window as any).__addJobToPanel;
       if (addJobFn) {

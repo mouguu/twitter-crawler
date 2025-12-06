@@ -1,133 +1,138 @@
 /**
- * Dynamic Rate Limiter based on Twitter API headers
+ * Global Rate Limiter using Redis
+ *
+ * Ensures rate limits are enforced across all workers
  */
 
-import { createEnhancedLogger, safeJsonParse } from '../utils';
-import { redisConnection } from './queue/connection';
+import { Redis } from 'ioredis';
+import { createEnhancedLogger } from '../utils';
 
 const logger = createEnhancedLogger('RateLimiter');
 
-interface RateLimitInfo {
-  remaining: number;
-  reset: number; // Unix timestamp in seconds
-  limit: number;
+export interface RateLimitConfig {
+  maxRequests: number;
+  windowMs: number;
+  key: string;
 }
 
-export class RateLimiter {
-  private readonly DEFAULT_DELAY = 2000; // 2 seconds
-  private readonly LOW_REMAINING_THRESHOLD = 50;
-  private readonly CRITICAL_REMAINING_THRESHOLD = 10;
+export class GlobalRateLimiter {
+  constructor(private redis: Redis) {}
 
   /**
-   * Update rate limit info from Twitter API headers
+   * Check if request is allowed under rate limit
+   * Returns true if allowed, false if rate limited
    */
-  async updateFromHeaders(endpoint: string, headers: Record<string, string>): Promise<void> {
+  async checkLimit(config: RateLimitConfig): Promise<boolean> {
+    const { key, maxRequests, windowMs } = config;
+
     try {
-      const remaining = parseInt(headers['x-rate-limit-remaining'] || '0', 10);
-      const reset = parseInt(headers['x-rate-limit-reset'] || '0', 10);
-      const limit = parseInt(headers['x-rate-limit-limit'] || '0', 10);
+      // Use Lua script for atomic operation
+      const script = `
+        local key = KEYS[1]
+        local max = tonumber(ARGV[1])
+        local window = tonumber(ARGV[2])
+        local count = redis.call('INCR', key)
 
-      if (remaining > 0 && reset > 0) {
-        const info: RateLimitInfo = { remaining, reset, limit };
-        const key = `rate_limit:${endpoint}`;
-        const ttl = Math.max(reset - Math.floor(Date.now() / 1000), 60);
+        if count == 1 then
+          redis.call('PEXPIRE', key, window)
+        end
 
-        await redisConnection.set(key, JSON.stringify(info), 'EX', ttl);
+        return count <= max
+      `;
 
-        logger.debug('Updated rate limit', { endpoint, remaining, reset, limit });
+      const result = await this.redis.eval(
+        script,
+        1,
+        key,
+        maxRequests.toString(),
+        windowMs.toString()
+      ) as number;
+
+      const allowed = result === 1;
+
+      if (!allowed) {
+        const ttl = await this.redis.pttl(key);
+        logger.debug(`Rate limit exceeded for ${key}`, {
+          key,
+          maxRequests,
+          windowMs,
+          ttl,
+        });
       }
-    } catch (error: any) {
-      logger.error('Failed to update rate limit', error);
-    }
-  }
 
-  /**
-   * Get current rate limit info for an endpoint
-   */
-  async getRateLimitInfo(endpoint: string): Promise<RateLimitInfo | null> {
-    try {
-      const key = `rate_limit:${endpoint}`;
-      const data = await redisConnection.get(key);
-
-      if (data) {
-        return safeJsonParse(data);
-      }
-    } catch (error: any) {
-      logger.error('Failed to get rate limit info', error);
-    }
-
-    return null;
-  }
-
-  /**
-   * Calculate delay needed before next request
-   */
-  async getDelay(endpoint: string): Promise<number> {
-    const info = await this.getRateLimitInfo(endpoint);
-
-    if (!info) {
-      return this.DEFAULT_DELAY;
-    }
-
-    const { remaining, reset } = info;
-    const now = Math.floor(Date.now() / 1000);
-
-    // If rate limit exhausted, wait until reset
-    if (remaining <= 0 && reset > now) {
-      const waitTime = (reset - now + 1) * 1000;
-      logger.warn(`Rate limit exhausted for ${endpoint}, waiting ${waitTime}ms`);
-      return waitTime;
-    }
-
-    // If critically low, add significant delay
-    if (remaining < this.CRITICAL_REMAINING_THRESHOLD) {
-      logger.warn(`Rate limit critical for ${endpoint}: ${remaining} remaining`);
-      return 10000; // 10 seconds
-    }
-
-    // If low, add moderate delay
-    if (remaining < this.LOW_REMAINING_THRESHOLD) {
-      logger.info(`Rate limit low for ${endpoint}: ${remaining} remaining`);
-      return 5000; // 5 seconds
-    }
-
-    return this.DEFAULT_DELAY;
-  }
-
-  /**
-   * Check if we should wait before making a request
-   */
-  async shouldWait(endpoint: string): Promise<boolean> {
-    const info = await this.getRateLimitInfo(endpoint);
-
-    if (!info) {
-      return false;
-    }
-
-    const { remaining, reset } = info;
-    const now = Math.floor(Date.now() / 1000);
-
-    // If rate limit exhausted and not yet reset, should wait
-    if (remaining <= 0 && reset > now) {
+      return allowed;
+    } catch (error) {
+      logger.error(`Rate limit check failed for ${key}`, error as Error);
+      // Fail open - allow request if Redis is down
       return true;
     }
+  }
+
+  /**
+   * Wait until a slot is available
+   * Blocks until rate limit allows the request
+   */
+  async waitForSlot(config: RateLimitConfig, maxWaitMs: number = 60000): Promise<boolean> {
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < maxWaitMs) {
+      const allowed = await this.checkLimit(config);
+
+      if (allowed) {
+        return true;
+      }
+
+      // Wait before retrying
+      const ttl = await this.redis.pttl(config.key);
+      const waitTime = Math.min(ttl || 1000, 1000);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+
+    logger.warn(`Rate limit wait timeout for ${config.key}`, {
+      key: config.key,
+      maxWaitMs,
+    });
 
     return false;
   }
 
   /**
-   * Wait for the appropriate delay
+   * Get current rate limit status
    */
-  async wait(endpoint: string): Promise<void> {
-    const delay = await this.getDelay(endpoint);
+  async getStatus(key: string): Promise<{
+    count: number;
+    limit: number;
+    windowMs: number;
+    ttl: number;
+    remaining: number;
+  } | null> {
+    try {
+      const count = parseInt((await this.redis.get(key)) || '0', 10);
+      const ttl = await this.redis.pttl(key);
 
-    if (delay > this.DEFAULT_DELAY) {
-      logger.info(`Throttling request to ${endpoint} for ${delay}ms`);
+      // Parse limit from key pattern (e.g., "reddit:rate-limit:1:3000" -> max=1, window=3000)
+      const parts = key.split(':');
+      const maxRequests = parseInt(parts[parts.length - 2] || '1', 10);
+      const windowMs = parseInt(parts[parts.length - 1] || '3000', 10);
+
+      return {
+        count,
+        limit: maxRequests,
+        windowMs,
+        ttl: ttl > 0 ? ttl : 0,
+        remaining: Math.max(0, maxRequests - count),
+      };
+    } catch (error) {
+      logger.error(`Failed to get rate limit status for ${key}`, error as Error);
+      return null;
     }
+  }
 
-    await new Promise((resolve) => setTimeout(resolve, delay));
+  /**
+   * Reset rate limit for a key
+   */
+  async reset(key: string): Promise<void> {
+    await this.redis.del(key);
+    logger.debug(`Rate limit reset for ${key}`);
   }
 }
-
-// Singleton instance
-export const rateLimiter = new RateLimiter();

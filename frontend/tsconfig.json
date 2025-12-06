@@ -20,12 +20,10 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
-    }
+    },
+    /* Node config (merged from tsconfig.node.json) */
+    "allowSyntheticDefaultImports": true,
+    "allowJs": true
   },
-  "include": ["src", "../types"],
-  "references": [
-    {
-      "path": "./tsconfig.node.json"
-    }
-  ]
+  "include": ["src", "vite.config.ts", "../types"]
 }

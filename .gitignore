@@ -80,3 +80,6 @@ yarn-error.log*
 coverage/
 *.lcov
 /generated/prisma
+
+# Proxy lists
+proxy/*.txt
